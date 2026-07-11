@@ -1,0 +1,95 @@
+# Builds and publishes every image under images/<name>/ to GHCR.
+#
+# Monorepo tagging contract (one repo, several images):
+#   git tag <image>-vX.Y.Z   ->  ghcr.io/antorfr/<image>:X.Y.Z (+ :X.Y :X)
+#   push on main             ->  ghcr.io/antorfr/<image>:main (all images)
+#   pull request             ->  build only, no push
+#
+# Multi-arch policy: amd64+arm64 on stable release tags only; everything
+# else (main, prereleases) builds amd64 alone to keep CI fast.
+name: docker-publish
+
+on:
+  push:
+    branches: [main]
+    tags: ['*-v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [claude-pod, agent-gw]
+    steps:
+      # On a tag push, build only the image the tag belongs to
+      - name: Skip images not matching this tag
+        id: gate
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ] && ! echo "${{ github.ref_name }}" | grep -q "^${{ matrix.image }}-v"; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - uses: docker/setup-qemu-action@v3
+        if: steps.gate.outputs.run == 'true'
+      - uses: docker/setup-buildx-action@v3
+        if: steps.gate.outputs.run == 'true'
+
+      - name: Login GHCR
+        if: steps.gate.outputs.run == 'true' && github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=match,pattern=${{ matrix.image }}-v(\d+\.\d+\.\d+.*),group=1
+            type=match,pattern=${{ matrix.image }}-v(\d+\.\d+)\.\d+$,group=1
+            type=match,pattern=${{ matrix.image }}-v(\d+)\.\d+\.\d+$,group=1
+            type=sha,prefix=sha-
+
+      - name: Detect stable release (multi-arch gate)
+        id: release
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          # stable = tag <image>-vX.Y.Z with no prerelease suffix
+          if echo "${{ github.ref_name }}" | grep -Eq "^${{ matrix.image }}-v[0-9]+\.[0-9]+\.[0-9]+$"; then
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build & push
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: images/${{ matrix.image }}
+          platforms: ${{ steps.release.outputs.platforms }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
