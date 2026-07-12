@@ -485,6 +485,7 @@ async function sendMessage(text) {
     pending.remove();
     status.classList.remove('busy');
     send.disabled = false;
+    syncConfirm();  // a sensitive action may have consumed the shield
   }
 }
 
@@ -740,12 +741,19 @@ function downloadLink(path, label) {
 }
 
 /* ── One-shot confirmation shield ───────────────────────────────── */
+// The countdown is cosmetic; the server owns the truth. While armed we
+// re-sync every few seconds so a consumption (or another device) disarms
+// the button instead of letting it count down into fiction.
 const confirmBtn = document.getElementById('confirm-btn');
-let confirmTimer = null;
+let confirmTimer = null, confirmPoll = null;
 
 function paintConfirm(remaining) {
   clearInterval(confirmTimer);
-  if (remaining <= 0) { confirmBtn.classList.remove('armed'); confirmBtn.textContent = '🛡'; return; }
+  if (remaining <= 0) {
+    confirmBtn.classList.remove('armed'); confirmBtn.textContent = '🛡';
+    clearInterval(confirmPoll); confirmPoll = null;
+    return;
+  }
   confirmBtn.classList.add('armed');
   let left = remaining;
   confirmBtn.textContent = left;
@@ -753,6 +761,16 @@ function paintConfirm(remaining) {
     left -= 1;
     if (left <= 0) paintConfirm(0); else confirmBtn.textContent = left;
   }, 1000);
+  if (!confirmPoll) confirmPoll = setInterval(syncConfirm, 4000);
+}
+
+async function syncConfirm() {
+  try {
+    const res = await fetch('/api/confirm', { headers: headers(false), cache: 'no-store' });
+    if (!res.ok) return;
+    const s = await res.json();
+    paintConfirm(s.armed ? s.remaining : 0);
+  } catch {}
 }
 
 confirmBtn.addEventListener('click', async () => {
@@ -764,9 +782,7 @@ confirmBtn.addEventListener('click', async () => {
   } catch {}
 });
 
-// Reflect server state on load (another device may have armed it)
-fetch('/api/confirm', { headers: headers(false) }).then(r => r.json())
-  .then(s => paintConfirm(s.armed ? s.remaining : 0)).catch(() => {});
+syncConfirm();  // reflect server state on load (another device may have armed it)
 
 /* ── VS Code tunnel: device-code reconnect helper ───────────────── */
 const tunnelBtn = document.getElementById('tunnel-btn');
