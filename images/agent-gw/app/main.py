@@ -67,8 +67,10 @@ app = FastAPI(title="agent-gw")
 app.include_router(auth.router)
 _query_lock = asyncio.Lock()
 
-# Paths reachable without a session (PWA shell plumbing + auth flow itself)
-_PUBLIC_PATHS = ("/auth/", "/api/auth/config", "/api/health", "/sw.js", "/manifest.webmanifest", "/static/")
+# Paths reachable without a session (PWA shell plumbing + auth flow itself).
+# /api/confirm/consume is localhost-guarded in its handler: the agent's hook
+# calls it from inside the pod, where no session cookie exists.
+_PUBLIC_PATHS = ("/auth/", "/api/auth/config", "/api/confirm/consume", "/api/health", "/sw.js", "/manifest.webmanifest", "/static/")
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -172,6 +174,39 @@ async def history(limit: int = 300):
             continue
         out.append({"role": obj["type"], "text": text, "ts": obj.get("timestamp")})
     return {"messages": out[-limit:]}
+
+
+# One-shot confirmation for sensitive tool actions on the headless channel.
+# Armed from the PWA (session-authenticated), consumed by the agent's
+# PreToolUse hook via localhost. Lives in process memory on purpose: the
+# agent has a shell in this container and could forge any file-based nonce,
+# but it can neither read this variable nor mint a session cookie. Worst
+# case it can burn a pending confirmation — deny itself, never allow.
+CONFIRM_TTL = int(os.environ.get("GW_CONFIRM_TTL", "120"))
+_confirm_until = 0.0
+
+
+@app.get("/api/confirm")
+async def confirm_state():
+    remaining = max(0, int(_confirm_until - time.time()))
+    return {"armed": remaining > 0, "remaining": remaining}
+
+
+@app.post("/api/confirm")
+async def confirm_arm():
+    global _confirm_until
+    _confirm_until = time.time() + CONFIRM_TTL
+    return {"armed": True, "remaining": CONFIRM_TTL}
+
+
+@app.post("/api/confirm/consume")
+async def confirm_consume(request: Request):
+    global _confirm_until
+    if not request.client or request.client.host not in ("127.0.0.1", "::1"):
+        raise HTTPException(status_code=403, detail="localhost only")
+    granted = time.time() < _confirm_until
+    _confirm_until = 0.0  # one shot, granted or not
+    return {"granted": granted}
 
 
 @app.get("/api/tunnel")

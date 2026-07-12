@@ -157,6 +157,15 @@
     cursor: pointer; align-self: flex-end;
   }
   form button:disabled { opacity: .35; }
+  /* One-shot confirmation shield: arms sensitive actions for a short window */
+  #confirm-btn {
+    background: none; border: 1px solid var(--border-2); color: var(--muted);
+    font-size: 16px; width: 42px; height: 42px;
+  }
+  #confirm-btn.armed {
+    border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+    font: 700 12px var(--mono);
+  }
 
   /* ── Nav (Notion-style rail) ────────────────────────────────────── */
   #nav .nav-head {
@@ -302,6 +311,7 @@
   <section id="chatpane">
     <main id="chat"></main>
     <form id="form">
+      <button id="confirm-btn" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
       <textarea id="input" rows="1" placeholder="Message…" autocomplete="off"></textarea>
       <button id="send" type="submit">↑</button>
     </form>
@@ -728,6 +738,35 @@ function downloadLink(path, label) {
   a.style.display = 'inline-block'; a.style.marginTop = '8px';
   return a;
 }
+
+/* ── One-shot confirmation shield ───────────────────────────────── */
+const confirmBtn = document.getElementById('confirm-btn');
+let confirmTimer = null;
+
+function paintConfirm(remaining) {
+  clearInterval(confirmTimer);
+  if (remaining <= 0) { confirmBtn.classList.remove('armed'); confirmBtn.textContent = '🛡'; return; }
+  confirmBtn.classList.add('armed');
+  let left = remaining;
+  confirmBtn.textContent = left;
+  confirmTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) paintConfirm(0); else confirmBtn.textContent = left;
+  }, 1000);
+}
+
+confirmBtn.addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/confirm', { method: 'POST', headers: headers(false) });
+    if (res.status === 401) { onUnauthorized(); return; }
+    const s = await res.json();
+    paintConfirm(s.remaining || 0);
+  } catch {}
+});
+
+// Reflect server state on load (another device may have armed it)
+fetch('/api/confirm', { headers: headers(false) }).then(r => r.json())
+  .then(s => paintConfirm(s.armed ? s.remaining : 0)).catch(() => {});
 
 /* ── VS Code tunnel: device-code reconnect helper ───────────────── */
 const tunnelBtn = document.getElementById('tunnel-btn');
