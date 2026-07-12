@@ -83,12 +83,22 @@ const send = document.getElementById('send');
 const status = document.getElementById('status');
 
 let token = localStorage.getItem('gw_token') || '';
+let oidcEnabled = false;
+fetch('/api/auth/config').then(r => r.json())
+  .then(c => { oidcEnabled = c.oidcEnabled; }).catch(() => {});
 
 function headers(json) {
   const h = {};
   if (json) h['Content-Type'] = 'application/json';
-  if (token) h['Authorization'] = 'Bearer ' + token;
+  // Bearer fallback only without SSO (dev mode); with OIDC the session
+  // cookie does the work.
+  if (!oidcEnabled && token) h['Authorization'] = 'Bearer ' + token;
   return h;
+}
+
+function onUnauthorized() {
+  if (oidcEnabled) { window.location = '/auth/login'; return true; }
+  return false;
 }
 
 function add(cls, text) {
@@ -115,7 +125,7 @@ async function sendMessage(text) {
       method: 'POST', headers: headers(true),
       body: JSON.stringify({ message: text }),
     });
-    if (res.status === 401) { await askToken(); pending.remove(); return; }
+    if (res.status === 401) { pending.remove(); if (!onUnauthorized()) await askToken(); return; }
     if (!res.ok) throw new Error((await res.json()).detail || res.status);
     pending.remove();
     // Parse the SSE stream by hand (EventSource can't POST).

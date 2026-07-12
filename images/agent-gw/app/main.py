@@ -8,6 +8,7 @@ the CLAUDE.md of the workspace the pod mounts — this gateway is agent-agnostic
 import asyncio
 import json
 import os
+import secrets
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -18,14 +19,20 @@ from claude_agent_sdk import (
     query,
 )
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+
+from . import auth
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
 STATE_DIR = Path(os.environ.get("GW_STATE_DIR", str(Path.home() / ".agent-gw")))
-# Optional bearer token (defense in depth behind the SSO/VPN layer).
+# Fallback bearer token, only used when OIDC is not configured (dev mode).
 AUTH_TOKEN = os.environ.get("GW_AUTH_TOKEN", "")
+# Signs the session cookie. Pin it in deployment values (DR-via-git policy);
+# the random fallback just means sessions reset on restart in dev.
+SESSION_SECRET = os.environ.get("GW_SESSION_SECRET") or secrets.token_hex(32)
 # Headless gateway: nobody can answer a permission prompt, so tools run
 # unattended. The pod's isolation (dedicated container, mounted volumes)
 # is the actual boundary.
@@ -34,7 +41,19 @@ PERMISSION_MODE = os.environ.get("GW_PERMISSION_MODE", "bypassPermissions")
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="agent-gw")
+app.include_router(auth.router)
 _query_lock = asyncio.Lock()
+
+# Paths reachable without a session (PWA shell plumbing + auth flow itself)
+_PUBLIC_PATHS = ("/auth/", "/api/auth/config", "/api/health", "/sw.js", "/manifest.webmanifest", "/static/")
+
+
+def _is_authenticated(request: Request) -> bool:
+    if auth.oidc_enabled:
+        return bool(request.session.get("user"))
+    if AUTH_TOKEN:
+        return request.headers.get("authorization") == f"Bearer {AUTH_TOKEN}"
+    return True  # nothing configured: open (dev only — do not deploy like this)
 
 
 def _session_file() -> Path:
@@ -59,13 +78,25 @@ def _sse(event: str, data: dict) -> str:
 
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
-    if AUTH_TOKEN and request.url.path.startswith("/api/"):
-        auth = request.headers.get("authorization", "")
-        if auth != f"Bearer {AUTH_TOKEN}":
-            from fastapi.responses import JSONResponse
-
+    path = request.url.path
+    if not path.startswith(_PUBLIC_PATHS) and not _is_authenticated(request):
+        if path.startswith("/api/"):
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        if auth.oidc_enabled:
+            return RedirectResponse("/auth/login")
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
     return await call_next(request)
+
+
+# Added AFTER check_auth on purpose: Starlette runs the last-added middleware
+# first, and the session must exist before check_auth reads it.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    max_age=30 * 24 * 3600,  # PWA-friendly: one Authelia login a month
+    https_only=True,
+    same_site="lax",
+)
 
 
 @app.get("/api/health")
