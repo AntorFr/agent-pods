@@ -37,6 +37,19 @@ SESSION_SECRET = os.environ.get("GW_SESSION_SECRET") or secrets.token_hex(32)
 # unattended. The pod's isolation (dedicated container, mounted volumes)
 # is the actual boundary.
 PERMISSION_MODE = os.environ.get("GW_PERMISSION_MODE", "bypassPermissions")
+# Models offered in the PWA dropdown, as "Label:model" pairs. CLI aliases
+# (opus, sonnet, haiku) always resolve to the latest model of the family,
+# so the list stays current without a rebuild. "Auto" (no model sent) is
+# always prepended: the SDK then uses its own default.
+MODELS = os.environ.get(
+    "GW_MODELS",
+    "Fable:claude-fable-5,Opus:opus,Sonnet:sonnet,Haiku:haiku",
+)
+MODEL_CHOICES: dict[str, str] = {}  # model id -> label
+for _pair in MODELS.split(","):
+    _label, _, _model = _pair.partition(":")
+    if _label.strip() and _model.strip():
+        MODEL_CHOICES[_model.strip()] = _label.strip()
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -104,6 +117,13 @@ async def health():
     return {"status": "ok", "channel": CHANNEL, "busy": _query_lock.locked()}
 
 
+@app.get("/api/models")
+async def models():
+    return {
+        "models": [{"id": m, "label": l} for m, l in MODEL_CHOICES.items()],
+    }
+
+
 @app.post("/api/reset")
 async def reset():
     _session_file().unlink(missing_ok=True)
@@ -116,6 +136,9 @@ async def chat(request: Request):
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="empty message")
+    model = (body.get("model") or "").strip() or None
+    if model and model not in MODEL_CHOICES:
+        raise HTTPException(status_code=400, detail="unknown model")
     if _query_lock.locked():
         raise HTTPException(status_code=409, detail="agent busy, retry later")
 
@@ -125,6 +148,7 @@ async def chat(request: Request):
                 cwd=WORKSPACE,
                 resume=_load_session_id(),
                 permission_mode=PERMISSION_MODE,
+                model=model,
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt={"type": "preset", "preset": "claude_code"},
