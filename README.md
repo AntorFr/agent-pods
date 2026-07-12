@@ -42,7 +42,9 @@ State that must survive restarts (mount as volumes):
 | `/workspace` | the agent's working repo |
 
 Environment: `TUNNEL_NAME` (max 20 chars), `GIT_USER_NAME` / `GIT_USER_EMAIL`
-(seeded once into the persisted home).
+(seeded once into the persisted home), `TUNNEL_LOG` (default
+`~/.vscode-cli/tunnel.out`) — the tunnel output is mirrored there so a
+sidecar gateway sharing the home can surface the device-code prompt.
 
 ## agent-gw
 
@@ -55,6 +57,8 @@ typing indicator, model picker) and an SSE API:
 - `GET /api/models` — models offered in the PWA dropdown
 - `GET /api/memory/tree` — read-only listing of the agent's memory dir
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
+- `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device
+  code + vscode.dev link, parsed from the claude-pod mirrored output
 - `GET /api/health`
 - `GET /auth/login|callback|logout`, `GET /api/auth/config` — OIDC flow (when configured)
 
@@ -78,6 +82,7 @@ Environment:
 | `GW_MODELS` | `Fable:claude-fable-5,Opus:opus,Sonnet:sonnet,Haiku:haiku` | `Label:model` pairs for the PWA dropdown. CLI aliases resolve to the latest model of each family. |
 | `GW_MEMORY_DIR` | `memory` | Memory dir shown in the PWA side panel, relative to the workspace |
 | `GW_TODO_FILE` | `todo/taches.md` | Todo file for the dedicated view, relative to the memory dir |
+| `GW_TUNNEL_LOG` | `~/.vscode-cli/tunnel.out` | Mirrored tunnel output (see claude-pod `TUNNEL_LOG`) |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | *(unset)* | OIDC SSO (e.g. Authelia). All four required to enable; login then goes through the IdP and a 30-day session cookie. |
 | `OIDC_ALLOWED_GROUP` | `admins` | IdP group required to log in |
 | `GW_SESSION_SECRET` | *(random)* | Signs the session cookie; pin it or sessions reset on restart |

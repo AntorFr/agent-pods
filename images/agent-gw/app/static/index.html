@@ -50,6 +50,42 @@
     font-size: 15px; cursor: pointer; padding: 4px 8px;
   }
   header button:hover { color: var(--accent); }
+  #tunnel-btn {
+    font: 600 10.5px var(--mono); letter-spacing: .12em;
+    border: 1px solid var(--border-2); border-radius: 8px; padding: 5px 9px;
+  }
+  #tunnel-btn.pending { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+  /* ── Tunnel modal ───────────────────────────────────────────────── */
+  #tunnel-modal {
+    position: fixed; inset: 0; background: rgba(4, 6, 10, .7);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+    padding: 20px;
+  }
+  #tunnel-modal.hidden { display: none; }
+  #tunnel-modal .card {
+    background: var(--panel); border: 1px solid var(--border-2); border-radius: 14px;
+    padding: 20px; width: min(420px, 100%);
+  }
+  #tunnel-modal h2 {
+    font: 600 11px var(--mono); letter-spacing: .2em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  #tunnel-modal .row { margin-bottom: 12px; font-size: 14px; color: var(--muted); }
+  #tunnel-modal .code {
+    display: block; width: 100%; text-align: center; cursor: pointer;
+    font: 700 26px var(--mono); letter-spacing: .12em; color: var(--fg);
+    background: var(--card-2); border: 1px dashed var(--accent); border-radius: 10px;
+    padding: 14px 10px; margin: 6px 0 4px;
+  }
+  #tunnel-modal .hint { font: 11px var(--mono); color: var(--faint); text-align: center; }
+  #tunnel-modal .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  #tunnel-modal .actions a, #tunnel-modal .actions button {
+    flex: 1; text-align: center; text-decoration: none; cursor: pointer;
+    font: 600 12px var(--mono); border-radius: 8px; padding: 9px 12px;
+    border: 1px solid var(--border-2); color: var(--fg); background: var(--card);
+  }
+  #tunnel-modal .actions .primary { background: var(--accent); border-color: var(--accent); color: #14100a; }
 
   /* ── Layout: chat alone on mobile, chat + side panel ≥ 960px ────── */
   #layout { flex: 1; display: flex; min-height: 0; }
@@ -232,8 +268,19 @@
   <div id="status"></div>
   <h1>Alfred</h1>
   <select id="model" title="Modèle"></select>
+  <button id="tunnel-btn" title="Tunnel VS Code">VSC</button>
   <button id="reset" title="Nouvelle session">↺</button>
 </header>
+<div id="tunnel-modal" class="hidden">
+  <div class="card">
+    <h2>Tunnel VS Code</h2>
+    <div id="tunnel-body"><div class="placeholder">chargement…</div></div>
+    <div class="actions">
+      <button id="tunnel-refresh">⟳ Rafraîchir</button>
+      <button id="tunnel-close">Fermer</button>
+    </div>
+  </div>
+</div>
 <div id="layout">
   <section id="chatpane">
     <main id="chat"></main>
@@ -653,6 +700,81 @@ function downloadLink(path, label) {
   a.style.display = 'inline-block'; a.style.marginTop = '8px';
   return a;
 }
+
+/* ── VS Code tunnel: device-code reconnect helper ───────────────── */
+const tunnelBtn = document.getElementById('tunnel-btn');
+const tunnelModal = document.getElementById('tunnel-modal');
+const tunnelBody = document.getElementById('tunnel-body');
+
+tunnelBtn.addEventListener('click', () => { tunnelModal.classList.remove('hidden'); refreshTunnel(); });
+document.getElementById('tunnel-close').addEventListener('click', () => tunnelModal.classList.add('hidden'));
+document.getElementById('tunnel-refresh').addEventListener('click', refreshTunnel);
+tunnelModal.addEventListener('click', (e) => { if (e.target === tunnelModal) tunnelModal.classList.add('hidden'); });
+
+async function refreshTunnel() {
+  tunnelBody.innerHTML = '<div class="placeholder">chargement…</div>';
+  let t;
+  try {
+    const res = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    t = await res.json();
+  } catch (e) {
+    tunnelBody.innerHTML = '<div class="row">État du tunnel indisponible (' + esc(String(e)) + ')</div>';
+    return;
+  }
+  tunnelBtn.classList.toggle('pending', !!t.pending);
+  tunnelBody.innerHTML = '';
+  if (!t.available) {
+    tunnelBody.innerHTML = '<div class="row">Pas de journal de tunnel — le conteneur tunnel n’a pas (encore) écrit ' +
+      'son fichier de sortie. Image claude-pod ≥ 0.2.0 requise.</div>';
+    return;
+  }
+  if (t.pending && t.code) {
+    tunnelBody.insertAdjacentHTML('beforeend',
+      '<div class="row">Appairage GitHub demandé — entrez ce code sur la page de connexion :</div>');
+    const codeBtn = document.createElement('button');
+    codeBtn.className = 'code'; codeBtn.textContent = t.code; codeBtn.title = 'Copier';
+    codeBtn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(t.code); codeBtn.textContent = 'copié ✓';
+        setTimeout(() => { codeBtn.textContent = t.code; }, 1500); } catch {}
+    });
+    tunnelBody.appendChild(codeBtn);
+    tunnelBody.insertAdjacentHTML('beforeend', '<div class="hint">tap pour copier</div>');
+    const a = document.createElement('a');
+    a.href = t.deviceUrl; a.target = '_blank'; a.rel = 'noopener';
+    a.className = 'primary'; a.textContent = 'Ouvrir ' + new URL(t.deviceUrl).hostname;
+    a.style.cssText = 'display:block;text-align:center;margin-top:12px;padding:10px;border-radius:8px;' +
+      'background:var(--accent);color:#14100a;font:600 13px var(--mono);text-decoration:none;';
+    tunnelBody.appendChild(a);
+  } else {
+    tunnelBody.insertAdjacentHTML('beforeend',
+      '<div class="row">Aucun appairage en attente — le tunnel est connecté ou silencieux ' +
+      '(dernier signe de vie : il y a ' + fmtAge(t.age) + ').</div>');
+  }
+  if (t.openUrl) {
+    const a = document.createElement('a');
+    a.href = t.openUrl; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'Ouvrir dans vscode.dev →';
+    a.style.cssText = 'display:block;margin-top:10px;color:var(--accent);font:12.5px var(--mono);';
+    tunnelBody.appendChild(a);
+  }
+}
+
+function fmtAge(s) {
+  if (s < 90) return s + ' s';
+  if (s < 5400) return Math.round(s / 60) + ' min';
+  return Math.round(s / 3600) + ' h';
+}
+
+// Light polling so the VSC chip lights up gold when a device code is waiting
+async function pollTunnel() {
+  try {
+    const res = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' });
+    if (res.ok) { const t = await res.json(); tunnelBtn.classList.toggle('pending', !!t.pending); }
+  } catch {}
+}
+setInterval(pollTunnel, 120000);
+pollTunnel();
 
 /* ── Boot ───────────────────────────────────────────────────────── */
 refreshSide();

@@ -8,7 +8,9 @@ the CLAUDE.md of the workspace the pod mounts — this gateway is agent-agnostic
 import asyncio
 import json
 import os
+import re
 import secrets
+import time
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -55,6 +57,9 @@ for _pair in MODELS.split(","):
 MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
 # Todo file surfaced as a dedicated view, relative to the memory dir.
 TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
+# Output of the sibling tunnel container (claude-pod tees it into the shared
+# home) — lets the PWA surface the GitHub device-code prompt on reconnect.
+TUNNEL_LOG = os.environ.get("GW_TUNNEL_LOG", str(Path.home() / ".vscode-cli" / "tunnel.out"))
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -126,6 +131,36 @@ async def health():
 async def models():
     return {
         "models": [{"id": m, "label": l} for m, l in MODEL_CHOICES.items()],
+    }
+
+
+@app.get("/api/tunnel")
+async def tunnel_status():
+    """Parse the tunnel container's mirrored output: pending device-code
+    login (for reconnecting VS Code remote) + the vscode.dev link."""
+    p = Path(TUNNEL_LOG)
+    if not p.is_file():
+        return {"available": False}
+    text = p.read_text(errors="replace")[-20000:]
+
+    def last(pattern):
+        matches = list(re.finditer(pattern, text))
+        return matches[-1] if matches else None
+
+    code = last(r"use code ([A-Z0-9]{4,}-[A-Z0-9]{4,})")
+    device = last(r"https://(?:github\.com/login/device|microsoft\.com/devicelogin)\S*")
+    open_url = last(r"https://vscode\.dev/tunnel/\S+")
+    connected = last(r"Open this link in your browser|Connected to an existing tunnel|tunnel is up")
+    # The code is only actionable if nothing indicates a completed login after it
+    pending = bool(code) and (connected is None or code.start() > connected.start())
+    return {
+        "available": True,
+        "pending": pending,
+        "code": code.group(1) if code else None,
+        "deviceUrl": device.group(0).rstrip(".,") if device else "https://github.com/login/device",
+        "openUrl": open_url.group(0).rstrip(".,") if open_url else None,
+        "updatedAt": int(p.stat().st_mtime),
+        "age": int(time.time() - p.stat().st_mtime),
     }
 
 
