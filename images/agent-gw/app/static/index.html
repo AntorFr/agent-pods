@@ -27,6 +27,7 @@
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   }
   button { font: inherit; }
+  .hidden { display: none !important; }
 
   /* ── Header ─────────────────────────────────────────────────────── */
   header {
@@ -56,57 +57,41 @@
   }
   #tunnel-btn.pending { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 
-  /* ── Tunnel modal ───────────────────────────────────────────────── */
-  #tunnel-modal {
-    position: fixed; inset: 0; background: rgba(4, 6, 10, .7);
-    display: flex; align-items: center; justify-content: center; z-index: 10;
-    padding: 20px;
-  }
-  #tunnel-modal.hidden { display: none; }
-  #tunnel-modal .card {
-    background: var(--panel); border: 1px solid var(--border-2); border-radius: 14px;
-    padding: 20px; width: min(420px, 100%);
-  }
-  #tunnel-modal h2 {
-    font: 600 11px var(--mono); letter-spacing: .2em; text-transform: uppercase;
-    color: var(--accent); margin-bottom: 14px;
-  }
-  #tunnel-modal .row { margin-bottom: 12px; font-size: 14px; color: var(--muted); }
-  #tunnel-modal .code {
-    display: block; width: 100%; text-align: center; cursor: pointer;
-    font: 700 26px var(--mono); letter-spacing: .12em; color: var(--fg);
-    background: var(--card-2); border: 1px dashed var(--accent); border-radius: 10px;
-    padding: 14px 10px; margin: 6px 0 4px;
-  }
-  #tunnel-modal .hint { font: 11px var(--mono); color: var(--faint); text-align: center; }
-  #tunnel-modal .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-  #tunnel-modal .actions a, #tunnel-modal .actions button {
-    flex: 1; text-align: center; text-decoration: none; cursor: pointer;
-    font: 600 12px var(--mono); border-radius: 8px; padding: 9px 12px;
-    border: 1px solid var(--border-2); color: var(--fg); background: var(--card);
-  }
-  #tunnel-modal .actions .primary { background: var(--accent); border-color: var(--accent); color: #14100a; }
-
-  /* ── Layout: chat alone on mobile, chat + side panel ≥ 960px ────── */
+  /* ── Layout: mobile = chat only; ≥ 960px = chat | nav | page ────── */
   #layout { flex: 1; display: flex; min-height: 0; }
   #chatpane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #side { display: none; }
+  #nav, #content { display: none; }
   @media (min-width: 960px) {
-    #chatpane { max-width: none; }
-    #side {
-      display: flex; flex-direction: column; min-height: 0;
-      width: clamp(380px, 42vw, 560px);
-      border-left: 1px solid var(--border); background: var(--panel);
-      transition: width .2s ease;
+    #chatpane {
+      flex: 0 0 clamp(330px, 30vw, 440px);
+      border-right: 1px solid var(--border); background: var(--panel);
     }
-    /* Reading mode: a page is open, give it room */
-    #side.reading { width: clamp(420px, 55vw, 760px); }
+    #nav {
+      display: flex; flex-direction: column; min-height: 0;
+      flex: 0 0 250px; border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 12px 10px;
+    }
+    /* Collapsible rail (Notion-like): toggled by ☰, auto-collapsed when a
+       page opens on screens where three columns would be cramped */
+    #layout.nav-hidden #nav { display: none; }
+    #content { display: block; flex: 1; overflow-y: auto; min-width: 0; }
+    #content-bar {
+      position: sticky; top: 0; z-index: 3; background: var(--bg);
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+    }
+    #content-bar button {
+      background: none; border: 1px solid var(--border-2); border-radius: 7px;
+      color: var(--muted); cursor: pointer; font-size: 14px; padding: 3px 9px;
+    }
+    #content-bar button:hover { color: var(--accent); border-color: var(--accent); }
+    #content-title { font: 12px var(--mono); color: var(--faint); }
   }
 
   /* ── Chat ───────────────────────────────────────────────────────── */
   main#chat { flex: 1; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
   .msg {
-    max-width: 85%; padding: 10px 14px; border-radius: 14px;
+    max-width: 88%; padding: 10px 14px; border-radius: 14px;
     margin-bottom: 8px; overflow-wrap: break-word;
   }
   .msg.user {
@@ -119,7 +104,7 @@
   }
   .msg.error { background: #c65f4a22; border: 1px solid var(--danger); white-space: pre-wrap; }
 
-  /* Rendered markdown (chat bubbles + memory viewer) */
+  /* Rendered markdown (chat bubbles + page viewer) */
   .md > :not(:last-child) { margin-bottom: .6em; }
   .md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin-top: .5em; }
   .md h1 { font-size: 1.2em; } .md h2 { font-size: 1.1em; } .md h3, .md h4 { font-size: 1em; }
@@ -138,7 +123,7 @@
     border-radius: 8px; padding: 10px; overflow-x: auto;
   }
   .md pre code { background: none; padding: 0; }
-  .md table { border-collapse: collapse; display: block; overflow-x: auto; font-size: .9em; max-width: 100%; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; font-size: .92em; max-width: 100%; }
   .md th, .md td { border: 1px solid var(--border-2); padding: 4px 8px; text-align: left; }
   .md th { background: var(--card-2); }
   .md img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
@@ -173,62 +158,32 @@
   }
   form button:disabled { opacity: .35; }
 
-  /* ── Side panel: tabs + views ───────────────────────────────────── */
-  #side nav {
-    display: flex; align-items: center; gap: 4px;
-    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  /* ── Nav (Notion-style rail) ────────────────────────────────────── */
+  #nav .nav-head {
+    display: flex; align-items: center; gap: 6px; padding: 2px 8px 10px;
   }
-  #side nav .tab {
-    background: none; border: 1px solid transparent; border-radius: 8px;
-    color: var(--muted); font: 600 11px var(--mono); letter-spacing: .15em;
-    text-transform: uppercase; padding: 6px 12px; cursor: pointer;
+  #nav .nav-head .label {
+    flex: 1; font: 600 10.5px var(--mono); letter-spacing: .2em;
+    text-transform: uppercase; color: var(--faint);
   }
-  #side nav .tab.active { color: var(--accent); border-color: var(--border-2); background: var(--card-2); }
-  #side nav .spacer { flex: 1; }
-  #side nav .icon {
+  #nav .nav-head button {
     background: none; border: none; color: var(--muted); cursor: pointer;
-    font-size: 14px; padding: 4px 8px;
+    font-size: 13px; padding: 2px 6px;
   }
-  #side nav .icon:hover { color: var(--accent); }
-  .view { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
-  .hidden { display: none !important; }
-  .placeholder { color: var(--faint); font: 12px var(--mono); padding: 12px 0; }
-
-  /* ── Todo view ──────────────────────────────────────────────────── */
-  .todo-section { margin-bottom: 18px; }
-  .todo-section h2 {
-    font: 600 11px var(--mono); letter-spacing: .18em; text-transform: uppercase;
-    color: var(--muted); margin-bottom: 8px; display: flex; align-items: baseline; gap: 8px;
+  #nav .nav-head button:hover { color: var(--accent); }
+  .nav-item {
+    display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+    background: none; border: none; color: var(--fg); cursor: pointer;
+    padding: 5px 8px; border-radius: 6px; font-size: 13.5px;
   }
-  .todo-section h2 .count { color: var(--accent); }
-  .task {
-    display: flex; gap: 10px; align-items: flex-start;
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 12px; margin-bottom: 6px;
-  }
-  .task.done { opacity: .45; }
-  .task .box {
-    width: 16px; height: 16px; border: 1.5px solid var(--border-2); border-radius: 5px;
-    flex-shrink: 0; margin-top: 2px; background: none; cursor: pointer; padding: 0;
-    color: transparent; font-size: 11px; line-height: 1;
-  }
-  .task .box:hover { border-color: var(--accent); color: var(--accent); }
-  .task.done .box { color: var(--ok); border-color: var(--ok); cursor: default; }
-  .task .body { flex: 1; min-width: 0; font-size: 14px; }
-  .task .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
-  .badge {
-    font: 600 10.5px var(--mono); letter-spacing: .05em; border-radius: 5px;
-    padding: 2px 7px; border: 1px solid var(--border-2); color: var(--muted);
-  }
-  .badge.due { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-  .badge.late { color: #e0765f; border-color: var(--danger); background: #c65f4a1a; }
-  .badge a { color: inherit; text-decoration: none; }
-
-  /* ── Memory view ────────────────────────────────────────────────── */
+  .nav-item:hover { background: var(--card-2); }
+  .nav-item.active { background: var(--accent-soft); color: var(--accent); }
+  .nav-item .glyph { color: var(--accent); font-size: 12px; width: 14px; text-align: center; }
+  #nav-todo { margin-bottom: 10px; font-weight: 600; }
   #mem-tree details { margin-left: 0; }
-  #mem-tree details details { margin-left: 14px; }
+  #mem-tree details details { margin-left: 12px; }
   #mem-tree summary {
-    cursor: pointer; padding: 4px 6px; border-radius: 6px; list-style: none;
+    cursor: pointer; padding: 4px 8px; border-radius: 6px; list-style: none;
     font: 600 12.5px var(--mono); color: var(--muted); user-select: none;
   }
   #mem-tree summary::before { content: "▸ "; color: var(--faint); }
@@ -237,27 +192,54 @@
   #mem-tree .file {
     display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
     background: none; border: none; color: var(--fg); cursor: pointer;
-    padding: 4px 6px 4px 20px; border-radius: 6px; font-size: 13.5px;
+    padding: 4px 8px 4px 22px; border-radius: 6px; font-size: 13px;
   }
-  #mem-tree details details .file { padding-left: 20px; }
   #mem-tree .file:hover { background: var(--card-2); }
+  #mem-tree .file.active { background: var(--accent-soft); color: var(--accent); }
   #mem-tree .file .ext {
-    font: 600 9.5px var(--mono); color: var(--accent); border: 1px solid var(--border-2);
+    font: 600 9px var(--mono); color: var(--accent); border: 1px solid var(--border-2);
     border-radius: 4px; padding: 1px 4px; flex-shrink: 0;
   }
   #mem-tree .archive { opacity: .5; }
-  #mem-viewer .crumbs {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
-    font: 12px var(--mono); color: var(--muted); flex-wrap: wrap;
-    position: sticky; top: -14px; z-index: 2; background: var(--panel);
-    padding: 10px 0; border-bottom: 1px solid var(--border);
+  .placeholder { color: var(--faint); font: 12px var(--mono); padding: 12px 8px; }
+
+  /* ── Content: the "Notion page" surface ─────────────────────────── */
+  .doc { max-width: 860px; margin: 0 auto; padding: 28px 44px 60px; }
+  .doc .md { font-size: 15.5px; line-height: 1.65; }
+  .doc .md h1 { font-size: 1.7em; border: none; margin-bottom: .4em; }
+  .doc .md h2 { font-size: 1.25em; margin-top: 1.2em; }
+  .doc .md h3 { font-size: 1.05em; margin-top: 1em; }
+
+  /* Todo page */
+  .todo-section { margin-bottom: 26px; }
+  .todo-section h2 {
+    font: 600 11px var(--mono); letter-spacing: .18em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px;
   }
-  #mem-viewer { padding-bottom: 24px; }
-  #mem-viewer .crumbs button {
-    background: var(--card-2); border: 1px solid var(--border-2); border-radius: 6px;
-    color: var(--accent); cursor: pointer; font: 12px var(--mono); padding: 3px 10px;
+  .todo-section h2 .count { color: var(--accent); }
+  .task {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 8px;
   }
-  #mem-viewer .crumbs a { color: var(--accent); font: 12px var(--mono); }
+  .task.done { opacity: .45; }
+  .task .box {
+    width: 17px; height: 17px; border: 1.5px solid var(--border-2); border-radius: 5px;
+    flex-shrink: 0; margin-top: 2px; background: none; cursor: pointer; padding: 0;
+    color: transparent; font-size: 11px; line-height: 1;
+  }
+  .task .box:hover { border-color: var(--accent); color: var(--accent); }
+  .task.done .box { color: var(--ok); border-color: var(--ok); cursor: default; }
+  .task .body { flex: 1; min-width: 0; font-size: 14.5px; }
+  .task .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .badge {
+    font: 600 10.5px var(--mono); letter-spacing: .05em; border-radius: 5px;
+    padding: 2px 7px; border: 1px solid var(--border-2); color: var(--muted);
+  }
+  .badge.due { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .badge.late { color: #e0765f; border-color: var(--danger); background: #c65f4a1a; }
+
+  /* Attachments */
   .attachment {
     display: flex; align-items: center; gap: 10px; background: var(--card);
     border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
@@ -267,6 +249,35 @@
     border-radius: 5px; padding: 3px 7px;
   }
   .attachment a { color: var(--accent); }
+
+  /* ── Tunnel modal ───────────────────────────────────────────────── */
+  #tunnel-modal {
+    position: fixed; inset: 0; background: rgba(4, 6, 10, .7);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+    padding: 20px;
+  }
+  #tunnel-modal .card {
+    background: var(--panel); border: 1px solid var(--border-2); border-radius: 14px;
+    padding: 20px; width: min(420px, 100%);
+  }
+  #tunnel-modal h2 {
+    font: 600 11px var(--mono); letter-spacing: .2em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  #tunnel-modal .row { margin-bottom: 12px; font-size: 14px; color: var(--muted); }
+  #tunnel-modal .code {
+    display: block; width: 100%; text-align: center; cursor: pointer;
+    font: 700 26px var(--mono); letter-spacing: .12em; color: var(--fg);
+    background: var(--card-2); border: 1px dashed var(--accent); border-radius: 10px;
+    padding: 14px 10px; margin: 6px 0 4px;
+  }
+  #tunnel-modal .hint { font: 11px var(--mono); color: var(--faint); text-align: center; }
+  #tunnel-modal .actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  #tunnel-modal .actions a, #tunnel-modal .actions button {
+    flex: 1; text-align: center; text-decoration: none; cursor: pointer;
+    font: 600 12px var(--mono); border-radius: 8px; padding: 9px 12px;
+    border: 1px solid var(--border-2); color: var(--fg); background: var(--card);
+  }
 </style>
 </head>
 <body>
@@ -295,19 +306,22 @@
       <button id="send" type="submit">↑</button>
     </form>
   </section>
-  <aside id="side">
-    <nav>
-      <button class="tab active" data-view="todo">Todo</button>
-      <button class="tab" data-view="mem">Mémoire</button>
-      <span class="spacer"></span>
-      <button class="icon" id="side-refresh" title="Rafraîchir">⟳</button>
-    </nav>
-    <div class="view" id="view-todo"><div class="placeholder">chargement…</div></div>
-    <div class="view hidden" id="view-mem">
-      <div id="mem-viewer" class="hidden"></div>
-      <div id="mem-tree"><div class="placeholder">chargement…</div></div>
+  <aside id="nav">
+    <div class="nav-head">
+      <span class="label">Mémoire</span>
+      <button id="nav-refresh" title="Rafraîchir">⟳</button>
     </div>
+    <button class="nav-item active" id="nav-todo"><span class="glyph">◈</span>Todo</button>
+    <div id="mem-tree"><div class="placeholder">chargement…</div></div>
   </aside>
+  <main id="content">
+    <div id="content-bar">
+      <button id="nav-toggle" title="Afficher / masquer l’arborescence">☰</button>
+      <span id="content-title">Todo</span>
+    </div>
+    <div class="doc" id="view-todo"><div class="placeholder">chargement…</div></div>
+    <div class="doc hidden" id="mem-viewer"></div>
+  </main>
 </div>
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/vendor/purify.min.js"></script>
@@ -352,6 +366,8 @@ function onUnauthorized() {
   return false;
 }
 
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
 /* ── Markdown rendering with memory-aware links ─────────────────────
    baseDir ('' for chat) resolves relative links/images against the
    memory tree; [[wiki links]] resolve from the memory root. */
@@ -390,7 +406,7 @@ function renderMd(mdText, baseDir) {
   return el;
 }
 
-// Any rendered memory link (chat included) opens in the memory panel.
+// Any rendered memory link (chat included) opens in the page panel.
 document.addEventListener('click', (e) => {
   const a = e.target.closest('a[data-mem]');
   if (!a) return;
@@ -452,7 +468,7 @@ async function sendMessage(text) {
         else if (ev === 'error') add('error', data.message);
       }
     }
-    refreshSide();  // the agent may have updated todo/memory
+    refreshNav();  // the agent may have updated todo/memory
   } catch (e) {
     add('error', String(e));
   } finally {
@@ -485,30 +501,43 @@ document.getElementById('reset').addEventListener('click', async () => {
   chat.innerHTML = '';
 });
 
-/* ── Side panel (≥ 960px): Todo + Memory views ──────────────────── */
-const sideEl = document.getElementById('side');
+/* ── Nav + content (≥ 960px): Notion-like rail and page surface ─── */
+const contentEl = document.getElementById('content');
 const viewTodo = document.getElementById('view-todo');
-const viewMem = document.getElementById('view-mem');
 const memTreeEl = document.getElementById('mem-tree');
 const memViewerEl = document.getElementById('mem-viewer');
+const navTodoBtn = document.getElementById('nav-todo');
 let memInfo = null;   // {root, todo, entries}
+let currentPath = null;
 
-function sideVisible() { return getComputedStyle(sideEl).display !== 'none'; }
+function contentVisible() { return getComputedStyle(contentEl).display !== 'none'; }
 
-document.querySelectorAll('#side .tab').forEach(btn => {
-  btn.addEventListener('click', () => switchView(btn.dataset.view));
-});
-function switchView(name) {
-  document.querySelectorAll('#side .tab').forEach(b => b.classList.toggle('active', b.dataset.view === name));
-  viewTodo.classList.toggle('hidden', name !== 'todo');
-  viewMem.classList.toggle('hidden', name !== 'mem');
-  sideEl.classList.toggle('reading', name === 'mem' && !memViewerEl.classList.contains('hidden'));
+const layoutEl = document.getElementById('layout');
+const contentTitle = document.getElementById('content-title');
+document.getElementById('nav-toggle').addEventListener('click', () =>
+  layoutEl.classList.toggle('nav-hidden'));
+// Three columns get cramped below 1280px: auto-fold the rail on page open
+function autoFoldNav() { if (window.innerWidth < 1280) layoutEl.classList.add('nav-hidden'); }
+
+navTodoBtn.addEventListener('click', showTodo);
+document.getElementById('nav-refresh').addEventListener('click', () => refreshNav(true));
+
+function markActive(path) {
+  currentPath = path;   // null = todo
+  navTodoBtn.classList.toggle('active', path === null);
+  memTreeEl.querySelectorAll('.file').forEach(b => b.classList.toggle('active', b.dataset.path === path));
 }
 
-document.getElementById('side-refresh').addEventListener('click', () => refreshSide(true));
+function showTodo() {
+  memViewerEl.classList.add('hidden');
+  viewTodo.classList.remove('hidden');
+  markActive(null);
+  contentTitle.textContent = 'Todo';
+  autoFoldNav();
+}
 
-async function refreshSide(force) {
-  if (!sideVisible()) return;
+async function refreshNav(force) {
+  if (!contentVisible()) return;
   try {
     const res = await fetch('/api/memory/tree', { headers: headers(false) });
     if (!res.ok) throw new Error(res.status);
@@ -516,11 +545,11 @@ async function refreshSide(force) {
     renderTree();
     await renderTodo();
   } catch (e) {
-    if (force) viewTodo.innerHTML = '<div class="placeholder">mémoire indisponible (' + e + ')</div>';
+    if (force) viewTodo.innerHTML = '<div class="placeholder">mémoire indisponible (' + esc(String(e)) + ')</div>';
   }
 }
 
-/* ── Todo view ──────────────────────────────────────────────────── */
+/* ── Todo page ──────────────────────────────────────────────────── */
 async function renderTodo() {
   if (!memInfo) return;
   const todoPath = memInfo.todo;
@@ -555,8 +584,6 @@ async function renderTodo() {
   }
 }
 
-function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-
 function renderTask(it, baseDir, today) {
   let text = it.text;
   const due = text.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})([^)]*)\)/);
@@ -578,8 +605,7 @@ function renderTask(it, baseDir, today) {
 
   const body = document.createElement('div');
   body.className = 'body';
-  const md = renderMd(text, baseDir);
-  body.appendChild(md);
+  body.appendChild(renderMd(text, baseDir));
 
   const meta = document.createElement('div');
   meta.className = 'meta';
@@ -601,7 +627,7 @@ function renderTask(it, baseDir, today) {
   return el;
 }
 
-/* ── Memory view: tree + viewer ─────────────────────────────────── */
+/* ── Memory tree (always visible) + page viewer ─────────────────── */
 function renderTree() {
   if (!memInfo) return;
   const root = { children: new Map() };
@@ -617,6 +643,7 @@ function renderTree() {
   }
   memTreeEl.innerHTML = '';
   memTreeEl.appendChild(renderNode(root, 0));
+  markActive(currentPath);
 }
 
 function renderNode(node, depth) {
@@ -636,6 +663,7 @@ function renderNode(node, depth) {
     } else {
       const btn = document.createElement('button');
       btn.className = 'file';
+      btn.dataset.path = k.path;
       const name = document.createElement('span');
       name.textContent = k.name.replace(MD_EXT, '');
       btn.appendChild(name);
@@ -653,27 +681,17 @@ function renderNode(node, depth) {
 }
 
 async function openMemory(path) {
-  if (!sideVisible()) return;  // mobile: chat only
-  switchView('mem');
-  memTreeEl.classList.add('hidden');
+  if (!contentVisible()) return;  // mobile: chat only
+  viewTodo.classList.add('hidden');
   memViewerEl.classList.remove('hidden');
   memViewerEl.innerHTML = '';
+  markActive(path);
+  // Unfold the tree down to the opened file
+  const btn = memTreeEl.querySelector(`.file[data-path="${CSS.escape(path)}"]`);
+  for (let d = btn?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
 
-  const crumbs = document.createElement('div');
-  crumbs.className = 'crumbs';
-  sideEl.classList.add('reading');
-  const back = document.createElement('button');
-  back.textContent = '← mémoire';
-  back.addEventListener('click', () => {
-    memViewerEl.classList.add('hidden');
-    memTreeEl.classList.remove('hidden');
-    sideEl.classList.remove('reading');
-  });
-  crumbs.appendChild(back);
-  const label = document.createElement('span');
-  label.textContent = path;
-  crumbs.appendChild(label);
-  memViewerEl.appendChild(crumbs);
+  contentTitle.textContent = (memInfo ? memInfo.root + '/' : '') + path;
+  autoFoldNav();
 
   const baseDir = path.split('/').slice(0, -1).join('/');
   if (MD_EXT.test(path)) {
@@ -690,6 +708,7 @@ async function openMemory(path) {
   } else {
     memViewerEl.appendChild(attachmentCard(path));
   }
+  contentEl.scrollTop = 0;
 }
 
 function attachmentCard(path) {
@@ -751,7 +770,7 @@ async function refreshTunnel() {
     tunnelBody.insertAdjacentHTML('beforeend', '<div class="hint">tap pour copier</div>');
     const a = document.createElement('a');
     a.href = t.deviceUrl; a.target = '_blank'; a.rel = 'noopener';
-    a.className = 'primary'; a.textContent = 'Ouvrir ' + new URL(t.deviceUrl).hostname;
+    a.textContent = 'Ouvrir ' + new URL(t.deviceUrl).hostname;
     a.style.cssText = 'display:block;text-align:center;margin-top:12px;padding:10px;border-radius:8px;' +
       'background:var(--accent);color:#14100a;font:600 13px var(--mono);text-decoration:none;';
     tunnelBody.appendChild(a);
@@ -798,8 +817,8 @@ pollTunnel();
   } catch {}
 })();
 
-refreshSide();
-window.matchMedia('(min-width: 960px)').addEventListener('change', () => refreshSide());
+refreshNav();
+window.matchMedia('(min-width: 960px)').addEventListener('change', () => refreshNav());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 </script>
