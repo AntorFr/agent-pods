@@ -50,6 +50,11 @@ for _pair in MODELS.split(","):
     _label, _, _model = _pair.partition(":")
     if _label.strip() and _model.strip():
         MODEL_CHOICES[_model.strip()] = _label.strip()
+# Read-only browsing of the agent's memory (markdown + attachments), shown
+# by the PWA on large screens. Relative to the workspace.
+MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
+# Todo file surfaced as a dedicated view, relative to the memory dir.
+TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -122,6 +127,51 @@ async def models():
     return {
         "models": [{"id": m, "label": l} for m, l in MODEL_CHOICES.items()],
     }
+
+
+def _memory_root() -> Path:
+    return (Path(WORKSPACE) / MEMORY_DIR).resolve()
+
+
+def _memory_path(rel: str) -> Path:
+    root = _memory_root()
+    p = (root / rel).resolve()
+    if p != root and root not in p.parents:
+        raise HTTPException(status_code=400, detail="invalid path")
+    return p
+
+
+@app.get("/api/memory/tree")
+async def memory_tree():
+    """Flat listing of the memory dir (the client builds the tree)."""
+    root = _memory_root()
+    entries = []
+    if root.is_dir():
+        for p in sorted(root.rglob("*")):
+            rel = p.relative_to(root)
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+            entries.append(
+                {
+                    "path": str(rel),
+                    "dir": p.is_dir(),
+                    "size": p.stat().st_size if p.is_file() else None,
+                }
+            )
+    return {"root": MEMORY_DIR, "todo": TODO_FILE, "entries": entries}
+
+
+@app.get("/api/memory/raw/{rel_path:path}")
+async def memory_raw(rel_path: str, download: bool = False):
+    """Serve one memory file: markdown/images inline, anything else is
+    downloadable (?download=1 forces an attachment disposition)."""
+    p = _memory_path(rel_path)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="not found")
+    headers = {"Cache-Control": "no-store"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{p.name}"'
+    return FileResponse(p, headers=headers)
 
 
 @app.post("/api/reset")

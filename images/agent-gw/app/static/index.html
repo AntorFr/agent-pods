@@ -3,118 +3,228 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1c1c1e">
+<meta name="theme-color" content="#0b0f16">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>Alfred</title>
 <style>
+  /* ── Batcave: graphite + gold, dark-only, sober ─────────────────── */
   :root {
-    --bg: #f5f5f7; --fg: #1c1c1e; --card: #ffffff; --muted: #8e8e93;
-    --accent: #3a5a40; --accent-fg: #ffffff; --border: #e5e5ea;
-    --code-bg: #ececf0;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #1c1c1e; --fg: #f5f5f7; --card: #2c2c2e; --muted: #8e8e93;
-      --accent: #74a57f; --accent-fg: #10141a; --border: #3a3a3c;
-      --code-bg: #1c1c1e;
-    }
+    --bg: #0b0f16; --panel: #0f141d; --card: #151c28; --card-2: #101722;
+    --fg: #d6dde8; --muted: #76839a; --faint: #4a5568;
+    --accent: #d9a441; --accent-soft: rgba(217, 164, 65, .13);
+    --border: #1e2735; --border-2: #2a3547;
+    --user-bubble: #26344a; --danger: #c65f4a; --ok: #6faf7c;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
   body {
-    font: 16px/1.5 -apple-system, system-ui, sans-serif;
+    font: 15px/1.5 -apple-system, system-ui, sans-serif;
     background: var(--bg); color: var(--fg);
     display: flex; flex-direction: column;
     padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
   }
+  button { font: inherit; }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
   header {
     padding: 12px 16px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    background: var(--panel);
   }
-  header h1 { font-size: 17px; font-weight: 600; flex: 1; }
-  header button {
-    background: none; border: none; color: var(--muted);
-    font-size: 14px; cursor: pointer; padding: 4px 8px;
+  #status { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+  #status.busy { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  header h1 {
+    font: 600 13px var(--mono); letter-spacing: .4em; text-transform: uppercase;
+    color: var(--accent); flex: 1; padding-left: .1em;
   }
   #model {
-    background: var(--card); color: var(--muted); border: 1px solid var(--border);
-    border-radius: 12px; font: 13px -apple-system, system-ui, sans-serif;
-    padding: 4px 8px; outline: none; max-width: 110px;
+    background: var(--card); color: var(--muted); border: 1px solid var(--border-2);
+    border-radius: 8px; font: 12px var(--mono); padding: 5px 8px; outline: none;
+    max-width: 110px;
   }
-  #status { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  #status.busy { background: #ff9f0a; }
-  main { flex: 1; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
+  header button {
+    background: none; border: none; color: var(--muted);
+    font-size: 15px; cursor: pointer; padding: 4px 8px;
+  }
+  header button:hover { color: var(--accent); }
+
+  /* ── Layout: chat alone on mobile, chat + side panel ≥ 960px ────── */
+  #layout { flex: 1; display: flex; min-height: 0; }
+  #chatpane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #side { display: none; }
+  @media (min-width: 960px) {
+    #chatpane { max-width: none; }
+    #side {
+      display: flex; flex-direction: column; min-height: 0;
+      width: clamp(380px, 42vw, 560px);
+      border-left: 1px solid var(--border); background: var(--panel);
+    }
+  }
+
+  /* ── Chat ───────────────────────────────────────────────────────── */
+  main#chat { flex: 1; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
   .msg {
-    max-width: 85%; padding: 10px 14px; border-radius: 18px;
+    max-width: 85%; padding: 10px 14px; border-radius: 14px;
     margin-bottom: 8px; overflow-wrap: break-word;
   }
   .msg.user {
-    background: var(--accent); color: var(--accent-fg); margin-left: auto;
+    background: var(--user-bubble); margin-left: auto;
     border-bottom-right-radius: 4px; white-space: pre-wrap;
   }
-  .msg.agent { background: var(--card); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-  .msg.error { background: #b0323255; border: 1px solid #b03232; white-space: pre-wrap; }
+  .msg.agent {
+    background: var(--card); border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.error { background: #c65f4a22; border: 1px solid var(--danger); white-space: pre-wrap; }
 
-  /* Rendered markdown inside agent bubbles */
-  .msg.agent > :not(:last-child) { margin-bottom: .6em; }
-  .msg.agent h1, .msg.agent h2, .msg.agent h3, .msg.agent h4 {
-    font-size: 1.05em; line-height: 1.3; margin-top: .4em;
+  /* Rendered markdown (chat bubbles + memory viewer) */
+  .md > :not(:last-child) { margin-bottom: .6em; }
+  .md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin-top: .5em; }
+  .md h1 { font-size: 1.2em; } .md h2 { font-size: 1.1em; } .md h3, .md h4 { font-size: 1em; }
+  .md h1, .md h2 { padding-bottom: .25em; border-bottom: 1px solid var(--border); }
+  .md ul, .md ol { padding-left: 1.4em; }
+  .md li + li { margin-top: .2em; }
+  .md blockquote { border-left: 3px solid var(--accent); padding-left: .8em; color: var(--muted); }
+  .md a { color: var(--accent); text-decoration-color: var(--accent-soft); }
+  .md hr { border: none; border-top: 1px solid var(--border); }
+  .md code {
+    font: .85em var(--mono); background: var(--card-2);
+    border-radius: 4px; padding: .1em .35em;
   }
-  .msg.agent ul, .msg.agent ol { padding-left: 1.4em; }
-  .msg.agent li + li { margin-top: .2em; }
-  .msg.agent blockquote {
-    border-left: 3px solid var(--border); padding-left: .8em; color: var(--muted);
-  }
-  .msg.agent a { color: var(--accent); }
-  .msg.agent hr { border: none; border-top: 1px solid var(--border); }
-  .msg.agent code {
-    font: .85em ui-monospace, SFMono-Regular, Menlo, monospace;
-    background: var(--code-bg); border-radius: 4px; padding: .1em .35em;
-  }
-  .msg.agent pre {
-    background: var(--code-bg); border: 1px solid var(--border);
+  .md pre {
+    background: var(--card-2); border: 1px solid var(--border);
     border-radius: 8px; padding: 10px; overflow-x: auto;
   }
-  .msg.agent pre code { background: none; padding: 0; }
-  .msg.agent table {
-    border-collapse: collapse; display: block; overflow-x: auto;
-    font-size: .9em; max-width: 100%;
-  }
-  .msg.agent th, .msg.agent td {
-    border: 1px solid var(--border); padding: 4px 8px; text-align: left;
-  }
-  .msg.agent th { background: var(--code-bg); }
+  .md pre code { background: none; padding: 0; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; font-size: .9em; max-width: 100%; }
+  .md th, .md td { border: 1px solid var(--border-2); padding: 4px 8px; text-align: left; }
+  .md th { background: var(--card-2); }
+  .md img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
 
-  /* Typing indicator: three pulsing dots while the agent works */
+  /* Typing indicator */
   .typing { display: inline-flex; gap: 5px; padding: 4px 0; }
   .typing span {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--muted);
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
     animation: pulse 1.2s infinite ease-in-out;
   }
   .typing span:nth-child(2) { animation-delay: .2s; }
   .typing span:nth-child(3) { animation-delay: .4s; }
   @keyframes pulse {
-    0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+    0%, 60%, 100% { opacity: .2; transform: translateY(0); }
     30% { opacity: 1; transform: translateY(-3px); }
   }
 
   form {
     display: flex; gap: 8px; padding: 12px 16px;
-    border-top: 1px solid var(--border); flex-shrink: 0;
+    border-top: 1px solid var(--border); flex-shrink: 0; background: var(--panel);
   }
   textarea {
-    flex: 1; resize: none; border: 1px solid var(--border); border-radius: 20px;
+    flex: 1; resize: none; border: 1px solid var(--border-2); border-radius: 18px;
     padding: 10px 14px; font: inherit; background: var(--card); color: var(--fg);
     max-height: 120px; outline: none;
   }
+  textarea:focus { border-color: var(--accent); }
   form button {
     border: none; border-radius: 50%; width: 42px; height: 42px; flex-shrink: 0;
-    background: var(--accent); color: var(--accent-fg); font-size: 18px;
+    background: var(--accent); color: #14100a; font-size: 18px;
     cursor: pointer; align-self: flex-end;
   }
-  form button:disabled { opacity: .4; }
+  form button:disabled { opacity: .35; }
+
+  /* ── Side panel: tabs + views ───────────────────────────────────── */
+  #side nav {
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  #side nav .tab {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--muted); font: 600 11px var(--mono); letter-spacing: .15em;
+    text-transform: uppercase; padding: 6px 12px; cursor: pointer;
+  }
+  #side nav .tab.active { color: var(--accent); border-color: var(--border-2); background: var(--card-2); }
+  #side nav .spacer { flex: 1; }
+  #side nav .icon {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 14px; padding: 4px 8px;
+  }
+  #side nav .icon:hover { color: var(--accent); }
+  .view { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
+  .view.hidden { display: none; }
+  .placeholder { color: var(--faint); font: 12px var(--mono); padding: 12px 0; }
+
+  /* ── Todo view ──────────────────────────────────────────────────── */
+  .todo-section { margin-bottom: 18px; }
+  .todo-section h2 {
+    font: 600 11px var(--mono); letter-spacing: .18em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px; display: flex; align-items: baseline; gap: 8px;
+  }
+  .todo-section h2 .count { color: var(--accent); }
+  .task {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 6px;
+  }
+  .task.done { opacity: .45; }
+  .task .box {
+    width: 16px; height: 16px; border: 1.5px solid var(--border-2); border-radius: 5px;
+    flex-shrink: 0; margin-top: 2px; background: none; cursor: pointer; padding: 0;
+    color: transparent; font-size: 11px; line-height: 1;
+  }
+  .task .box:hover { border-color: var(--accent); color: var(--accent); }
+  .task.done .box { color: var(--ok); border-color: var(--ok); cursor: default; }
+  .task .body { flex: 1; min-width: 0; font-size: 14px; }
+  .task .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+  .badge {
+    font: 600 10.5px var(--mono); letter-spacing: .05em; border-radius: 5px;
+    padding: 2px 7px; border: 1px solid var(--border-2); color: var(--muted);
+  }
+  .badge.due { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .badge.late { color: #e0765f; border-color: var(--danger); background: #c65f4a1a; }
+  .badge a { color: inherit; text-decoration: none; }
+
+  /* ── Memory view ────────────────────────────────────────────────── */
+  #mem-tree details { margin-left: 0; }
+  #mem-tree details details { margin-left: 14px; }
+  #mem-tree summary {
+    cursor: pointer; padding: 4px 6px; border-radius: 6px; list-style: none;
+    font: 600 12.5px var(--mono); color: var(--muted); user-select: none;
+  }
+  #mem-tree summary::before { content: "▸ "; color: var(--faint); }
+  #mem-tree details[open] > summary::before { content: "▾ "; }
+  #mem-tree summary:hover { background: var(--card-2); color: var(--fg); }
+  #mem-tree .file {
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    background: none; border: none; color: var(--fg); cursor: pointer;
+    padding: 4px 6px 4px 20px; border-radius: 6px; font-size: 13.5px;
+  }
+  #mem-tree details details .file { padding-left: 20px; }
+  #mem-tree .file:hover { background: var(--card-2); }
+  #mem-tree .file .ext {
+    font: 600 9.5px var(--mono); color: var(--accent); border: 1px solid var(--border-2);
+    border-radius: 4px; padding: 1px 4px; flex-shrink: 0;
+  }
+  #mem-tree .archive { opacity: .5; }
+  #mem-viewer .crumbs {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+    font: 12px var(--mono); color: var(--muted); flex-wrap: wrap;
+  }
+  #mem-viewer .crumbs button {
+    background: var(--card-2); border: 1px solid var(--border-2); border-radius: 6px;
+    color: var(--accent); cursor: pointer; font: 12px var(--mono); padding: 3px 10px;
+  }
+  #mem-viewer .crumbs a { color: var(--accent); font: 12px var(--mono); }
+  .attachment {
+    display: flex; align-items: center; gap: 10px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px;
+  }
+  .attachment .ext {
+    font: 600 11px var(--mono); color: var(--accent); border: 1px solid var(--border-2);
+    border-radius: 5px; padding: 3px 7px;
+  }
+  .attachment a { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -124,11 +234,28 @@
   <select id="model" title="Modèle"></select>
   <button id="reset" title="Nouvelle session">↺</button>
 </header>
-<main id="chat"></main>
-<form id="form">
-  <textarea id="input" rows="1" placeholder="Message…" autocomplete="off"></textarea>
-  <button id="send" type="submit">↑</button>
-</form>
+<div id="layout">
+  <section id="chatpane">
+    <main id="chat"></main>
+    <form id="form">
+      <textarea id="input" rows="1" placeholder="Message…" autocomplete="off"></textarea>
+      <button id="send" type="submit">↑</button>
+    </form>
+  </section>
+  <aside id="side">
+    <nav>
+      <button class="tab active" data-view="todo">Todo</button>
+      <button class="tab" data-view="mem">Mémoire</button>
+      <span class="spacer"></span>
+      <button class="icon" id="side-refresh" title="Rafraîchir">⟳</button>
+    </nav>
+    <div class="view" id="view-todo"><div class="placeholder">chargement…</div></div>
+    <div class="view hidden" id="view-mem">
+      <div id="mem-viewer" class="hidden"></div>
+      <div id="mem-tree"><div class="placeholder">chargement…</div></div>
+    </div>
+  </aside>
+</div>
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/vendor/purify.min.js"></script>
 <script>
@@ -155,6 +282,9 @@ modelSel.addEventListener('change', () => localStorage.setItem('gw_model', model
 
 marked.setOptions({ gfm: true, breaks: true });
 
+const IMG_EXT = /\.(png|jpe?g|gif|webp|svg|heic|heif)$/i;
+const MD_EXT = /\.md$/i;
+
 function headers(json) {
   const h = {};
   if (json) h['Content-Type'] = 'application/json';
@@ -169,11 +299,57 @@ function onUnauthorized() {
   return false;
 }
 
-function add(cls, text) {
+/* ── Markdown rendering with memory-aware links ─────────────────────
+   baseDir ('' for chat) resolves relative links/images against the
+   memory tree; [[wiki links]] resolve from the memory root. */
+function normPath(p) {
+  const out = [];
+  for (const seg of p.split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') out.pop(); else out.push(seg);
+  }
+  return out.join('/');
+}
+
+function renderMd(mdText, baseDir) {
+  const src = mdText.replace(/\[\[([^\]]+)\]\]/g, (_, t) => `[${t.trim()}](/mem/${t.trim()})`);
   const el = document.createElement('div');
-  el.className = 'msg ' + cls;
-  if (cls === 'agent') el.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  else el.textContent = text;
+  el.className = 'md';
+  el.innerHTML = DOMPurify.sanitize(marked.parse(src));
+  el.querySelectorAll('img').forEach(img => {
+    const s = img.getAttribute('src') || '';
+    if (s.startsWith('/mem/')) img.src = '/api/memory/raw/' + normPath(s.slice(5));
+    else if (!/^[a-z]+:/i.test(s) && !s.startsWith('/')) img.src = '/api/memory/raw/' + normPath(baseDir + '/' + s);
+    img.loading = 'lazy';
+  });
+  el.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href') || '';
+    let target = null;
+    if (href.startsWith('/mem/')) target = decodeURI(href.slice(5));
+    else if (!/^[a-z]+:/i.test(href) && !href.startsWith('/') && !href.startsWith('#'))
+      target = baseDir + '/' + decodeURI(href);
+    if (target !== null) {
+      target = normPath(target);
+      if (!/\.[a-z0-9]+$/i.test(target)) target += '.md';
+      a.href = '#'; a.dataset.mem = target;
+    } else if (/^https?:/i.test(href)) { a.target = '_blank'; a.rel = 'noopener'; }
+  });
+  return el;
+}
+
+// Any rendered memory link (chat included) opens in the memory panel.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-mem]');
+  if (!a) return;
+  e.preventDefault();
+  openMemory(a.dataset.mem);
+});
+
+/* ── Chat ───────────────────────────────────────────────────────── */
+function add(cls, text) {
+  let el;
+  if (cls === 'agent') { el = renderMd(text, ''); el.classList.add('msg', 'agent'); }
+  else { el = document.createElement('div'); el.className = 'msg ' + cls; el.textContent = text; }
   chat.appendChild(el);
   chat.scrollTop = chat.scrollHeight;
   return el;
@@ -206,8 +382,7 @@ async function sendMessage(text) {
     if (res.status === 401) { pending.remove(); if (!onUnauthorized()) await askToken(); return; }
     if (!res.ok) throw new Error((await res.json()).detail || res.status);
     // Parse the SSE stream by hand (EventSource can't POST). The typing
-    // bubble stays up until the first text arrives (agent may run tools
-    // for a while before answering), then between intermediate texts.
+    // bubble stays below intermediate texts until "done".
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
@@ -224,6 +399,7 @@ async function sendMessage(text) {
         else if (ev === 'error') add('error', data.message);
       }
     }
+    refreshSide();  // the agent may have updated todo/memory
   } catch (e) {
     add('error', String(e));
   } finally {
@@ -255,6 +431,232 @@ document.getElementById('reset').addEventListener('click', async () => {
   await fetch('/api/reset', { method: 'POST', headers: headers(false) });
   chat.innerHTML = '';
 });
+
+/* ── Side panel (≥ 960px): Todo + Memory views ──────────────────── */
+const sideEl = document.getElementById('side');
+const viewTodo = document.getElementById('view-todo');
+const viewMem = document.getElementById('view-mem');
+const memTreeEl = document.getElementById('mem-tree');
+const memViewerEl = document.getElementById('mem-viewer');
+let memInfo = null;   // {root, todo, entries}
+
+function sideVisible() { return getComputedStyle(sideEl).display !== 'none'; }
+
+document.querySelectorAll('#side .tab').forEach(btn => {
+  btn.addEventListener('click', () => switchView(btn.dataset.view));
+});
+function switchView(name) {
+  document.querySelectorAll('#side .tab').forEach(b => b.classList.toggle('active', b.dataset.view === name));
+  viewTodo.classList.toggle('hidden', name !== 'todo');
+  viewMem.classList.toggle('hidden', name !== 'mem');
+}
+
+document.getElementById('side-refresh').addEventListener('click', () => refreshSide(true));
+
+async function refreshSide(force) {
+  if (!sideVisible()) return;
+  try {
+    const res = await fetch('/api/memory/tree', { headers: headers(false) });
+    if (!res.ok) throw new Error(res.status);
+    memInfo = await res.json();
+    renderTree();
+    await renderTodo();
+  } catch (e) {
+    if (force) viewTodo.innerHTML = '<div class="placeholder">mémoire indisponible (' + e + ')</div>';
+  }
+}
+
+/* ── Todo view ──────────────────────────────────────────────────── */
+async function renderTodo() {
+  if (!memInfo) return;
+  const todoPath = memInfo.todo;
+  const baseDir = todoPath.split('/').slice(0, -1).join('/');
+  const res = await fetch('/api/memory/raw/' + todoPath, { headers: headers(false) });
+  if (!res.ok) { viewTodo.innerHTML = '<div class="placeholder">pas de fichier todo</div>'; return; }
+  const md = await res.text();
+
+  // Parse "## section" blocks of "- [ ] item" (with indented continuations)
+  const sections = [];
+  let cur = null, item = null;
+  for (const line of md.split('\n')) {
+    const h = line.match(/^##\s+(.*)/);
+    if (h) { cur = { title: h[1], items: [] }; sections.push(cur); item = null; continue; }
+    if (!cur) continue;
+    const t = line.match(/^- \[([ xX])\]\s+(.*)/);
+    if (t) { item = { done: t[1] !== ' ', text: t[2] }; cur.items.push(item); continue; }
+    if (item && /^\s+\S/.test(line) && !/^\s*[-*#>]/.test(line)) item.text += ' ' + line.trim();
+    else item = null;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  viewTodo.innerHTML = '';
+  for (const sec of sections) {
+    const box = document.createElement('div');
+    box.className = 'todo-section';
+    const open = sec.items.filter(i => !i.done).length;
+    box.innerHTML = `<h2>${esc(sec.title.replace(/\(.*\)/, '').trim())} <span class="count">${sec.items.length ? open : ''}</span></h2>`;
+    if (!sec.items.length) box.insertAdjacentHTML('beforeend', '<div class="placeholder">rien</div>');
+    for (const it of sec.items) box.appendChild(renderTask(it, baseDir, today));
+    viewTodo.appendChild(box);
+  }
+}
+
+function esc(s) { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function renderTask(it, baseDir, today) {
+  let text = it.text;
+  const due = text.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})([^)]*)\)/);
+  const added = text.match(/\*\(ajouté[^)]*\)\*/);
+  text = text.replace(/—?\s*\(échéance:[^)]*\)/, '').replace(/\*\(ajouté[^)]*\)\*/, '').trim();
+
+  const el = document.createElement('div');
+  el.className = 'task' + (it.done ? ' done' : '');
+
+  const box = document.createElement('button');
+  box.className = 'box'; box.textContent = '✓';
+  box.title = it.done ? 'Faite' : 'Demander à Alfred de la marquer comme faite';
+  if (!it.done) box.addEventListener('click', () => {
+    input.value = 'Marque cette tâche comme faite : « ' +
+      text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\[|\]\]/g, '') + ' »';
+    input.focus(); input.dispatchEvent(new Event('input'));
+  });
+  el.appendChild(box);
+
+  const body = document.createElement('div');
+  body.className = 'body';
+  const md = renderMd(text, baseDir);
+  body.appendChild(md);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  if (due) {
+    const b = document.createElement('span');
+    const d = due[1];
+    b.className = 'badge ' + (d < today ? 'late' : d === today ? 'due' : '');
+    b.textContent = (d < today ? '⚠ ' : '') + (d === today ? "aujourd'hui" : d) + (due[2] || '').replace(/^,\s*/, ' · ');
+    meta.appendChild(b);
+  }
+  if (added) {
+    const b = document.createElement('span');
+    b.className = 'badge';
+    b.textContent = added[0].replace(/\*|\(|\)/g, '');
+    meta.appendChild(b);
+  }
+  if (meta.children.length) body.appendChild(meta);
+  el.appendChild(body);
+  return el;
+}
+
+/* ── Memory view: tree + viewer ─────────────────────────────────── */
+function renderTree() {
+  if (!memInfo) return;
+  const root = { children: new Map() };
+  for (const e of memInfo.entries) {
+    const parts = e.path.split('/');
+    let node = root;
+    for (let i = 0; i < parts.length; i++) {
+      if (!node.children.has(parts[i]))
+        node.children.set(parts[i], { name: parts[i], dir: true, children: new Map() });
+      node = node.children.get(parts[i]);
+      if (i === parts.length - 1) { node.dir = e.dir; node.path = e.path; }
+    }
+  }
+  memTreeEl.innerHTML = '';
+  memTreeEl.appendChild(renderNode(root, 0));
+}
+
+function renderNode(node, depth) {
+  const frag = document.createDocumentFragment();
+  const kids = [...node.children.values()]
+    .sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name, 'fr'));
+  for (const k of kids) {
+    if (k.dir) {
+      const det = document.createElement('details');
+      if (depth === 0) det.open = true;
+      if (k.name === 'archive') { det.open = false; det.className = 'archive'; }
+      const sum = document.createElement('summary');
+      sum.textContent = k.name + '/';
+      det.appendChild(sum);
+      det.appendChild(renderNode(k, depth + 1));
+      frag.appendChild(det);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'file';
+      const name = document.createElement('span');
+      name.textContent = k.name.replace(MD_EXT, '');
+      btn.appendChild(name);
+      const m = k.name.match(/\.([a-z0-9]+)$/i);
+      if (m && !MD_EXT.test(k.name)) {
+        const ext = document.createElement('span');
+        ext.className = 'ext'; ext.textContent = m[1].toUpperCase();
+        btn.appendChild(ext);
+      }
+      btn.addEventListener('click', () => openMemory(k.path));
+      frag.appendChild(btn);
+    }
+  }
+  return frag;
+}
+
+async function openMemory(path) {
+  if (!sideVisible()) return;  // mobile: chat only
+  switchView('mem');
+  memTreeEl.classList.add('hidden');
+  memViewerEl.classList.remove('hidden');
+  memViewerEl.innerHTML = '';
+
+  const crumbs = document.createElement('div');
+  crumbs.className = 'crumbs';
+  const back = document.createElement('button');
+  back.textContent = '← mémoire';
+  back.addEventListener('click', () => {
+    memViewerEl.classList.add('hidden');
+    memTreeEl.classList.remove('hidden');
+  });
+  crumbs.appendChild(back);
+  const label = document.createElement('span');
+  label.textContent = path;
+  crumbs.appendChild(label);
+  memViewerEl.appendChild(crumbs);
+
+  const baseDir = path.split('/').slice(0, -1).join('/');
+  if (MD_EXT.test(path)) {
+    const res = await fetch('/api/memory/raw/' + path, { headers: headers(false) });
+    if (!res.ok) { memViewerEl.insertAdjacentHTML('beforeend', '<div class="placeholder">introuvable</div>'); return; }
+    memViewerEl.appendChild(renderMd(await res.text(), baseDir));
+  } else if (IMG_EXT.test(path)) {
+    const img = document.createElement('img');
+    img.src = '/api/memory/raw/' + path;
+    img.style.maxWidth = '100%'; img.style.borderRadius = '8px';
+    img.onerror = () => { img.remove(); memViewerEl.appendChild(attachmentCard(path)); };
+    memViewerEl.appendChild(img);
+    memViewerEl.appendChild(downloadLink(path));
+  } else {
+    memViewerEl.appendChild(attachmentCard(path));
+  }
+}
+
+function attachmentCard(path) {
+  const name = path.split('/').pop();
+  const ext = (name.match(/\.([a-z0-9]+)$/i) || [, '?'])[1].toUpperCase();
+  const el = document.createElement('div');
+  el.className = 'attachment';
+  el.innerHTML = `<span class="ext">${esc(ext)}</span>`;
+  el.appendChild(downloadLink(path, name));
+  return el;
+}
+
+function downloadLink(path, label) {
+  const a = document.createElement('a');
+  a.href = '/api/memory/raw/' + path + '?download=1';
+  a.textContent = label || 'Télécharger ' + path.split('/').pop();
+  a.style.display = 'inline-block'; a.style.marginTop = '8px';
+  return a;
+}
+
+/* ── Boot ───────────────────────────────────────────────────────── */
+refreshSide();
+window.matchMedia('(min-width: 960px)').addEventListener('change', () => refreshSide());
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 </script>
