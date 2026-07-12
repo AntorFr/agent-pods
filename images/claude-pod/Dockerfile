@@ -48,6 +48,15 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
+# Google Workspace MCP server (stdio) in its own venv — same pinned version
+# as agent-gw so both containers spawn identical tools from .mcp.json.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/workspace-mcp \
+    && /opt/workspace-mcp/bin/pip install --no-cache-dir workspace-mcp==1.22.0 \
+    && ln -s /opt/workspace-mcp/bin/workspace-mcp /usr/local/bin/workspace-mcp
+
 COPY --from=vscode-cli /usr/local/bin/code /usr/local/bin/code
 
 # Rename the stock `node` user (uid 1000) — this pod hosts an agent, not a build
