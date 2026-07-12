@@ -777,6 +777,18 @@ setInterval(pollTunnel, 120000);
 pollTunnel();
 
 /* ── Boot ───────────────────────────────────────────────────────── */
+// Restore the visible conversation from the server-side transcript — the
+// session itself always survives reloads (and pod restarts), only the DOM dies.
+(async function loadHistory() {
+  try {
+    const res = await fetch('/api/history', { headers: headers(false) });
+    if (res.status === 401) { onUnauthorized(); return; }
+    if (!res.ok) return;
+    const { messages } = await res.json();
+    for (const m of messages) add(m.role === 'user' ? 'user' : 'agent', m.text);
+  } catch {}
+})();
+
 refreshSide();
 window.matchMedia('(min-width: 960px)').addEventListener('change', () => refreshSide());
 

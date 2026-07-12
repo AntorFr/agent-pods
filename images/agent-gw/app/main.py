@@ -134,6 +134,46 @@ async def models():
     }
 
 
+@app.get("/api/history")
+async def history(limit: int = 300):
+    """Replay the persisted session transcript (written by the Claude Code
+    harness) so the PWA can restore the visible conversation on reload."""
+    session_id = _load_session_id()
+    if not session_id:
+        return {"messages": []}
+    slug = re.sub(r"[^A-Za-z0-9]", "-", WORKSPACE)
+    f = Path.home() / ".claude" / "projects" / slug / f"{session_id}.jsonl"
+    if not f.is_file():
+        return {"messages": []}
+    out = []
+    for line in f.read_text(errors="replace").splitlines():
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if obj.get("type") not in ("user", "assistant"):
+            continue
+        if obj.get("isMeta") or obj.get("isSidechain"):
+            continue
+        content = (obj.get("message") or {}).get("content")
+        if isinstance(content, str):
+            texts = [content]
+        elif isinstance(content, list):
+            texts = [
+                b.get("text", "")
+                for b in content
+                if isinstance(b, dict) and b.get("type") == "text"
+            ]
+        else:
+            texts = []
+        text = "\n\n".join(t for t in texts if t).strip()
+        # skip tool-only turns and harness-injected wrappers (<system-reminder>…)
+        if not text or text.startswith("<"):
+            continue
+        out.append({"role": obj["type"], "text": text, "ts": obj.get("timestamp")})
+    return {"messages": out[-limit:]}
+
+
 @app.get("/api/tunnel")
 async def tunnel_status():
     """Parse the tunnel container's mirrored output: pending device-code

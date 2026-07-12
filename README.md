@@ -59,6 +59,8 @@ typing indicator, model picker) and an SSE API:
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
 - `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device
   code + vscode.dev link, parsed from the claude-pod mirrored output
+- `GET /api/history` — replay of the current session transcript (the PWA
+  restores the visible conversation on reload)
 - `GET /api/health`
 - `GET /auth/login|callback|logout`, `GET /api/auth/config` — OIDC flow (when configured)
 
