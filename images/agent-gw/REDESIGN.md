@@ -36,6 +36,22 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 - **Chemin de promotion** : un domaine naît en contenu ; quand il mérite une UX dédiée, il devient
   un module codé (rime avec la doctrine sujet→projet d'Alfred).
 
+## L'Atelier, Projets, Outils (la zone la plus complexe — arrêtée)
+
+- **« L'Atelier »** (remplace « DIY ») = domaine de **connaissance + capacités**, PAS les projets :
+  - **Savoir-faire** (techniques réutilisables) ;
+  - **Machines** (leur *usage* est un savoir-faire) ;
+  - **Outils** = les fonctionnalités codées activables (plan de débit/suivi menuiserie ; demain
+    un générateur de boîtes laser…).
+- **« Projets »** = domaine à part, **rangé par catégorie MAJEURE** : Menuiserie, Bricolage,
+  Électronique, Développement. Un projet peut être transverse (un meuble avec de l'électronique) —
+  la catégorie affichée est le métier *principal* ; les autres métiers sont des « aspects ».
+- **Un outil = un module attaché à des projets**, en **double entrée** :
+  1. depuis la **fiche projet** (section « Outils du projet », si activé) ;
+  2. depuis **L'Atelier › Outils**.
+  Même module, deux chemins (le fil d'Ariane reflète l'origine).
+- Les fiches savoir-faire/machine sont **référencées** par les projets qui les emploient.
+
 ## Trois régimes de contenu (à ne pas confondre)
 
 - **Dérivé** (requête live sur le frontmatter) : galeries, facettes, vues dynamiques todo,
