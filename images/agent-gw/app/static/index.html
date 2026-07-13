@@ -603,10 +603,20 @@ async function sendMessage(text) {
   const pending = addTyping();
   status.classList.add('busy');
   try {
-    const res = await fetch('/api/chat', {
-      method: 'POST', headers: headers(true),
-      body: JSON.stringify({ message: text, model: modelSel.value || undefined }),
-    });
+    // The lock may be held elsewhere (another tab/device, or an ask_alfred MCP
+    // call): the server 409s. Wait it out instead of erroring — the typing
+    // dots keep spinning until the agent frees up.
+    let res;
+    const deadline = Date.now() + 180000;
+    while (true) {
+      res = await fetch('/api/chat', {
+        method: 'POST', headers: headers(true),
+        body: JSON.stringify({ message: text, model: modelSel.value || undefined }),
+      });
+      if (res.status !== 409) break;
+      if (Date.now() > deadline) throw new Error('Alfred est occupé depuis un moment — réessayez.');
+      await new Promise(r => setTimeout(r, 1500));
+    }
     if (res.status === 401) { pending.remove(); if (!onUnauthorized()) await askToken(); return; }
     if (!res.ok) throw new Error((await res.json()).detail || res.status);
     // Parse the SSE stream by hand (EventSource can't POST). The typing
