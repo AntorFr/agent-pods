@@ -503,7 +503,12 @@ async def chat(request: Request):
 
 @app.get("/")
 async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    # no-cache: the app JS is inlined here, so the browser must revalidate
+    # index.html every load or it serves a stale frontend after a deploy.
+    return FileResponse(
+        STATIC_DIR / "index.html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # Served from the root so the service worker scope covers the whole app.
