@@ -62,10 +62,32 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 - Typo : sans système pour le corps, serif lettré (Iowan/Palatino) réservé au nom/titres pour la
   touche majordome, mono pour la donnée technique (étiquettes, cotes, métadonnées).
 
+## App Todo — modèle de données (référence, ZÉRO duplication)
+
+Besoin utilisateur : la liste complète est longue/effrayante. Le matin, avec Alfred, on se
+donne des objectifs (jour / week-end) et on suit une **liste de focus** — mais tout en
+**référence**, une seule base, pas de copie.
+
+- **Base unique** : `todo/taches.md`. Chaque tâche a un **id stable** (`^id`), statut,
+  métadonnées (échéance, estimation, tags, lien projet/domaine). Seule source de vérité.
+- **Liste de focus = liste d'ids** vers la base (`todo/focus/<nom>.md`). Aucune copie du texte
+  ni de l'état ; à l'affichage on résout les ids → tâches vivantes.
+- **L'état (fait/pas fait) vit sur la tâche de la base.** Cocher dans un focus bascule *la*
+  tâche, partout. Désync impossible.
+- **Deux natures de vues** :
+  - **Focus curées** (toi + Alfred au petit-déj) = liste d'ids **stockée** (une décision, non dérivable).
+  - **Vues dynamiques** (en retard, < 15 min, par domaine) = **requêtes** dérivées, rien de stocké.
+- **Vue par défaut de l'app = le focus du jour** (court, calme), PAS la base complète. La grande
+  liste ne s'ouvre qu'à la curation.
+- **Rituel** : « objectifs du jour » → Alfred propose depuis la base (échéances, quick wins,
+  non bloquées) → validation → il écrit la liste de focus → app affiche « Aujourd'hui ».
+- **Sous-tâches** (hiérarchie) = même mécanisme de référence (tâche → tâches enfants). Secondaire.
+- Intégrité : un focus ne tient que des ids ; ids disparus/faits ignorés à la résolution.
+
 ## Vues à réaliser
 
-- **Todo** : bandeau focus (retards, contraintes), groupes par domaine, chips (échéance/dep/est/blocage),
-  liseré de priorité.
+- **Todo** : app-module. Défaut = focus du jour ; base groupée par domaine accessible à la
+  curation ; bandeau focus (retards, contraintes) ; chips (échéance/dep/est/blocage) ; priorité.
 - **Atelier (Menuiserie)** : plan de débit **SVG à l'échelle** (dérasage matérialisé, pièces colorées
   par famille, étiquette+cotes, cliquables → détail), élévation d'assemblage SVG, préparations, suivi
   par réglage FS-PA. API d'état déjà existante (`/api/workbook/state`) = le patron des app-modules.
