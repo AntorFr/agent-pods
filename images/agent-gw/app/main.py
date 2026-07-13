@@ -26,6 +26,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth
@@ -66,6 +67,12 @@ TUNNEL_LOG = os.environ.get("GW_TUNNEL_LOG", str(Path.home() / ".vscode-cli" / "
 # Service token gating the /mcp endpoint (other agents call Alfred over MCP).
 # Machine-to-machine: coexists with Authelia, checked before the OIDC logic.
 MCP_TOKEN = os.environ.get("GW_MCP_TOKEN", "")
+# FastMCP validates the Host header (DNS-rebinding protection). Behind an
+# ingress the Host is the public name, which must be allow-listed or every
+# call 421s. Comma-separated; localhost is always added for in-pod checks.
+MCP_ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", "alfred.berard.me").split(",") if h.strip()
+]
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -77,6 +84,10 @@ mcp_server = FastMCP(
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
+    transport_security=TransportSecuritySettings(
+        allowed_hosts=MCP_ALLOWED_HOSTS + ["localhost", "127.0.0.1", "localhost:8000", "127.0.0.1:8000"],
+        allowed_origins=[f"https://{h}" for h in MCP_ALLOWED_HOSTS],
+    ),
 )
 
 
