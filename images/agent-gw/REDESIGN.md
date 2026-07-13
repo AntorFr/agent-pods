@@ -78,6 +78,9 @@ Le détail d'un élément n'est pas toujours une page :
 ## Shell & ergonomie
 
 - **Pas de barre de navigation centrale** (l'ancienne arbo). Navigation = mosaïque + recherche.
+- **Retour à l'accueil / navigation profonde** : un **fil d'Ariane** qui commence toujours par
+  « Accueil » (cliquable), chaque segment cliquable (Accueil › Maison › Piscine › Entretien) ;
+  **+ le blason Alfred = bouton accueil** ; **+ retour d'un cran**. Trois chemins cohérents.
 - **Chat d'Alfred = première classe, rail permanent à gauche** (pas un tiroir escamotable).
   Défaut ~1/3 de l'écran.
 - **⚠️ Le rail de chat doit être REDIMENSIONNABLE par l'utilisateur** : poignée à glisser entre
