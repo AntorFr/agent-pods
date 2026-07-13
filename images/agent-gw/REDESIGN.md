@@ -36,6 +36,21 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 - **Chemin de promotion** : un domaine naît en contenu ; quand il mérite une UX dédiée, il devient
   un module codé (rime avec la doctrine sujet→projet d'Alfred).
 
+## Trois régimes de contenu (à ne pas confondre)
+
+- **Dérivé** (requête live sur le frontmatter) : galeries, facettes, vues dynamiques todo,
+  compteurs des tuiles. Calculé par le front/gateway, toujours à jour, ~0 coût, pas de LLM.
+- **Matérialisé curé** (jugement d'Alfred) : **la « une » / « Reprendre » de la home**, la
+  liste de focus « Aujourd'hui ». Un **sous-agent Alfred** choisit les 3-4 éléments à mettre
+  en avant **+ une raison** et écrit un artefact (`home/brief.json`). Le front le lit *cheap*.
+  **Pas de LLM au render.** Rafraîchi sur **déclencheurs réactifs** : rituel du matin,
+  « rafraîchis ma une », ou à l'ouverture si le brief a plus de N heures (1 appel throttlé).
+  Alfred reste réactif — aucune tâche de fond.
+- **Rédigé** (contenu) : fiches/pages en md+blocs, rendues à la lecture sans LLM.
+
+⚠️ Piège : « Reprendre » n'est PAS un tri par date-de-modif (requête bête) — c'est du jugement,
+donc régime *matérialisé curé*, comme la liste de focus todo (même mécanisme).
+
 ## Shell & ergonomie
 
 - **Pas de barre de navigation centrale** (l'ancienne arbo). Navigation = mosaïque + recherche.
