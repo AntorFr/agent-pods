@@ -51,6 +51,30 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 ⚠️ Piège : « Reprendre » n'est PAS un tri par date-de-modif (requête bête) — c'est du jugement,
 donc régime *matérialisé curé*, comme la liste de focus todo (même mécanisme).
 
+## Vue collection générique (LE composant transverse)
+
+Presque tous les domaines suivent le même patron : **cartes + recherche/facettes → détail**.
+Donc UN seul composant « collection », configuré par domaine — pas un écran par domaine.
+
+- **Collection plate** : Cuisine (recettes), Contacts, Achats, Projets. Cartes issues du
+  frontmatter, **recherche** (nom/tags/type) + **facettes** (une propriété du frontmatter :
+  catégorie, rôle, statut…). Régime *dérivé* (requête live).
+- **Collection groupée** : Cadeaux → on entre par **personne** (niveau de regroupement), puis
+  la liste. Même composant + une clé `groupBy`.
+- **Config par domaine** : quels champs sur la carte, quelle(s) facette(s), regroupé ou non.
+  Idéalement déduite du frontmatter + une petite config de domaine.
+
+## Derrière une carte : page unique OU espace multi-pages
+
+Le détail d'un élément n'est pas toujours une page :
+
+- **Page unique** : une recette, un contact, un volet roulant → une fiche md+blocs.
+- **Espace multi-pages** : un projet complexe, un cluster de connaissances (ex. **Piscine** :
+  vue d'ensemble, entretien, hivernage, matériel PoolLAB, traitement). = un **dossier de pages**
+  avec sa **navigation interne** (TOC latérale) et des **cross-links** `[[piscine/poollab]]`.
+- Côté mémoire : page unique = un `.md` ; espace = un **dossier** de `.md` (une page = index).
+  Le front détecte l'un ou l'autre et rend la fiche ou l'espace+TOC. Même moteur de rendu.
+
 ## Shell & ergonomie
 
 - **Pas de barre de navigation centrale** (l'ancienne arbo). Navigation = mosaïque + recherche.
