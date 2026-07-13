@@ -259,6 +259,110 @@
   }
   .attachment a { color: var(--accent); }
 
+  /* ── Ateliers (workbooks) ───────────────────────────────────────── */
+  .doc.wide { max-width: 1180px; }
+  .wb-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 12px; cursor: pointer;
+  }
+  .wb-card:hover { border-color: var(--accent); }
+  .wb-card h3 { font-size: 16px; margin-bottom: 6px; }
+  .wb-card .sub { font: 12px var(--mono); color: var(--muted); margin-bottom: 10px; }
+  .progress { height: 6px; background: var(--card-2); border-radius: 3px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); }
+  .wb-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .wb-head h2 { font-size: 20px; flex: 1; }
+  .wb-tabs { display: flex; gap: 4px; margin-bottom: 18px; flex-wrap: wrap; }
+  .wb-tabs button {
+    background: none; border: 1px solid var(--border-2); border-radius: 8px;
+    color: var(--muted); font: 600 11px var(--mono); letter-spacing: .12em;
+    text-transform: uppercase; padding: 7px 14px; cursor: pointer;
+  }
+  .wb-tabs button.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .btn-accent {
+    background: var(--accent); border: none; border-radius: 8px; color: #14100a;
+    font: 600 12px var(--mono); padding: 9px 14px; cursor: pointer;
+  }
+  /* Débit / calepinage */
+  .panel { margin-bottom: 22px; }
+  .panel h4 { font: 600 12px var(--mono); color: var(--muted); margin-bottom: 8px; }
+  .panel .cols { display: flex; gap: 8px; align-items: stretch; overflow-x: auto; }
+  .panel .col {
+    border: 1px solid var(--border-2); border-radius: 8px; padding: 8px;
+    min-width: 130px; flex: 1;
+  }
+  .panel .col h5 { font: 600 10.5px var(--mono); color: var(--accent); margin-bottom: 6px; }
+  .piece-block {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; margin-bottom: 5px; font: 12px var(--mono); color: var(--fg);
+  }
+  .piece-block:hover { border-color: var(--accent); }
+  .piece-block.done { opacity: .4; text-decoration: line-through; }
+  .piece-block .dims { color: var(--muted); font-size: 10.5px; }
+  .piece-block.flash { animation: flash 1.6s; }
+  @keyframes flash { 0%, 60% { border-color: var(--accent); background: var(--accent-soft); } }
+  /* Prépas & assemblage */
+  .prep-card, .asm-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .prep-card h4, .asm-card h4 { font: 600 13px var(--mono); color: var(--accent); margin-bottom: 6px; }
+  .prep-card ul, .asm-card ol { padding-left: 1.3em; font-size: 14px; }
+  .prep-card li + li, .asm-card li + li { margin-top: .35em; }
+  /* Suivi */
+  .reg-group { margin-bottom: 20px; }
+  .reg-group h4 {
+    font: 600 11px var(--mono); letter-spacing: .12em; color: var(--muted);
+    text-transform: uppercase; margin-bottom: 8px; display: flex; gap: 10px; align-items: center;
+  }
+  .reg-group h4 .count { color: var(--accent); }
+  .tick-row {
+    display: flex; align-items: center; gap: 10px; background: var(--card);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 5px;
+  }
+  .tick-row.done { opacity: .45; }
+  .tick-row input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+  .tick-row .lbl { flex: 1; font: 13px var(--mono); cursor: pointer; }
+  .tick-row .dims { color: var(--muted); font: 11px var(--mono); }
+  /* Mode atelier (TV) */
+  #atelier-mode {
+    position: fixed; inset: 0; background: var(--bg); z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #atelier-exit {
+    position: absolute; top: 18px; right: 22px; background: none; border: 1px solid var(--border-2);
+    border-radius: 10px; color: var(--muted); font-size: 22px; padding: 8px 16px; cursor: pointer;
+  }
+  #atelier-body { text-align: center; max-width: 900px; padding: 24px; width: 100%; }
+  #atelier-body .reg { font: 600 20px var(--mono); color: var(--accent); letter-spacing: .1em; margin-bottom: 18px; }
+  #atelier-body .etq { font: 700 64px var(--mono); margin-bottom: 12px; overflow-wrap: break-word; }
+  #atelier-body .dims { font: 32px var(--mono); color: var(--muted); margin-bottom: 10px; }
+  #atelier-body .extra { font-size: 20px; color: var(--muted); margin-bottom: 30px; min-height: 1.4em; }
+  #atelier-body .done-btn {
+    background: var(--accent); border: none; border-radius: 16px; color: #14100a;
+    font: 700 34px var(--mono); padding: 22px 60px; cursor: pointer;
+  }
+  #atelier-body .progress { margin-top: 34px; height: 10px; }
+  #atelier-body .pcount { font: 16px var(--mono); color: var(--faint); margin-top: 10px; }
+  /* Piece modal */
+  #piece-modal {
+    position: fixed; inset: 0; background: rgba(4, 6, 10, .7); z-index: 15;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #piece-modal .card {
+    background: var(--panel); border: 1px solid var(--border-2); border-radius: 14px;
+    padding: 20px; width: min(480px, 100%); max-height: 80vh; overflow-y: auto;
+  }
+  #piece-modal h2 { font: 700 18px var(--mono); color: var(--accent); margin-bottom: 10px; }
+  #piece-modal .row { font-size: 14px; margin-bottom: 8px; }
+  #piece-modal .row b { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .1em; display: block; }
+  #piece-modal .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  #piece-modal .actions button {
+    flex: 1; background: var(--card); border: 1px solid var(--border-2); border-radius: 8px;
+    color: var(--fg); font: 600 12px var(--mono); padding: 9px 10px; cursor: pointer;
+  }
+
   /* ── Tunnel modal ───────────────────────────────────────────────── */
   #tunnel-modal {
     position: fixed; inset: 0; background: rgba(4, 6, 10, .7);
@@ -322,6 +426,7 @@
       <button id="nav-refresh" title="Rafraîchir">⟳</button>
     </div>
     <button class="nav-item active" id="nav-todo"><span class="glyph">◈</span>Todo</button>
+    <button class="nav-item" id="nav-ateliers"><span class="glyph">◧</span>Ateliers</button>
     <div id="mem-tree"><div class="placeholder">chargement…</div></div>
   </aside>
   <main id="content">
@@ -331,7 +436,18 @@
     </div>
     <div class="doc" id="view-todo"><div class="placeholder">chargement…</div></div>
     <div class="doc hidden" id="mem-viewer"></div>
+    <div class="doc hidden" id="view-ateliers"></div>
+    <div class="doc wide hidden" id="view-workbook"></div>
   </main>
+</div>
+<!-- Fullscreen shop mode: one piece at a time, TV-sized -->
+<div id="atelier-mode" class="hidden">
+  <button id="atelier-exit">✕</button>
+  <div id="atelier-body"></div>
+</div>
+<!-- Piece detail -->
+<div id="piece-modal" class="hidden">
+  <div class="card" id="piece-body"></div>
 </div>
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/vendor/purify.min.js"></script>
@@ -536,12 +652,12 @@ document.getElementById('nav-refresh').addEventListener('click', () => refreshNa
 function markActive(path) {
   currentPath = path;   // null = todo
   navTodoBtn.classList.toggle('active', path === null);
+  navAteliersBtn.classList.remove('active');
   memTreeEl.querySelectorAll('.file').forEach(b => b.classList.toggle('active', b.dataset.path === path));
 }
 
 function showTodo() {
-  memViewerEl.classList.add('hidden');
-  viewTodo.classList.remove('hidden');
+  switchDoc(viewTodo);
   markActive(null);
   contentTitle.textContent = 'Todo';
   autoFoldNav();
@@ -693,8 +809,7 @@ function renderNode(node, depth) {
 
 async function openMemory(path) {
   if (!contentVisible()) return;  // mobile: chat only
-  viewTodo.classList.add('hidden');
-  memViewerEl.classList.remove('hidden');
+  switchDoc(memViewerEl);
   memViewerEl.innerHTML = '';
   markActive(path);
   // Unfold the tree down to the opened file
@@ -738,6 +853,276 @@ function downloadLink(path, label) {
   a.textContent = label || 'Télécharger ' + path.split('/').pop();
   a.style.display = 'inline-block'; a.style.marginTop = '8px';
   return a;
+}
+
+/* ── Ateliers: workbook hub + native 4-view workbook ────────────── */
+const viewAteliers = document.getElementById('view-ateliers');
+const viewWb = document.getElementById('view-workbook');
+const navAteliersBtn = document.getElementById('nav-ateliers');
+const atelierEl = document.getElementById('atelier-mode');
+const pieceModal = document.getElementById('piece-modal');
+let wb = null;          // {path, data, state, byEtq}
+let wbTab = 'suivi';
+
+navAteliersBtn.addEventListener('click', showAteliers);
+document.getElementById('atelier-exit').addEventListener('click', () => atelierEl.classList.add('hidden'));
+pieceModal.addEventListener('click', (e) => { if (e.target === pieceModal) pieceModal.classList.add('hidden'); });
+
+function switchDoc(el) {
+  for (const d of document.querySelectorAll('#content .doc')) d.classList.toggle('hidden', d !== el);
+}
+
+async function showAteliers() {
+  markActive(null);
+  navTodoBtn.classList.remove('active');
+  navAteliersBtn.classList.add('active');
+  contentTitle.textContent = 'Ateliers';
+  switchDoc(viewAteliers);
+  autoFoldNav();
+  viewAteliers.innerHTML = '<div class="placeholder">chargement…</div>';
+  let list;
+  try {
+    const res = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' });
+    list = (await res.json()).workbooks;
+  } catch { viewAteliers.innerHTML = '<div class="placeholder">indisponible</div>'; return; }
+  viewAteliers.innerHTML = '';
+  if (!list.length) {
+    viewAteliers.innerHTML = '<div class="placeholder">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div>';
+    return;
+  }
+  for (const w of list) {
+    const card = document.createElement('div');
+    card.className = 'wb-card';
+    const pct = w.pieces ? Math.round(100 * w.done / w.pieces) : 0;
+    const last = w.lastActivity ? new Date(w.lastActivity).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais';
+    card.innerHTML = `<h3>${esc(w.titre)}</h3>
+      <div class="sub">${w.done}/${w.pieces} pièces · dernière activité : ${esc(last)}</div>
+      <div class="progress"><div style="width:${pct}%"></div></div>`;
+    card.addEventListener('click', () => openWorkbook(w.path));
+    viewAteliers.appendChild(card);
+  }
+}
+
+async function openWorkbook(path) {
+  let data, state;
+  try {
+    const [rd, rs] = await Promise.all([
+      fetch('/api/memory/raw/' + path, { headers: headers(false), cache: 'no-store' }),
+      fetch('/api/workbook/state?wb=' + encodeURIComponent(path), { headers: headers(false), cache: 'no-store' }),
+    ]);
+    if (!rd.ok) throw new Error(rd.status);
+    data = await rd.json(); state = await rs.json();
+  } catch (e) { viewAteliers.innerHTML = '<div class="placeholder">workbook illisible (' + esc(String(e)) + ')</div>'; return; }
+  wb = { path, data, state, byEtq: new Map((data.pieces || []).map(p => [p.etiquette, p])) };
+  localStorage.setItem('gw_wb', path);
+  contentTitle.textContent = data.titre || data.projet || path;
+  switchDoc(viewWb);
+  renderWb();
+}
+
+function wbDone(etq) { return !!wb.state.fait[etq]; }
+function pieceDims(p) { return `${p.longueur}×${p.largeur}×${p.ep}`; }
+
+async function tick(etq, done) {
+  try {
+    const res = await fetch('/api/workbook/state', {
+      method: 'POST', headers: headers(true),
+      body: JSON.stringify({ wb: wb.path, etiquette: etq, done }),
+    });
+    if (res.ok) wb.state = await res.json();
+  } catch {}
+  renderWb();
+  if (!atelierEl.classList.contains('hidden')) renderAtelier();
+}
+
+function renderWb() {
+  const d = wb.data;
+  const total = (d.pieces || []).length;
+  const done = Object.keys(wb.state.fait).filter(e => wb.byEtq.has(e)).length;
+  viewWb.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'wb-head';
+  head.innerHTML = `<h2>${esc(d.titre || d.projet || '')}</h2>
+    <span class="sub" style="font:12px var(--mono);color:var(--muted)">${done}/${total}</span>`;
+  const shopBtn = document.createElement('button');
+  shopBtn.className = 'btn-accent'; shopBtn.textContent = '▶ Mode atelier';
+  shopBtn.addEventListener('click', () => { atelierEl.classList.remove('hidden'); renderAtelier(); });
+  head.appendChild(shopBtn);
+  viewWb.appendChild(head);
+  const prog = document.createElement('div');
+  prog.className = 'progress';
+  prog.innerHTML = `<div style="width:${total ? Math.round(100 * done / total) : 0}%"></div>`;
+  prog.style.marginBottom = '16px';
+  viewWb.appendChild(prog);
+
+  const tabs = document.createElement('div');
+  tabs.className = 'wb-tabs';
+  for (const [id, label] of [['debit', 'Débit'], ['prepas', 'Prépas'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']]) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.classList.toggle('active', wbTab === id);
+    b.addEventListener('click', () => { wbTab = id; renderWb(); });
+    tabs.appendChild(b);
+  }
+  viewWb.appendChild(tabs);
+
+  const body = document.createElement('div');
+  viewWb.appendChild(body);
+  if (wbTab === 'debit') renderDebit(body);
+  else if (wbTab === 'prepas') renderPrepas(body);
+  else if (wbTab === 'assemblage') renderAsm(body);
+  else renderSuivi(body);
+}
+
+function pieceBlock(etq) {
+  const p = wb.byEtq.get(etq);
+  const b = document.createElement('button');
+  b.className = 'piece-block' + (wbDone(etq) ? ' done' : '');
+  b.dataset.etq = etq;
+  b.innerHTML = `${esc(etq)}<div class="dims">${p ? esc(pieceDims(p)) : ''}</div>`;
+  b.addEventListener('click', () => showPiece(etq));
+  return b;
+}
+
+function renderDebit(body) {
+  for (const pan of wb.data.calepinage || []) {
+    const el = document.createElement('div');
+    el.className = 'panel';
+    el.innerHTML = `<h4>${esc(pan.panneau)} — ${esc(pan.dims || '')}</h4>`;
+    const cols = document.createElement('div');
+    cols.className = 'cols';
+    for (const col of pan.colonnes || []) {
+      const c = document.createElement('div');
+      c.className = 'col';
+      c.innerHTML = `<h5>${esc(String(col.largeur))} mm · ${esc(col.reglageFS || '')}</h5>`;
+      for (const etq of col.pieces || []) c.appendChild(pieceBlock(etq));
+      cols.appendChild(c);
+    }
+    el.appendChild(cols);
+    body.appendChild(el);
+  }
+  if (!(wb.data.calepinage || []).length) body.innerHTML = '<div class="placeholder">pas de calepinage</div>';
+}
+
+function renderPrepas(body) {
+  let any = false;
+  for (const p of wb.data.pieces || []) {
+    if (!(p.preparations || []).length) continue;
+    any = true;
+    const el = document.createElement('div');
+    el.className = 'prep-card';
+    el.innerHTML = `<h4>${esc(p.etiquette)} <span style="color:var(--muted)">· ${esc(pieceDims(p))}</span></h4>
+      <ul>${p.preparations.map(pr => `<li><b>${esc(pr.type)}</b> — ${esc(pr.cotes || '')} ${pr.pos ? '· ' + esc(pr.pos) : ''}</li>`).join('')}</ul>`;
+    el.querySelector('h4').style.cursor = 'pointer';
+    el.querySelector('h4').addEventListener('click', () => showPiece(p.etiquette));
+    body.appendChild(el);
+  }
+  if (!any) body.innerHTML = '<div class="placeholder">aucune préparation</div>';
+}
+
+function renderAsm(body) {
+  for (const m of wb.data.assemblage || []) {
+    const el = document.createElement('div');
+    el.className = 'asm-card';
+    el.id = 'asm-' + m.module;
+    el.innerHTML = `<h4>${esc(m.titre || m.module)}</h4>
+      <ol>${(m.sequence || []).map(s => `<li>${esc(s)}</li>`).join('')}</ol>`;
+    body.appendChild(el);
+  }
+  if (!(wb.data.assemblage || []).length) body.innerHTML = '<div class="placeholder">pas de séquence d’assemblage</div>';
+}
+
+function suiviGroups() {
+  const groups = new Map();
+  for (const p of wb.data.pieces || []) {
+    const key = p.reglageFS || '—';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  return groups;
+}
+
+function renderSuivi(body) {
+  for (const [reg, pieces] of suiviGroups()) {
+    const g = document.createElement('div');
+    g.className = 'reg-group';
+    const open = pieces.filter(p => !wbDone(p.etiquette)).length;
+    g.innerHTML = `<h4>${esc(reg)} <span class="count">${open ? open + ' restantes' : '✓'}</span></h4>`;
+    for (const p of pieces) {
+      const row = document.createElement('div');
+      row.className = 'tick-row' + (wbDone(p.etiquette) ? ' done' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = wbDone(p.etiquette);
+      cb.addEventListener('change', () => tick(p.etiquette, cb.checked));
+      const lbl = document.createElement('span');
+      lbl.className = 'lbl'; lbl.textContent = p.etiquette;
+      lbl.addEventListener('click', () => showPiece(p.etiquette));
+      const dims = document.createElement('span');
+      dims.className = 'dims'; dims.textContent = pieceDims(p) + (p.panneau ? ' · ' + p.panneau : '');
+      row.append(cb, lbl, dims);
+      g.appendChild(row);
+    }
+    body.appendChild(g);
+  }
+}
+
+function showPiece(etq) {
+  const p = wb.byEtq.get(etq);
+  if (!p) return;
+  const body = document.getElementById('piece-body');
+  body.innerHTML = `<h2>${esc(etq)}</h2>
+    <div class="row"><b>Dimensions</b>${esc(pieceDims(p))} mm — ${esc(p.reglageFS || '')}</div>
+    <div class="row"><b>Débit</b>panneau ${esc(p.panneau || '?')}, colonne ${esc(String(p.colonne ?? '?'))}</div>
+    ${(p.preparations || []).length ? `<div class="row"><b>Préparations</b>${p.preparations.map(pr => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</div>` : ''}
+    ${p.placeAssemblage ? `<div class="row"><b>Assemblage</b>${esc(p.placeAssemblage)}</div>` : ''}`;
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const goDebit = document.createElement('button');
+  goDebit.textContent = 'Voir au débit';
+  goDebit.addEventListener('click', () => { pieceModal.classList.add('hidden'); wbTab = 'debit'; renderWb(); flashPiece(etq); });
+  const goAsm = document.createElement('button');
+  goAsm.textContent = 'Voir à l’assemblage';
+  goAsm.addEventListener('click', () => {
+    pieceModal.classList.add('hidden'); wbTab = 'assemblage'; renderWb();
+    document.getElementById('asm-' + p.module)?.scrollIntoView({ behavior: 'smooth' });
+  });
+  const tickBtn = document.createElement('button');
+  tickBtn.textContent = wbDone(etq) ? 'Décocher' : 'Marquer faite ✓';
+  tickBtn.addEventListener('click', () => { pieceModal.classList.add('hidden'); tick(etq, !wbDone(etq)); });
+  actions.append(goDebit, goAsm, tickBtn);
+  body.appendChild(actions);
+  pieceModal.classList.remove('hidden');
+}
+
+function flashPiece(etq) {
+  const el = viewWb.querySelector(`.piece-block[data-etq="${CSS.escape(etq)}"]`);
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1700); }
+}
+
+/* Shop mode: pieces in réglage order, first not-done, huge */
+function renderAtelier() {
+  const bodyEl = document.getElementById('atelier-body');
+  const ordered = [];
+  for (const [, pieces] of suiviGroups()) ordered.push(...pieces);
+  const total = ordered.length;
+  const remaining = ordered.filter(p => !wbDone(p.etiquette));
+  if (!remaining.length) {
+    bodyEl.innerHTML = `<div class="etq">Terminé 🎉</div><div class="dims">${total} pièces débitées</div>`;
+    return;
+  }
+  const cur = remaining[0];
+  const doneCount = total - remaining.length;
+  bodyEl.innerHTML = `<div class="reg">${esc(cur.reglageFS || '')}</div>
+    <div class="etq">${esc(cur.etiquette)}</div>
+    <div class="dims">${esc(pieceDims(cur))} mm</div>
+    <div class="extra">${esc((cur.preparations || []).map(pr => pr.type).join(' · ') || '')}</div>`;
+  const btn = document.createElement('button');
+  btn.className = 'done-btn'; btn.textContent = 'FAIT ✓';
+  btn.addEventListener('click', () => tick(cur.etiquette, true));
+  bodyEl.appendChild(btn);
+  bodyEl.insertAdjacentHTML('beforeend',
+    `<div class="progress"><div style="width:${Math.round(100 * doneCount / total)}%"></div></div>
+     <div class="pcount">${doneCount}/${total} — réglage : ${esc(String(cur.reglageFS || '—'))}</div>`);
 }
 
 /* ── One-shot confirmation shield ───────────────────────────────── */

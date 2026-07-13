@@ -61,6 +61,11 @@ typing indicator, model picker) and an SSE API:
   code + vscode.dev link, parsed from the claude-pod mirrored output
 - `GET /api/history` — replay of the current session transcript (the PWA
   restores the visible conversation on reload)
+- `GET /api/workbook/list`, `GET|POST /api/workbook/state` — project workbooks:
+  the agent emits `…/assets/workbook.json` files under its memory dir (pieces,
+  cutting layout, assembly), the PWA renders them (4 linked views + fullscreen
+  shop mode) and stores progress ticks in the sibling `workbook-state.json` —
+  the only file the gateway ever writes into the memory tree (path-locked).
 - `GET|POST /api/confirm` — one-shot confirmation for sensitive tool actions:
   the PWA shield button arms a `GW_CONFIRM_TTL` (default 120s) window,
   `POST /api/confirm/consume` (localhost-only, meant for a PreToolUse hook)

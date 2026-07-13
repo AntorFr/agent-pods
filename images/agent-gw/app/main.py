@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -174,6 +175,78 @@ async def history(limit: int = 300):
             continue
         out.append({"role": obj["type"], "text": text, "ts": obj.get("timestamp")})
     return {"messages": out[-limit:]}
+
+
+# Workbooks: per-project JSON emitted by the agent under the memory dir
+# (…/assets/workbook.json). The front renders them; the ONLY thing the
+# gateway ever writes is the sibling workbook-state.json (progress ticks,
+# a user gesture — not memory, hence kept out of git by the agent).
+
+
+def _workbook_file(rel: str) -> Path:
+    p = _memory_path(rel)
+    if p.name != "workbook.json" or not p.is_file():
+        raise HTTPException(status_code=404, detail="not a workbook")
+    return p
+
+
+def _load_wb_state(wb: Path) -> dict:
+    try:
+        state = json.loads(wb.with_name("workbook-state.json").read_text())
+    except (OSError, ValueError):
+        state = {}
+    state.setdefault("fait", {})
+    return state
+
+
+@app.get("/api/workbook/list")
+async def workbook_list():
+    root = _memory_root()
+    out = []
+    if root.is_dir():
+        for p in sorted(root.rglob("workbook.json")):
+            try:
+                data = json.loads(p.read_text())
+            except (OSError, ValueError):
+                continue
+            fait = _load_wb_state(p)["fait"]
+            out.append(
+                {
+                    "path": str(p.relative_to(root)),
+                    "projet": data.get("projet"),
+                    "titre": data.get("titre") or data.get("projet") or p.parent.name,
+                    "pieces": len(data.get("pieces", [])),
+                    "done": len(fait),
+                    "lastActivity": max(fait.values(), default=None),
+                }
+            )
+    out.sort(key=lambda w: w["lastActivity"] or "", reverse=True)
+    return {"workbooks": out}
+
+
+@app.get("/api/workbook/state")
+async def workbook_state(wb: str):
+    return _load_wb_state(_workbook_file(wb))
+
+
+@app.post("/api/workbook/state")
+async def workbook_tick(request: Request):
+    """One tick = one piece. Server-side merge so two devices never
+    clobber each other's progress with a stale full-state write."""
+    body = await request.json()
+    p = _workbook_file(body.get("wb") or "")
+    etiquette = (body.get("etiquette") or "").strip()
+    if not etiquette:
+        raise HTTPException(status_code=400, detail="etiquette required")
+    state = _load_wb_state(p)
+    if body.get("done", True):
+        state["fait"][etiquette] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    else:
+        state["fait"].pop(etiquette, None)
+    p.with_name("workbook-state.json").write_text(
+        json.dumps(state, ensure_ascii=False, indent=1)
+    )
+    return state
 
 
 # One-shot confirmation for sensitive tool actions on the headless channel.
