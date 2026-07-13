@@ -80,6 +80,9 @@ typing indicator, model picker) and an SSE API:
 - `GET /api/health`
 - `GET /auth/login|callback|logout`, `GET /api/auth/config` — OIDC flow (when configured)
 
+Messages sent while the agent is busy are queued client-side (type-ahead) and
+fired automatically when the current turn finishes — no "agent busy" error.
+
 On screens ≥ 960px the PWA adds a side panel: a todo board (parsed from the
 todo markdown file: sections, due-date badges, attachments) and a memory
 browser (tree, rendered markdown with resolved `[[wiki links]]`, inline

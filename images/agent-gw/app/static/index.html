@@ -157,6 +157,18 @@
     cursor: pointer; align-self: flex-end;
   }
   form button:disabled { opacity: .35; }
+  /* Type-ahead queue: messages sent while Alfred is busy wait here, then fire */
+  #queued-strip {
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 8px 16px 0; flex-shrink: 0;
+  }
+  #queued-strip .qchip {
+    align-self: flex-end; max-width: 85%;
+    font: 13px -apple-system, system-ui, sans-serif; color: var(--muted);
+    background: var(--card-2); border: 1px dashed var(--border-2); border-radius: 12px;
+    padding: 6px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #queued-strip .qchip::before { content: "⏳ "; color: var(--accent); }
   /* One-shot confirmation shield: arms sensitive actions for a short window */
   #confirm-btn {
     background: none; border: 1px solid var(--border-2); color: var(--muted);
@@ -414,6 +426,7 @@
 <div id="layout">
   <section id="chatpane">
     <main id="chat"></main>
+    <div id="queued-strip" class="hidden"></div>
     <form id="form">
       <button id="confirm-btn" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
       <textarea id="input" rows="1" placeholder="Message…" autocomplete="off"></textarea>
@@ -564,11 +577,31 @@ async function askToken() {
   localStorage.setItem('gw_token', token);
 }
 
+// Type-ahead queue: while Alfred is busy, new messages wait instead of 409ing.
+let busy = false;
+const queue = [];
+const queuedStrip = document.getElementById('queued-strip');
+
+function renderQueued() {
+  queuedStrip.innerHTML = '';
+  queuedStrip.classList.toggle('hidden', queue.length === 0);
+  for (const t of queue) {
+    const c = document.createElement('div');
+    c.className = 'qchip'; c.textContent = t;
+    queuedStrip.appendChild(c);
+  }
+}
+
+function submitText(text) {
+  if (busy) { queue.push(text); renderQueued(); return; }
+  sendMessage(text);
+}
+
 async function sendMessage(text) {
+  busy = true;
   add('user', text);
   const pending = addTyping();
   status.classList.add('busy');
-  send.disabled = true;
   try {
     const res = await fetch('/api/chat', {
       method: 'POST', headers: headers(true),
@@ -600,8 +633,13 @@ async function sendMessage(text) {
   } finally {
     pending.remove();
     status.classList.remove('busy');
-    send.disabled = false;
+    busy = false;
     syncConfirm();  // a sensitive action may have consumed the shield
+    if (queue.length) {           // fire the next type-ahead message
+      const next = queue.shift();
+      renderQueued();
+      sendMessage(next);
+    }
   }
 }
 
@@ -611,7 +649,7 @@ form.addEventListener('submit', (e) => {
   if (!text) return;
   input.value = '';
   input.style.height = 'auto';
-  sendMessage(text);
+  submitText(text);
 });
 
 input.addEventListener('keydown', (e) => {
@@ -626,6 +664,8 @@ document.getElementById('reset').addEventListener('click', async () => {
   if (!confirm('Repartir sur une session vierge ?')) return;
   await fetch('/api/reset', { method: 'POST', headers: headers(false) });
   chat.innerHTML = '';
+  queue.length = 0;
+  renderQueued();
 });
 
 /* ── Nav + content (≥ 960px): Notion-like rail and page surface ─── */
