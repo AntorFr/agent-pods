@@ -66,6 +66,12 @@ typing indicator, model picker) and an SSE API:
   cutting layout, assembly), the PWA renders them (4 linked views + fullscreen
   shop mode) and stores progress ticks in the sibling `workbook-state.json` —
   the only file the gateway ever writes into the memory tree (path-locked).
+- `POST /mcp` — MCP server (streamable HTTP) exposing Alfred to **other agents**.
+  One tool, `ask_alfred(request, task_id?, agent?)`: hands a natural-language
+  task to Alfred, who files it with his own discipline; returns `{reply,
+  task_id}`. Stateless — the task is the SDK session carried by `task_id`
+  (pass it back to continue a clarification). Gated by `GW_MCP_TOKEN` (Bearer),
+  independent of the OIDC session. Serialized with the PWA via the same lock.
 - `GET|POST /api/confirm` — one-shot confirmation for sensitive tool actions:
   the PWA shield button arms a `GW_CONFIRM_TTL` (default 120s) window,
   `POST /api/confirm/consume` (localhost-only, meant for a PreToolUse hook)
@@ -99,6 +105,7 @@ Environment:
 | `OIDC_ALLOWED_GROUP` | `admins` | IdP group required to log in |
 | `GW_SESSION_SECRET` | *(random)* | Signs the session cookie; pin it or sessions reset on restart |
 | `GW_AUTH_TOKEN` | *(unset)* | Fallback bearer token on `/api/*` when OIDC is not configured (dev only) |
+| `GW_MCP_TOKEN` | *(unset)* | Service token gating `/mcp`. Unset ⇒ `/mcp` returns 401 (disabled). Other agents present it as `Authorization: Bearer …`. |
 | `GW_PERMISSION_MODE` | `bypassPermissions` | Claude Code permission mode (headless) |
 
 > ⚠️ The gateway exposes an agent that has shell access to its workspace.

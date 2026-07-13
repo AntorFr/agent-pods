@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from claude_agent_sdk import (
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from mcp.server.fastmcp import FastMCP
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth
@@ -61,10 +63,30 @@ TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
 # Output of the sibling tunnel container (claude-pod tees it into the shared
 # home) — lets the PWA surface the GitHub device-code prompt on reconnect.
 TUNNEL_LOG = os.environ.get("GW_TUNNEL_LOG", str(Path.home() / ".vscode-cli" / "tunnel.out"))
+# Service token gating the /mcp endpoint (other agents call Alfred over MCP).
+# Machine-to-machine: coexists with Authelia, checked before the OIDC logic.
+MCP_TOKEN = os.environ.get("GW_MCP_TOKEN", "")
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="agent-gw")
+# MCP server exposing Alfred to other agents (Skippy, Nestor, HA…). Stateless
+# HTTP: each tool call is independent; the "task" is carried by the SDK
+# session id the caller passes back. Mounted at /mcp, token-guarded.
+mcp_server = FastMCP(
+    "alfred",
+    stateless_http=True,
+    json_response=True,
+    streamable_http_path="/",
+)
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    async with mcp_server.session_manager.run():
+        yield
+
+
+app = FastAPI(title="agent-gw", lifespan=_lifespan)
 app.include_router(auth.router)
 _query_lock = asyncio.Lock()
 
@@ -105,6 +127,12 @@ def _sse(event: str, data: dict) -> str:
 @app.middleware("http")
 async def check_auth(request: Request, call_next):
     path = request.url.path
+    # /mcp is machine-to-machine: gated solely by the service token, wholly
+    # independent of the Authelia session (other agents have no cookie).
+    if path.startswith("/mcp"):
+        if MCP_TOKEN and request.headers.get("authorization") == f"Bearer {MCP_TOKEN}":
+            return await call_next(request)
+        return JSONResponse({"detail": "unauthorized"}, status_code=401)
     if not path.startswith(_PUBLIC_PATHS) and not _is_authenticated(request):
         if path.startswith("/api/"):
             return JSONResponse({"detail": "unauthorized"}, status_code=401)
@@ -363,6 +391,56 @@ async def reset():
     return {"status": "reset"}
 
 
+async def _run_alfred(prompt: str, resume: str | None = None) -> tuple[str, str | None]:
+    """One Alfred turn, collected (not streamed): returns (text, session_id).
+    Serialized by _query_lock so MCP tasks and the PWA never run at once."""
+    options = ClaudeAgentOptions(
+        cwd=WORKSPACE,
+        resume=resume,
+        permission_mode=PERMISSION_MODE,
+        system_prompt={"type": "preset", "preset": "claude_code"},
+        setting_sources=["project"],
+    )
+    parts: list[str] = []
+    session_id = resume
+    async with _query_lock:
+        async for msg in query(prompt=prompt, options=options):
+            if isinstance(msg, AssistantMessage):
+                for block in msg.content:
+                    if isinstance(block, TextBlock) and block.text:
+                        parts.append(block.text)
+            elif isinstance(msg, ResultMessage):
+                session_id = msg.session_id
+    return "\n\n".join(parts).strip(), session_id
+
+
+@mcp_server.tool(
+    description=(
+        "Hand a task or question to Alfred, the user's personal butler agent. "
+        "Alfred manages the user's memory (todos, projects, notes, gift ideas) "
+        "and calendar, and files everything with his own discipline (routing, "
+        "index updates, git commit). Use it to add a todo, update a project, "
+        "record a note, or ask what the user noted about something. "
+        "Each call is a fresh task; to continue a clarification Alfred asked "
+        "for, pass back the task_id it returned. Set 'agent' to your own name."
+    )
+)
+async def ask_alfred(request: str, task_id: str | None = None, agent: str = "agent") -> dict:
+    request = (request or "").strip()
+    if not request:
+        return {"error": "empty request"}
+    prompt = (
+        f"[Requete transmise par l'agent « {agent} » via MCP, a la demande de "
+        f"Monsieur. Traite-la selon ta discipline habituelle (rangement, index, "
+        f"commit), puis conclus par un compte rendu bref.]\n\n{request}"
+    )
+    try:
+        reply, session_id = await _run_alfred(prompt, resume=task_id)
+    except Exception as exc:  # returned to the caller, not swallowed
+        return {"error": str(exc)}
+    return {"reply": reply, "task_id": session_id}
+
+
 @app.post("/api/chat")
 async def chat(request: Request):
     body = await request.json()
@@ -431,3 +509,5 @@ async def manifest():
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+# MCP endpoint for other agents (token-guarded in check_auth above).
+app.mount("/mcp", mcp_server.streamable_http_app())

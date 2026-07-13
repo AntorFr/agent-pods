@@ -7,3 +7,5 @@ httpx>=0.27
 # Google Workspace MCP server (stdio), spawned by the agent harness when the
 # workspace .mcp.json asks for it. Pinned: an MCP server is a security surface.
 workspace-mcp==1.22.0
+# MCP server SDK — Alfred exposes an /mcp endpoint so other agents can call him.
+mcp>=1.2
