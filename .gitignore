@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .DS_Store
+
+# Frontend build artifact (generated at image build)
+images/agent-gw/app/static/engine.js
