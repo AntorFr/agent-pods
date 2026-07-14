@@ -180,6 +180,14 @@ Le détail d'un élément n'est pas toujours une page :
 - **Mobile** = chat plein écran uniquement (le canvas de droite disparaît). Règle historique.
 - Arbo profonde (si conservée quelque part) : indentation resserrée + troncature `…` + tooltip.
 
+## Command-palette (⌘K) — acquis, à faire plus tard
+
+Overlay clavier (façon Spotlight / ⌘P Notion) accessible de partout : (1) **chercher** une fiche
+(requête dérivée sur le frontmatter), (2) **naviguer** vite vers une app/domaine, (3) **agir**
+(« nouvelle todo… », « objectifs du jour »). Hybride **recherche + « demander à Alfred »** (mot-clé
+→ résultats ; phrase → chat/action). 3 portes d'entrée : mosaïque (souris), chat (conversation),
+palette (clavier). Pas une inconnue structurelle : réutilise la recherche + le chat déjà conçus.
+
 ## Recherche & facettes
 
 - **Recherche universelle** (barre ⌘K) : nom, tag, type, statut → résultats plats.
