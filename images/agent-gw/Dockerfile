@@ -6,6 +6,16 @@
 # NEVER set ANTHROPIC_API_KEY in this image or its pod — it silently
 # overrides the subscription token and bills API credits instead.
 
+# --- Frontend build stage: bundle the Markdoc content engine (browser IIFE) ---
+FROM node:22-bookworm-slim AS frontend
+WORKDIR /fe
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+# -> /fe/dist/engine.js
+
+# --- Runtime ---
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -35,6 +45,8 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+# Bundled content engine from the frontend build stage (built once, never at runtime).
+COPY --from=frontend /fe/dist/engine.js ./app/static/engine.js
 
 RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /workspace \
