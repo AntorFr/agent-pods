@@ -27,6 +27,61 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 - **DOMPurify** conservé en défense-en-profondeur sur le HTML final.
 - Repli si besoin : markdown-it + markdown-it-container (`html:false`), zéro build, vendorable.
 
+## Contrat d'écriture d'Alfred (frontmatter + blocs) — L'INTERFACE
+
+Le squelette invisible dont dépendent le moteur, les collections, les facettes ET la skill
+d'Alfred. **Alfred écrit UNIQUEMENT** : markdown standard + **blocs typés (fermés)** + frontmatter.
+Jamais de HTML/CSS. Un bloc ou attribut hors schéma est **rejeté** (validation), pas rendu de
+travers → c'est ça qui garantit l'unicité. Étendre le vocabulaire = un acte codé + une ligne de
+skill (jamais Alfred qui « complète » le visuel).
+
+### Frontmatter — schéma
+
+**Cœur (toute fiche)**
+- `type` : `fiche | projet | recette | contact | cadeau | achat | savoir-faire | machine | outil | tache | espace` — pilote le rendu de détail + les champs attendus.
+- `domaine` : `atelier | projets | maison | cuisine | achats | cadeaux | contacts | admin | …`
+- `titre` : sinon nom de fichier ; `créé` / `maj` : dates ISO.
+- `status` : `en-cours | bloqué | clos` par défaut ; sets propres à certains types
+  (achat → `veille | à-acheter | acheté` ; cadeau → `idée | acheté | offert`).
+- `tags` : liste libre.
+
+**Regroupement & collections**
+- `cat` : catégorie majeure (projets : `menuiserie | bricolage | electronique | dev`).
+- `aspects` : métiers secondaires (un meuble avec de l'électronique).
+- `groupBy` : clé de regroupement d'une collection (`person`, `cat`, `area`…).
+
+**Liens & références** (base unique + attributs + références — jamais de copie)
+- `projet` : id du projet (sur une tâche ⇒ étape de projet).
+- `tools` : ids d'outils activés (sur un projet).
+- `refs` : ids de tâches (liste de focus todo).
+- `pages` : espace multi-pages (dossier de `.md`, une page = index) — ou détecté par la structure.
+- `[[wikilink]]` dans le corps : lien inter-fiches.
+
+**Tâches (todo)** : `due`, `est`, `dep`, `blk`, `pri`, `done`, `sub` (ids enfants).
+**Type-spécifiques** (ex.) : recette `temps`/`difficulté` ; contact `tel`/`role` ; cadeau `person`/`prix` ; achat `prix`.
+
+### Blocs Markdoc — catalogue (vocabulaire fermé)
+
+**Contenu**
+- `{% callout type="note|astuce|attention" %}…{% /callout %}`
+- Images : `![alt](chemin)` (résolu → `/api/memory/raw`) ou `{% image src alt %}`
+- `{% galerie %} …images… {% /galerie %}`
+- `{% web url="…" %}` — aperçu + lecteur intégré (pas de sortie navigateur)
+- `{% piece-jointe fichier="…" %}` — carte de téléchargement
+- Tableaux, listes, titres, code, gras : **markdown standard**
+- `[[wikilink]]`
+
+**Embarque un module codé** (le tag adosse un composant — unifie contenu ET apps)
+- `{% outil id="debit" projet="rangement-garage" %}` — le workbench plan de débit
+- `{% liste ref="aujourdhui" %}` — une liste de focus todo
+- `{% etapes projet="reseau-garage" %}` — la checklist d'étapes du projet
+
+### Validation
+- Markdoc valide noms + attributs **par schéma** → erreur claire si mal formé.
+- DOMPurify en défense-en-profondeur sur le HTML final.
+- Ce catalogue est la **source unique** côté skill d'Alfred (il apprend ces blocs) et côté
+  moteur (il les rend). Ajout d'un bloc = composant codé + entrée de skill, en un geste coordonné.
+
 ## Métaphore app-store
 
 - **Launcher / mosaïque d'apps** comme point d'entrée. Chaque app = une tuile (Todo, Ateliers,
