@@ -14,7 +14,7 @@ function expandWikilinks(src) {
   });
 }
 
-export function renderPage(source) {
+export function renderPage(source, { baseDir = '' } = {}) {
   const ast = Markdoc.parse(expandWikilinks(source));
   const frontmatter = ast.attributes.frontmatter
     ? YAML.parse(ast.attributes.frontmatter)
@@ -23,7 +23,8 @@ export function renderPage(source) {
   // Surface schema violations rather than rendering garbage.
   const errors = Markdoc.validate(ast, config).filter((e) => e.error.level === 'critical');
 
-  const content = Markdoc.transform(ast, config);
+  // baseDir lets relative asset paths resolve against the fiche's directory.
+  const content = Markdoc.transform(ast, { ...config, variables: { baseDir } });
   const html = Markdoc.renderers.html(content);
   return { frontmatter, html, errors };
 }

@@ -4,8 +4,8 @@ import './design-system.css'; // esbuild bundles this into engine.css
 import DOMPurify from 'dompurify';
 import { renderPage } from './render.js';
 
-export function render(source) {
-  const { frontmatter, html, errors } = renderPage(source);
+export function render(source, opts) {
+  const { frontmatter, html, errors } = renderPage(source, opts);
   return { frontmatter, html: DOMPurify.sanitize(html), errors };
 }
 

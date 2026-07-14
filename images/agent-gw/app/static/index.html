@@ -8,6 +8,7 @@
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon.svg">
 <title>Alfred</title>
+<link rel="stylesheet" href="/static/engine.css">
 <style>
   /* ── Batcave: graphite + gold, dark-only, sober ─────────────────── */
   :root {
@@ -464,6 +465,7 @@
 </div>
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/vendor/purify.min.js"></script>
+<script src="/static/engine.js"></script>
 <script>
 const chat = document.getElementById('chat');
 const form = document.getElementById('form');
@@ -545,12 +547,15 @@ function renderMd(mdText, baseDir) {
   return el;
 }
 
-// Any rendered memory link (chat included) opens in the page panel.
+// Any rendered memory link opens in the page panel — both the legacy
+// data-mem links and the engine's [[wikilink]] output (href="/mem/…").
 document.addEventListener('click', (e) => {
-  const a = e.target.closest('a[data-mem]');
+  const a = e.target.closest('a[data-mem], a[href^="/mem/"]');
   if (!a) return;
   e.preventDefault();
-  openMemory(a.dataset.mem);
+  let target = a.dataset.mem || decodeURIComponent(a.getAttribute('href').slice(5));
+  if (target && !/\.[a-z0-9]+$/i.test(target)) target += '.md';
+  openMemory(target);
 });
 
 /* ── Chat ───────────────────────────────────────────────────────── */
@@ -873,7 +878,18 @@ async function openMemory(path) {
   if (MD_EXT.test(path)) {
     const res = await fetch('/api/memory/raw/' + path, { headers: headers(false) });
     if (!res.ok) { memViewerEl.insertAdjacentHTML('beforeend', '<div class="placeholder">introuvable</div>'); return; }
-    memViewerEl.appendChild(renderMd(await res.text(), baseDir));
+    const text = await res.text();
+    if (window.Alfred && window.Alfred.render) {
+      // Markdoc content engine: frontmatter parsed out, blocks rendered, styled
+      // via engine.css (scoped .alfred-doc). Falls back to marked if unavailable.
+      const { html } = window.Alfred.render(text, { baseDir });
+      const doc = document.createElement('div');
+      doc.className = 'alfred-doc';
+      doc.innerHTML = html;
+      memViewerEl.appendChild(doc);
+    } else {
+      memViewerEl.appendChild(renderMd(text, baseDir));
+    }
   } else if (IMG_EXT.test(path)) {
     const img = document.createElement('img');
     img.src = '/api/memory/raw/' + path;

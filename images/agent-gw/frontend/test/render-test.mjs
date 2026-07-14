@@ -32,7 +32,7 @@ Attendre l'Omni avant la méthode maison sur l'Endurance.
 {% outil id="debit" projet="rangement-garage" /%}
 `;
 
-const { frontmatter, html, errors } = renderPage(sample);
+const { frontmatter, html, errors } = renderPage(sample, { baseDir: 'domaines/diy/projets/voiles-lego-fortuna' });
 
 const checks = [
   ['frontmatter.type === projet', frontmatter.type === 'projet'],
@@ -40,7 +40,7 @@ const checks = [
   ['no critical schema errors', errors.length === 0],
   ['callout rendered', html.includes('class="callout attention"')],
   ['wikilink → /mem/', html.includes('href="/mem/voiles-lego-impression"')],
-  ['image resolved to raw', html.includes('/api/memory/raw/assets/inspiration-1.png')],
+  ['image resolved with baseDir', html.includes('/api/memory/raw/domaines/diy/projets/voiles-lego-fortuna/assets/inspiration-1.png')],
   ['gallery rendered', html.includes('class="gallery"')],
   ['web card', html.includes('class="webcard"') && html.includes('youtube.com')],
   ['attachment', html.includes('class="attach"') && html.includes('PDF')],

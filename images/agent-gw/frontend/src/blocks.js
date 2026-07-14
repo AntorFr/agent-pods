@@ -8,8 +8,22 @@ const { Tag } = Markdoc;
 
 const RAW = 'api/memory/raw';
 const isAbsolute = (s) => /^[a-z]+:/i.test(s) || s.startsWith('/');
-// Resolve a memory-relative asset path to the gateway's raw endpoint.
-const asset = (src) => (isAbsolute(src) ? src : `/${RAW}/${src.replace(/^\.?\//, '')}`);
+// Collapse . and .. segments.
+function normalize(p) {
+  const out = [];
+  for (const seg of p.split('/')) {
+    if (!seg || seg === '.') continue;
+    if (seg === '..') out.pop(); else out.push(seg);
+  }
+  return out.join('/');
+}
+// Resolve a memory-relative asset path to the gateway's raw endpoint,
+// relative to the fiche's directory (baseDir).
+function asset(src, baseDir = '') {
+  if (isAbsolute(src)) return src;
+  const clean = src.replace(/^\.?\//, '');
+  return `/${RAW}/${normalize(baseDir ? `${baseDir}/${clean}` : clean)}`;
+}
 
 const CALLOUT_ICON = { note: '🛈', astuce: '✓', attention: '⚠' };
 
@@ -63,7 +77,7 @@ export const config = {
         const { fichier } = node.transformAttributes(cfg);
         const name = fichier.split('/').pop();
         const ext = (name.split('.').pop() || '?').toUpperCase();
-        return new Tag('a', { class: 'attach', href: `${asset(fichier)}?download=1` }, [
+        return new Tag('a', { class: 'attach', href: `${asset(fichier, cfg.variables?.baseDir)}?download=1` }, [
           new Tag('span', { class: 'ext' }, [ext]),
           new Tag('div', {}, [new Tag('div', { class: 'fn' }, [name])]),
         ]);
@@ -98,7 +112,7 @@ export const config = {
       },
       transform(node, cfg) {
         const { src, alt } = node.transformAttributes(cfg);
-        return new Tag('img', { class: 'shot', src: asset(src), alt: alt || '', loading: 'lazy' }, []);
+        return new Tag('img', { class: 'shot', src: asset(src, cfg.variables?.baseDir), alt: alt || '', loading: 'lazy' }, []);
       },
     },
   },
