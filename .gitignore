@@ -5,3 +5,4 @@ __pycache__/
 
 # Frontend build artifact (generated at image build)
 images/agent-gw/app/static/engine.js
+images/agent-gw/app/static/engine.css

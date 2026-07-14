@@ -1,0 +1,76 @@
+/* Alfred design system — tokens + content/block styles.
+   Cold, modern chassis; colour comes from the apps. Dual theme. Bundled by
+   esbuild into engine.css. Covers the content vocabulary the Markdoc engine
+   emits (prose + blocks); the app shell has its own stylesheet. */
+
+:root {
+  --bg:#EEF1F6; --surface:#FFFFFF; --surface2:#F4F6FA; --raise:#FFFFFF; --sink:#E5E9F0;
+  --ink:#151A22; --ink-soft:#586274; --ink-faint:#98A2B2;
+  --line:#E1E6EE; --line-soft:#EDF0F5;
+  --accent:#0E8FA6; --accent-lo:#0E8FA614;
+  --good:#2E9E63; --warn:#B4771B; --crit:#D24B3E; --proj:#4C6FE0;
+  --shadow-sm:0 1px 2px rgba(20,28,45,.06);
+  --shadow:0 4px 12px rgba(20,28,45,.07),0 1px 3px rgba(20,28,45,.06);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  --r:13px; --r-lg:17px;
+}
+@media (prefers-color-scheme:dark){ :root{
+  --bg:#0B0D12; --surface:#141821; --surface2:#1A1F29; --raise:#212836; --sink:#07090D;
+  --ink:#E9ECF3; --ink-soft:#98A2B3; --ink-faint:#59616F; --line:#232A37; --line-soft:#1A1F29;
+  --accent:#4ECAD8; --accent-lo:#4ECAD81c; --good:#5CBE83; --warn:#E0A64F; --crit:#EA6A5C; --proj:#7B96F2;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 6px 18px rgba(0,0,0,.42),0 1px 3px rgba(0,0,0,.3);
+}}
+:root[data-theme="light"]{
+  --bg:#EEF1F6; --surface:#FFFFFF; --surface2:#F4F6FA; --raise:#FFFFFF; --sink:#E5E9F0; --ink:#151A22; --ink-soft:#586274; --ink-faint:#98A2B2; --line:#E1E6EE; --line-soft:#EDF0F5; --accent:#0E8FA6; --accent-lo:#0E8FA614; --good:#2E9E63; --warn:#B4771B; --crit:#D24B3E; --proj:#4C6FE0; --shadow-sm:0 1px 2px rgba(20,28,45,.06); --shadow:0 4px 12px rgba(20,28,45,.07),0 1px 3px rgba(20,28,45,.06);
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D12; --surface:#141821; --surface2:#1A1F29; --raise:#212836; --sink:#07090D; --ink:#E9ECF3; --ink-soft:#98A2B3; --ink-faint:#59616F; --line:#232A37; --line-soft:#1A1F29; --accent:#4ECAD8; --accent-lo:#4ECAD81c; --good:#5CBE83; --warn:#E0A64F; --crit:#EA6A5C; --proj:#7B96F2; --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow:0 6px 18px rgba(0,0,0,.42),0 1px 3px rgba(0,0,0,.3);
+}
+
+/* Rendered content ("prose") */
+.prose{ font:15.5px/1.65 var(--sans); color:var(--ink); }
+.prose h1{ font:600 30px/1.15 var(--serif); letter-spacing:-.012em; margin:0 0 .4em; text-wrap:balance; }
+.prose h2{ font:600 19px/1.3 var(--serif); margin:1.3em 0 .5em; }
+.prose h3{ font:600 15.5px/1.3 var(--serif); margin:1.1em 0 .4em; }
+.prose p{ margin:0 0 .8em; max-width:66ch; }
+.prose a{ color:var(--accent); text-underline-offset:2px; }
+.prose ul,.prose ol{ padding-left:1.4em; margin:0 0 .8em; } .prose li+li{ margin-top:.25em; }
+.prose blockquote{ border-left:3px solid var(--accent); padding-left:.9em; color:var(--ink-soft); margin:0 0 .8em; }
+.prose hr{ border:none; border-top:1px solid var(--line); margin:1.4em 0; }
+.prose code{ font:.85em var(--mono); background:var(--surface2); border:1px solid var(--line); border-radius:5px; padding:.1em .4em; }
+.prose pre{ background:var(--sink); border:1px solid var(--line); border-radius:10px; padding:12px 14px; overflow-x:auto; }
+.prose pre code{ background:none; border:none; padding:0; }
+.prose table{ border-collapse:collapse; display:block; overflow-x:auto; font-size:.92em; max-width:100%; margin:0 0 .9em; }
+.prose th,.prose td{ border:1px solid var(--line); padding:5px 9px; text-align:left; } .prose th{ background:var(--surface2); }
+
+/* Blocks emitted by the engine */
+.callout{ display:flex; gap:12px; padding:13px 15px; border-radius:var(--r); border:1px solid; margin:1em 0; font-size:14.5px; }
+.callout .i{ font-size:17px; line-height:1.4; }
+.callout .callout-body>:last-child{ margin-bottom:0; }
+.callout.note{ background:var(--accent-lo); border-color:color-mix(in srgb,var(--accent) 28%,transparent); }
+.callout.astuce{ background:color-mix(in srgb,var(--good) 10%,transparent); border-color:color-mix(in srgb,var(--good) 30%,transparent); }
+.callout.attention{ background:color-mix(in srgb,var(--warn) 12%,transparent); border-color:color-mix(in srgb,var(--warn) 34%,transparent); }
+
+.shot{ max-width:100%; border-radius:var(--r); border:1px solid var(--line); box-shadow:var(--shadow-sm); display:block; }
+figure{ margin:1.2em 0; } figcaption{ font-size:12.5px; color:var(--ink-faint); margin-top:7px; font-style:italic; }
+.gallery{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:1.2em 0; }
+.gallery p{ margin:0; } .gallery .shot{ aspect-ratio:4/5; object-fit:cover; width:100%; }
+
+.webcard{ display:flex; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; box-shadow:var(--shadow-sm); margin:1.1em 0; max-width:440px; text-decoration:none; color:inherit; }
+.webcard .thumb{ width:104px; flex-shrink:0; background:linear-gradient(150deg,#33415e,#1f6b5e); }
+.webcard .wb{ padding:11px 14px; min-width:0; }
+.webcard .host{ font:600 10.5px var(--mono); color:var(--accent); }
+.webcard .wt{ font-size:14px; font-weight:600; margin-top:3px; }
+
+.attach{ display:inline-flex; align-items:center; gap:12px; padding:11px 15px; border-radius:var(--r); background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow-sm); text-decoration:none; color:inherit; margin:.6em 0; }
+.attach .ext{ font:700 10.5px var(--mono); color:#fff; background:var(--proj); border-radius:6px; padding:5px 8px; }
+.attach .fn{ font-size:13.5px; }
+
+/* Coded module embedded by {% outil %} — the front mounts the real component here.
+   Fallback frame while un-mounted. */
+.module-embed{ border:1px dashed color-mix(in srgb,var(--accent) 40%,var(--line)); border-radius:var(--r); padding:16px; margin:1.1em 0; color:var(--ink-faint); font:12.5px var(--mono); background:var(--accent-lo); }
+.module-embed::before{ content:"⟐ module « " attr(data-module) " »"; }
+
+@media (prefers-reduced-motion:reduce){ *{ transition:none!important; animation:none!important; } }
