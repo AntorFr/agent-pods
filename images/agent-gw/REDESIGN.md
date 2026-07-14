@@ -75,6 +75,19 @@ longue page. Même mécanique pour : Cadeaux (cartes personnes → idées), Proj
 fiches). C'est la « collection groupée » généralisée : le niveau de regroupement est lui-même une
 grille de cartes cliquables. Une seule mécanique à coder.
 
+## Maillage Todo ↔ Projet (étapes de projet)
+
+Un projet est souvent une suite d'étapes. Sans nouveau concept :
+
+- **Une étape de projet = une tâche de la base**, avec un attribut `projet: <id>`. Elle vit
+  UNE fois (base = source de vérité), pas de duplication.
+- La **fiche projet** affiche ses étapes (checklist = tâches où `projet===id`), avec « ＋ au
+  focus » (aujourd'hui / week-end) qui les **référence** dans une liste de focus (comme n'importe
+  quelle tâche). Cocher une étape (fiche, todo ou focus) met à jour l'unique tâche.
+- Dérivés gratuits : vue todo **« par projet »** (`projet=` — dérivée) ; **avancement du projet**
+  = ratio d'étapes faites (dérivé). Rien à maintenir.
+- C'est la même mécanique que les listes de focus : **base unique + attributs + références**.
+
 ## Vue collection générique (LE composant transverse)
 
 Presque tous les domaines suivent le même patron : **cartes + recherche/facettes → détail**.
