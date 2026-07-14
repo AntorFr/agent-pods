@@ -67,6 +67,14 @@ via une skill ; ajouter un bloc = un acte codé + une ligne de skill.
 ⚠️ Piège : « Reprendre » n'est PAS un tri par date-de-modif (requête bête) — c'est du jugement,
 donc régime *matérialisé curé*, comme la liste de focus todo (même mécanisme).
 
+## Principe d'entrée : cartes de sous-domaine → contenu (unifié)
+
+Partout, on **entre par une grille de cartes de sous-domaine**, puis on descend — jamais une
+longue page. Même mécanique pour : Cadeaux (cartes personnes → idées), Projets (cartes catégorie
+→ projets → fiche), L'Atelier (Outils au 1er niveau + cartes de connaissance par sous-domaine →
+fiches). C'est la « collection groupée » généralisée : le niveau de regroupement est lui-même une
+grille de cartes cliquables. Une seule mécanique à coder.
+
 ## Vue collection générique (LE composant transverse)
 
 Presque tous les domaines suivent le même patron : **cartes + recherche/facettes → détail**.
