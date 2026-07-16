@@ -47,8 +47,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 # Serveurs MCP stdio bundlés (maps/weather), lancés par le .mcp.json du workspace.
 COPY mcp_servers ./mcp_servers
-# Bundled content engine + styles from the frontend build stage (built once, never at runtime).
-COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css ./app/static/
+# Bundled content engine + launcher shell (built once, never at runtime).
+COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css ./app/static/
 
 RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /workspace \

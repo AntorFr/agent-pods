@@ -1,0 +1,150 @@
+/* Alfred — launcher shell (nouvelle UI). Palette FROIDE, moderne, deux thèmes à parité.
+   Pas de crème/jaune. Le châssis est neutre froid ; la couleur vient des apps (chaque
+   tuile sa teinte). Bundlé par esbuild -> launcher.css. Le rendu des fiches réutilise
+   .alfred-doc (engine.css), chargé à part. */
+
+:root {
+  --bg:#EDF1F7; --bg-deep:#E3E8F1; --surface:#FFFFFF; --surface2:#F5F7FB; --sink:#E7ECF4;
+  --ink:#141A24; --ink-soft:#535E70; --ink-faint:#8B95A6;
+  --line:#DCE2EC; --line-soft:#E7ECF4;
+  --accent:#0E8FA6; --accent-ink:#0A6E80; --accent-lo:#0E8FA614;
+  --good:#2E9E63; --warn:#B4771B; --crit:#D24B3E;
+  --shadow-sm:0 1px 2px rgba(20,28,45,.07);
+  --shadow-md:0 6px 22px -8px rgba(20,28,45,.20);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  --r:14px; --r-sm:9px;
+  --rail:34%;
+}
+@media (prefers-color-scheme:dark){ :root{
+  --bg:#0B0E14; --bg-deep:#070910; --surface:#141924; --surface2:#1A2130; --sink:#0A0D14;
+  --ink:#E9ECF3; --ink-soft:#9AA4B4; --ink-faint:#5B6472;
+  --line:#232B3A; --line-soft:#1B2230;
+  --accent:#4ECAD8; --accent-ink:#8CE0EA; --accent-lo:#4ECAD81c;
+  --good:#5CBE83; --warn:#E0A64F; --crit:#EA6A5C;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 8px 26px -10px rgba(0,0,0,.6);
+}}
+:root[data-theme="light"]{ --bg:#EDF1F7; --bg-deep:#E3E8F1; --surface:#FFFFFF; --surface2:#F5F7FB; --sink:#E7ECF4; --ink:#141A24; --ink-soft:#535E70; --ink-faint:#8B95A6; --line:#DCE2EC; --line-soft:#E7ECF4; --accent:#0E8FA6; --accent-ink:#0A6E80; --accent-lo:#0E8FA614; --good:#2E9E63; --warn:#B4771B; --crit:#D24B3E; --shadow-sm:0 1px 2px rgba(20,28,45,.07); --shadow-md:0 6px 22px -8px rgba(20,28,45,.20); }
+:root[data-theme="dark"]{ --bg:#0B0E14; --bg-deep:#070910; --surface:#141924; --surface2:#1A2130; --sink:#0A0D14; --ink:#E9ECF3; --ink-soft:#9AA4B4; --ink-faint:#5B6472; --line:#232B3A; --line-soft:#1B2230; --accent:#4ECAD8; --accent-ink:#8CE0EA; --accent-lo:#4ECAD81c; --good:#5CBE83; --warn:#E0A64F; --crit:#EA6A5C; --shadow-sm:0 1px 2px rgba(0,0,0,.4); --shadow-md:0 8px 26px -10px rgba(0,0,0,.6); }
+
+* { box-sizing:border-box; }
+html,body { height:100%; margin:0; }
+body { background:var(--bg); color:var(--ink); font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
+button { font:inherit; color:inherit; cursor:pointer; }
+::selection { background:color-mix(in srgb,var(--accent) 30%,transparent); }
+
+/* ── Grille : rail chat | canvas ─────────────────────────────────── */
+#shell { display:grid; grid-template-columns:var(--rail) 1fr; height:100dvh; overflow:hidden; }
+#gutter { display:none; }
+@media (min-width:900px){
+  #shell { grid-template-columns:var(--rail) 6px 1fr; }
+  #gutter { display:block; background:transparent; cursor:col-resize; position:relative; }
+  #gutter::after { content:""; position:absolute; inset:0 2px; border-radius:3px; background:var(--line); transition:background .15s; }
+  #gutter:hover::after, #gutter.drag::after { background:var(--accent); }
+}
+
+/* ── Rail chat ───────────────────────────────────────────────────── */
+#rail { display:flex; flex-direction:column; min-width:0; background:var(--surface); border-right:1px solid var(--line); }
+#rail-head { display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid var(--line-soft); }
+.blason { width:30px; height:30px; border-radius:8px; flex:0 0 auto; display:grid; place-items:center;
+  background:linear-gradient(150deg,var(--accent),color-mix(in srgb,var(--accent) 40%,#2b3a63)); color:#fff; font:700 15px var(--serif); border:none; box-shadow:var(--shadow-sm); }
+#rail-head .name { font:600 16px var(--serif); letter-spacing:.01em; }
+#rail-head .spacer { flex:1; }
+.icon-btn { width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface2);
+  display:grid; place-items:center; font-size:14px; color:var(--ink-soft); transition:.15s; }
+.icon-btn:hover { border-color:var(--accent); color:var(--accent); }
+.icon-btn.pending { color:var(--warn); border-color:var(--warn); }
+#rail-status { width:8px; height:8px; border-radius:50%; background:var(--ink-faint); flex:0 0 auto; }
+#rail-status.busy { background:var(--warn); animation:pulse 1s infinite; }
+@keyframes pulse { 50%{ opacity:.35; } }
+
+#chat { flex:1; overflow-y:auto; padding:18px 16px; display:flex; flex-direction:column; gap:12px; }
+.msg { max-width:92%; padding:9px 13px; border-radius:13px; font-size:14.5px; line-height:1.5; }
+.msg.user { align-self:flex-end; background:var(--accent); color:#fff; border-bottom-right-radius:4px; }
+.msg.agent { align-self:flex-start; background:var(--surface2); border:1px solid var(--line-soft); border-bottom-left-radius:4px; }
+.msg.error { align-self:center; background:color-mix(in srgb,var(--crit) 14%,transparent); border:1px solid color-mix(in srgb,var(--crit) 40%,transparent); color:var(--crit); font-size:13px; }
+.msg .md > :first-child { margin-top:0; } .msg .md > :last-child { margin-bottom:0; }
+.msg.agent .md a { color:var(--accent-ink); }
+.typing { display:flex; gap:4px; padding:2px 0; }
+.typing span { width:6px; height:6px; border-radius:50%; background:var(--ink-faint); animation:blink 1.2s infinite; }
+.typing span:nth-child(2){ animation-delay:.2s; } .typing span:nth-child(3){ animation-delay:.4s; }
+@keyframes blink { 0%,60%,100%{ opacity:.25; } 30%{ opacity:1; } }
+
+#queued { display:flex; flex-wrap:wrap; gap:6px; padding:0 16px 8px; }
+#queued .chip { font:12px var(--mono); padding:4px 9px; border-radius:20px; background:var(--surface2); border:1px solid var(--line); color:var(--ink-soft); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#queued:empty { display:none; }
+
+#composer { display:flex; align-items:flex-end; gap:8px; padding:12px 14px; border-top:1px solid var(--line-soft); }
+#composer textarea { flex:1; resize:none; border:1px solid var(--line); background:var(--surface2); color:var(--ink);
+  border-radius:12px; padding:10px 12px; font:15px var(--sans); max-height:120px; }
+#composer textarea:focus { outline:none; border-color:var(--accent); }
+#shield { width:38px; height:38px; flex:0 0 auto; border-radius:11px; border:1px solid var(--line); background:var(--surface2); font-size:15px; }
+#shield.armed { border-color:var(--warn); color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); font:700 13px var(--mono); }
+#send { width:38px; height:38px; flex:0 0 auto; border-radius:11px; border:none; background:var(--accent); color:#fff; font-size:17px; }
+#send:hover { background:var(--accent-ink); }
+#model { border:1px solid var(--line); background:var(--surface2); color:var(--ink-soft); border-radius:8px; padding:5px 8px; font:12px var(--mono); }
+
+/* ── Canvas ──────────────────────────────────────────────────────── */
+#canvas { min-width:0; overflow-y:auto; background:var(--bg); display:flex; flex-direction:column; }
+#topbar { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:12px; padding:14px 26px;
+  background:color-mix(in srgb,var(--bg) 86%,transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--line-soft); }
+#crumbs { display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:13.5px; min-width:0; }
+#crumbs a { color:var(--ink-soft); text-decoration:none; padding:3px 7px; border-radius:7px; white-space:nowrap; }
+#crumbs a:hover { background:var(--surface2); color:var(--ink); }
+#crumbs a.here { color:var(--ink); font-weight:600; }
+#crumbs .sep { color:var(--ink-faint); font-size:11px; }
+#topbar .spacer { flex:1; }
+#page { padding:22px 26px 60px; max-width:1100px; width:100%; margin:0 auto; }
+
+/* Accueil : mosaïque d'apps */
+.hello { font:600 26px/1.2 var(--serif); margin:6px 0 2px; letter-spacing:-.01em; }
+.hello .sub { display:block; font:400 14px var(--sans); color:var(--ink-soft); margin-top:4px; }
+.mosaic { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:15px; margin-top:22px; }
+.tile { --hue:200; position:relative; text-align:left; border:1px solid var(--line); border-radius:var(--r); padding:16px;
+  background:var(--surface); box-shadow:var(--shadow-sm); min-height:112px; display:flex; flex-direction:column; gap:6px;
+  transition:transform .12s, box-shadow .12s, border-color .12s; overflow:hidden; }
+.tile::before { content:""; position:absolute; inset:0 0 auto 0; height:3px;
+  background:hsl(var(--hue) 62% 52%); }
+.tile:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:hsl(var(--hue) 50% 55%); }
+.tile .glyph { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; font-size:17px;
+  background:hsl(var(--hue) 60% 52% / .14); color:hsl(var(--hue) 55% 42%); }
+@media (prefers-color-scheme:dark){ .tile .glyph { color:hsl(var(--hue) 70% 68%); } }
+:root[data-theme="dark"] .tile .glyph { color:hsl(var(--hue) 70% 68%); }
+.tile .t-name { font:600 15px var(--sans); }
+.tile .t-count { font:12px var(--mono); color:var(--ink-faint); margin-top:auto; }
+.tile.soon { opacity:.62; } .tile.soon .t-count { color:var(--warn); }
+
+/* Vue collection : cartes de fiches */
+.section-title { font:600 13px var(--mono); text-transform:uppercase; letter-spacing:.08em; color:var(--ink-faint); margin:26px 0 12px; }
+.search { display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:9px 13px; margin-bottom:6px; max-width:420px; }
+.search input { border:none; background:none; color:var(--ink); font:14px var(--sans); flex:1; outline:none; }
+.cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:13px; margin-top:14px; }
+.card { text-align:left; border:1px solid var(--line); border-radius:var(--r-sm); padding:14px 15px; background:var(--surface);
+  box-shadow:var(--shadow-sm); transition:.12s; display:flex; flex-direction:column; gap:5px; }
+.card:hover { border-color:var(--accent); transform:translateY(-1px); }
+.card .c-name { font:600 14.5px var(--sans); }
+.card .c-meta { font:11.5px var(--mono); color:var(--ink-faint); display:flex; gap:8px; flex-wrap:wrap; }
+.card .c-tag { padding:1px 6px; border-radius:5px; background:var(--surface2); border:1px solid var(--line-soft); }
+
+.placeholder { color:var(--ink-faint); font-size:14px; padding:16px 0; }
+.fiche { animation:fade .2s; }
+@keyframes fade { from{ opacity:0; transform:translateY(4px); } }
+
+/* ── Mobile : chat plein écran, canvas masqué (règle historique) ── */
+@media (max-width:899px){
+  #shell { grid-template-columns:1fr; }
+  #canvas { display:none; }
+  body.canvas-open #rail { display:none; }
+  body.canvas-open #canvas { display:flex; }
+}
+
+/* ── Modales (tunnel) ────────────────────────────────────────────── */
+.modal { position:fixed; inset:0; z-index:50; background:rgba(8,11,18,.55); display:grid; place-items:center; padding:20px; }
+.modal[hidden] { display:none; }
+.modal .card { max-width:400px; width:100%; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:22px; box-shadow:var(--shadow-md); }
+.modal h2 { font:600 17px var(--serif); margin:0 0 14px; }
+.modal .row { font-size:14px; color:var(--ink-soft); margin-bottom:12px; }
+.modal .code { display:block; width:100%; font:700 20px var(--mono); letter-spacing:.12em; text-align:center; padding:12px; border-radius:10px; border:1px dashed var(--accent); background:var(--accent-lo); color:var(--accent-ink); }
+.modal .actions { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+.modal .actions button { flex:1; padding:9px; border-radius:9px; border:1px solid var(--line); background:var(--surface2); }

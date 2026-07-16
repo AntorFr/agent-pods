@@ -511,6 +511,16 @@ async def index():
     )
 
 
+@app.get("/app")
+async def launcher():
+    # Nouvelle UI (shell launcher), servie EN PARALLÈLE de / le temps de la
+    # migration. Bascule prévue : faire pointer / ici quand elle est complète.
+    return FileResponse(
+        STATIC_DIR / "app.html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
+
+
 # Served from the root so the service worker scope covers the whole app.
 @app.get("/sw.js")
 async def service_worker():
