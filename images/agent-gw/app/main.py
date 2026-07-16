@@ -383,6 +383,56 @@ async def memory_tree():
     return {"root": MEMORY_DIR, "todo": TODO_FILE, "entries": entries}
 
 
+def _parse_frontmatter(text: str) -> dict:
+    """Minimal reader for Alfred's flat frontmatter (type/domaine/status/cat/tags/
+    title…). Handles `key: scalar`, inline `key: [a, b]`, and block `- item` lists.
+    Intentionally NOT a full YAML parser — the writing contract keeps frontmatter flat."""
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}
+    fm: dict = {}
+    cur = None
+    for line in text[3:end].split("\n"):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        m = re.match(r"^([A-Za-z0-9_-]+):\s*(.*)$", line)
+        if m:
+            key, val = m.group(1), m.group(2).strip()
+            if val == "":
+                fm[key] = []
+                cur = key
+            elif val.startswith("[") and val.endswith("]"):
+                fm[key] = [v.strip().strip("\"'") for v in val[1:-1].split(",") if v.strip()]
+                cur = None
+            else:
+                fm[key] = val.strip("\"'")
+                cur = None
+        elif cur is not None and re.match(r"^\s*-\s+", line):
+            fm[cur].append(re.sub(r"^\s*-\s+", "", line).strip().strip("\"'"))
+    return fm
+
+
+@app.get("/api/memory/index")
+async def memory_index():
+    """Frontmatter of every memory .md in one shot — the 'dérivé' data layer that
+    powers collection cards, facets and (later) search, without N round-trips."""
+    root = _memory_root()
+    items = []
+    if root.is_dir():
+        for p in sorted(root.rglob("*.md")):
+            rel = p.relative_to(root)
+            if any(part.startswith(".") for part in rel.parts):
+                continue
+            try:
+                fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="ignore")[:4000])
+            except OSError:
+                fm = {}
+            items.append({"path": str(rel), "fm": fm})
+    return {"root": MEMORY_DIR, "items": items}
+
+
 @app.get("/api/memory/raw/{rel_path:path}")
 async def memory_raw(rel_path: str, download: bool = False):
     """Serve one memory file: markdown/images inline, anything else is

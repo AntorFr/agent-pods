@@ -226,10 +226,17 @@ function metaFor(name) {
 
 /* ── Mémoire (arbo) ──────────────────────────────────────────────── */
 let memInfo = null; // {root, todo, entries:[{path,dir}]}
+let memIndex = null; // Map path -> frontmatter (dérivé, une requête)
 async function loadTree() {
   try { const r = await fetch('/api/memory/tree', { headers: headers(false) }); if (r.ok) memInfo = await r.json(); } catch {}
 }
 function loadTreeThen(fn) { loadTree().then(fn); }
+async function loadIndex() {
+  if (memIndex) return;
+  memIndex = new Map();
+  try { const r = await fetch('/api/memory/index', { headers: headers(false) }); if (r.ok) { const { items } = await r.json(); for (const it of items) memIndex.set(it.path, it.fm || {}); } } catch {}
+}
+const prettify = (s) => { s = s.replace(MD_EXT, '').replace(/-/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
 // Sous-domaines de 1er niveau sous domaines/ + todo + sujets.
 function domains() {
   if (!memInfo) return [];
@@ -245,12 +252,28 @@ function countIn(prefix) {
   if (!memInfo) return 0;
   return memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path) && e.path.startsWith(prefix)).length;
 }
-// Fiches .md d'un domaine (chemins).
-function fichesOf(domain) {
-  const prefix = domain === 'sujets' ? 'sujets/' : 'domaines/' + domain + '/';
-  return memInfo.entries
-    .filter((e) => !e.dir && MD_EXT.test(e.path) && e.path.startsWith(prefix) && !e.path.startsWith('sujets/archive'))
-    .map((e) => e.path).sort();
+// Préfixe mémoire d'un sous-chemin d'app (ex. "cadeaux/frere" -> "domaines/cadeaux/frere/").
+function memPrefix(subpath) {
+  const segs = subpath.split('/');
+  const base = segs[0] === 'sujets' ? 'sujets' : 'domaines/' + segs[0];
+  const rest = segs.slice(1).join('/');
+  return (rest ? base + '/' + rest : base) + '/';
+}
+// Enfants immédiats d'un préfixe : sous-dossiers (regroupements) + fiches .md de ce niveau.
+function childrenOf(prefix) {
+  const folders = new Set(), files = [];
+  for (const e of memInfo.entries) {
+    if (!e.path.startsWith(prefix) || e.path.startsWith('sujets/archive')) continue;
+    const rest = e.path.slice(prefix.length);
+    if (!rest) continue;
+    const slash = rest.indexOf('/');
+    if (slash >= 0) folders.add(rest.slice(0, slash));
+    else if (!e.dir && MD_EXT.test(rest)) files.push(e.path);
+  }
+  return { folders: [...folders].sort((a, b) => a.localeCompare(b, 'fr')), files: files.sort() };
+}
+function ficheCount(prefix) {
+  return memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path) && e.path.startsWith(prefix) && !e.path.startsWith('sujets/archive')).length;
 }
 
 /* ── Routeur (hash) + fil d'Ariane ───────────────────────────────── */
@@ -299,33 +322,83 @@ function renderHome() {
   page.appendChild(grid);
 }
 
-function renderDomain(domain) {
-  const m = metaFor(domain);
-  crumbs([{ label: 'Accueil', hash: '#/' }, { label: m.label, hash: '#/dom/' + domain }]);
+async function renderDomain(subpath) {
+  await loadIndex();
+  const segs = subpath.split('/');
+  const m = metaFor(segs[0]);
+  const cr = [{ label: 'Accueil', hash: '#/' }];
+  let acc = '';
+  segs.forEach((s, i) => { acc = i ? acc + '/' + s : s; cr.push({ label: i ? prettify(s) : m.label, hash: '#/dom/' + acc }); });
+  crumbs(cr);
   page.innerHTML = '';
-  const fiches = fichesOf(domain);
-  const bar = document.createElement('div');
-  bar.className = 'search';
-  bar.innerHTML = '<span>🔍</span>';
-  const inp = document.createElement('input'); inp.placeholder = 'Filtrer…'; bar.appendChild(inp);
-  page.appendChild(bar);
-  const cards = document.createElement('div'); cards.className = 'cards'; page.appendChild(cards);
-  const draw = (q) => {
-    cards.innerHTML = '';
-    const ql = q.toLowerCase();
-    const shown = fiches.filter((p) => p.toLowerCase().includes(ql));
-    if (!shown.length) { cards.innerHTML = '<div class="placeholder">Aucune fiche.</div>'; return; }
-    for (const p of shown) {
-      const name = p.split('/').pop().replace(MD_EXT, '').replace(/-/g, ' ');
-      const rel = p.replace('domaines/' + domain + '/', '').replace('sujets/', '');
-      const card = document.createElement('a');
-      card.className = 'card'; card.href = '#/mem/' + p;
-      card.innerHTML = `<div class="c-name">${esc(name.charAt(0).toUpperCase() + name.slice(1))}</div><div class="c-meta"><span class="c-tag">${esc(rel.includes('/') ? rel.split('/')[0] : 'fiche')}</span></div>`;
-      cards.appendChild(card);
+  const prefix = memPrefix(subpath);
+  const { folders, files } = childrenOf(prefix);
+
+  // Sous-domaines : cartes de regroupement (clic = on descend d'un cran).
+  if (folders.length) {
+    const title = document.createElement('div'); title.className = 'section-title'; title.textContent = 'Sous-domaines';
+    page.appendChild(title);
+    const grid = document.createElement('div'); grid.className = 'cards'; page.appendChild(grid);
+    for (const f of folders) {
+      const n = ficheCount(prefix + f + '/');
+      const card = document.createElement('a'); card.className = 'card'; card.href = '#/dom/' + subpath + '/' + f;
+      card.innerHTML = `<div class="c-name">${esc(prettify(f))}</div><div class="c-meta"><span class="c-tag">${n} fiche${n > 1 ? 's' : ''}</span></div>`;
+      grid.appendChild(card);
     }
-  };
-  inp.addEventListener('input', () => draw(inp.value));
-  draw('');
+  }
+
+  // Fiches de ce niveau : cartes pilotées par le frontmatter + facette.
+  if (files.length) {
+    if (folders.length) { const t = document.createElement('div'); t.className = 'section-title'; t.textContent = 'Fiches'; page.appendChild(t); }
+    const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status' : 'type';
+    const facetVals = [...new Set(files.map((p) => (memIndex.get(p) || {})[facetKey]).filter(Boolean))].sort();
+    let activeFacet = null;
+    const search = document.createElement('div'); search.className = 'search'; search.innerHTML = '<span>🔍</span>';
+    const inp = document.createElement('input'); inp.placeholder = 'Filtrer…'; search.appendChild(inp); page.appendChild(search);
+    let facetRow = null;
+    const cards = document.createElement('div'); cards.className = 'cards';
+    const draw = () => {
+      const q = inp.value.toLowerCase();
+      cards.innerHTML = '';
+      const shown = files.filter((p) => {
+        const fm = memIndex.get(p) || {};
+        if (activeFacet && fm[facetKey] !== activeFacet) return false;
+        return (p + ' ' + (fm.title || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
+      });
+      if (!shown.length) { cards.innerHTML = '<div class="placeholder">Aucune fiche.</div>'; return; }
+      for (const p of shown) {
+        const fm = memIndex.get(p) || {};
+        const name = fm.title || prettify(p.split('/').pop());
+        const meta = [];
+        if (fm.type) meta.push(fm.type);
+        if (fm.status) meta.push(fm.status);
+        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 2).forEach((t) => meta.push('#' + t));
+        const card = document.createElement('a'); card.className = 'card'; card.href = '#/mem/' + p;
+        card.innerHTML = `<div class="c-name">${esc(name)}</div>` + (meta.length ? `<div class="c-meta">${meta.map((x) => `<span class="c-tag">${esc(x)}</span>`).join('')}</div>` : '');
+        cards.appendChild(card);
+      }
+    };
+    if (facetVals.length > 1) {
+      facetRow = document.createElement('div'); facetRow.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 2px';
+      for (const v of facetVals) {
+        const b = document.createElement('button'); b.className = 'c-tag'; b.style.cssText = 'padding:4px 11px;border:1px solid var(--line);border-radius:20px;background:var(--surface);cursor:pointer';
+        b.textContent = v;
+        b.addEventListener('click', () => {
+          activeFacet = activeFacet === v ? null : v;
+          [...facetRow.children].forEach((c) => { c.style.borderColor = 'var(--line)'; c.style.color = 'var(--ink-soft)'; });
+          if (activeFacet === v) { b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }
+          draw();
+        });
+        facetRow.appendChild(b);
+      }
+      page.appendChild(facetRow);
+    }
+    page.appendChild(cards);
+    inp.addEventListener('input', draw);
+    draw();
+  }
+
+  if (!folders.length && !files.length) page.innerHTML = '<div class="placeholder">Rien ici pour l’instant.</div>';
 }
 
 async function renderFiche(path) {
