@@ -137,7 +137,7 @@ async function sendMessage(text) {
         else if (ev === 'error') add('error', data.message);
       }
     }
-    if (currentRoute().startsWith('dom/') || currentRoute() === '') loadTreeThen(renderRoute); // l'agent a pu écrire
+    if (currentRoute().startsWith('dom/') || currentRoute() === '') { memIndex = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
   } catch (e) {
     add('error', String(e));
   } finally {
@@ -211,8 +211,8 @@ const APP_META = {
   cuisine:  { label: 'Cuisine',   glyph: '⌘', hue: 24 },
   achats:   { label: 'Achats',    glyph: '⛬', hue: 46 },
   admin:    { label: 'Admin',     glyph: '▤', hue: 210 },
-  atelier:  { label: 'L’Atelier', glyph: '⚒', hue: 130 },
-  diy:      { label: 'L’Atelier', glyph: '⚒', hue: 130 },
+  atelier:  { label: 'L’Atelier', glyph: '⚒', hue: 130, module: true },
+  diy:      { label: 'L’Atelier', glyph: '⚒', hue: 130, module: true },
   sujets:   { label: 'Sujets',    glyph: '❯', hue: 188 },
 };
 function hueFor(name) {
@@ -299,6 +299,8 @@ function renderRoute() {
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
   if (route.startsWith('dom/')) return renderDomain(route.slice(4));
   if (route === 'todo') return renderTodo();
+  if (route === 'atelier') return renderAtelierHub();
+  if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));
   renderHome();
 }
 
@@ -310,10 +312,14 @@ function renderHome() {
   page.appendChild(h);
   const grid = document.createElement('div');
   grid.className = 'mosaic';
-  const tiles = [{ id: 'todo', route: '#/todo' }, ...domains().map((d) => ({ id: d, route: '#/dom/' + d }))];
+  const tiles = [
+    { id: 'todo', route: '#/todo' },
+    { id: 'atelier', route: '#/atelier' },
+    ...domains().filter((d) => d !== 'atelier' && d !== 'diy').map((d) => ({ id: d, route: '#/dom/' + d })),
+  ];
   for (const t of tiles) {
     const m = metaFor(t.id);
-    const count = t.id === 'todo' ? '' : countIn(t.id === 'sujets' ? 'sujets/' : 'domaines/' + t.id + '/') + ' fiches';
+    const count = m.module ? '' : countIn(t.id === 'sujets' ? 'sujets/' : 'domaines/' + t.id + '/') + ' fiches';
     const tile = document.createElement('a');
     tile.className = 'tile'; tile.href = t.route; tile.style.setProperty('--hue', m.hue);
     tile.innerHTML = `<div class="glyph">${m.glyph}</div><div class="t-name">${esc(m.label)}</div><div class="t-count">${esc(count)}</div>`;
@@ -488,6 +494,196 @@ function renderTask(it, baseDir, today) {
   }
   el.appendChild(body);
   return el;
+}
+
+/* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */
+let wb = null;       // {path, data, state, byEtq}
+let wbTab = 'suivi';
+const wbDone = (etq) => !!(wb.state.fait || {})[etq];
+const pieceDims = (p) => `${p.longueur}×${p.largeur}×${p.ep}`;
+
+// Conteneurs créés une fois : modale pièce + mode atelier plein écran.
+const pieceModal = document.createElement('div');
+pieceModal.className = 'modal'; pieceModal.hidden = true;
+pieceModal.innerHTML = '<div class="card"><div class="piece-body" id="piece-body"></div></div>';
+pieceModal.addEventListener('click', (e) => { if (e.target === pieceModal) pieceModal.hidden = true; });
+document.body.appendChild(pieceModal);
+const atelierFull = document.createElement('div');
+atelierFull.className = 'atelier-full'; atelierFull.hidden = true;
+atelierFull.innerHTML = '<button class="close" id="atelier-close">✕</button><div id="atelier-body"></div>';
+atelierFull.querySelector('#atelier-close').addEventListener('click', () => { atelierFull.hidden = true; });
+document.body.appendChild(atelierFull);
+
+async function renderAtelierHub() {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }]);
+  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  let list;
+  try { const r = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' }); list = (await r.json()).workbooks; }
+  catch { page.innerHTML = '<div class="placeholder">Atelier indisponible.</div>'; return; }
+  page.innerHTML = '';
+  const t = document.createElement('div'); t.className = 'section-title'; t.textContent = 'Suivi menuiserie'; page.appendChild(t);
+  if (!list.length) { page.insertAdjacentHTML('beforeend', '<div class="placeholder">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div>'); return; }
+  const grid = document.createElement('div'); grid.className = 'cards'; page.appendChild(grid);
+  for (const w of list) {
+    const pct = w.pieces ? Math.round(100 * w.done / w.pieces) : 0;
+    const last = w.lastActivity ? new Date(w.lastActivity).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais';
+    const card = document.createElement('a'); card.className = 'card wb-card'; card.href = '#/atelier/' + encodeURIComponent(w.path);
+    card.innerHTML = `<div class="c-name">${esc(w.titre)}</div><div class="c-meta"><span class="c-tag">${w.done}/${w.pieces} pièces</span><span>${esc(last)}</span></div><div class="progress"><div style="width:${pct}%"></div></div>`;
+    grid.appendChild(card);
+  }
+}
+
+async function renderWorkbook(path) {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: '…', hash: '#/atelier/' + encodeURIComponent(path) }]);
+  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  let data, state;
+  try {
+    const [rd, rs] = await Promise.all([
+      fetch('/api/memory/raw/' + path, { headers: headers(false), cache: 'no-store' }),
+      fetch('/api/workbook/state?wb=' + encodeURIComponent(path), { headers: headers(false), cache: 'no-store' }),
+    ]);
+    if (!rd.ok) throw new Error(rd.status);
+    data = await rd.json(); state = await rs.json();
+  } catch (e) { page.innerHTML = '<div class="placeholder">Workbook illisible (' + esc(String(e)) + ').</div>'; return; }
+  wb = { path, data, state, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: data.titre || data.projet || 'Workbook', hash: '#/atelier/' + encodeURIComponent(path) }]);
+  renderWb();
+}
+
+async function tick(etq, done) {
+  try { const r = await fetch('/api/workbook/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ wb: wb.path, etiquette: etq, done }) }); if (r.ok) wb.state = await r.json(); } catch {}
+  renderWb();
+  if (!atelierFull.hidden) renderShop();
+}
+
+function renderWb() {
+  const d = wb.data;
+  const total = (d.pieces || []).length;
+  const done = Object.keys(wb.state.fait || {}).filter((e) => wb.byEtq.has(e)).length;
+  page.innerHTML = '';
+  const head = document.createElement('div'); head.className = 'wb-head';
+  head.innerHTML = `<h2>${esc(d.titre || d.projet || '')}</h2><span class="sub">${done}/${total}</span><span class="spacer"></span>`;
+  const shopBtn = document.createElement('button'); shopBtn.className = 'btn-accent'; shopBtn.textContent = '▶ Mode atelier';
+  shopBtn.addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
+  head.appendChild(shopBtn); page.appendChild(head);
+  const prog = document.createElement('div'); prog.className = 'wb-prog'; prog.style.marginBottom = '16px';
+  prog.innerHTML = `<div style="width:${total ? Math.round(100 * done / total) : 0}%"></div>`; page.appendChild(prog);
+  const tabs = document.createElement('div'); tabs.className = 'wb-tabs';
+  for (const [id, label] of [['debit', 'Débit'], ['prepas', 'Prépas'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']]) {
+    const b = document.createElement('button'); b.textContent = label; b.classList.toggle('active', wbTab === id);
+    b.addEventListener('click', () => { wbTab = id; renderWb(); }); tabs.appendChild(b);
+  }
+  page.appendChild(tabs);
+  const body = document.createElement('div'); page.appendChild(body);
+  if (wbTab === 'debit') renderDebit(body);
+  else if (wbTab === 'prepas') renderPrepas(body);
+  else if (wbTab === 'assemblage') renderAsm(body);
+  else renderSuivi(body);
+}
+
+function pieceBlock(etq) {
+  const p = wb.byEtq.get(etq);
+  const b = document.createElement('button');
+  b.className = 'piece-block' + (wbDone(etq) ? ' done' : ''); b.dataset.etq = etq;
+  b.innerHTML = `${esc(etq)}<div class="dims">${p ? esc(pieceDims(p)) : ''}</div>`;
+  b.addEventListener('click', () => showPiece(etq));
+  return b;
+}
+function renderDebit(body) {
+  for (const pan of wb.data.calepinage || []) {
+    const el = document.createElement('div'); el.className = 'panel';
+    el.innerHTML = `<h4>${esc(pan.panneau)} — ${esc(pan.dims || '')}</h4>`;
+    const cols = document.createElement('div'); cols.className = 'cols';
+    for (const col of pan.colonnes || []) {
+      const c = document.createElement('div'); c.className = 'col';
+      c.innerHTML = `<h5>${esc(String(col.largeur))} mm · ${esc(col.reglageFS || '')}</h5>`;
+      for (const etq of col.pieces || []) c.appendChild(pieceBlock(etq));
+      cols.appendChild(c);
+    }
+    el.appendChild(cols); body.appendChild(el);
+  }
+  if (!(wb.data.calepinage || []).length) body.innerHTML = '<div class="placeholder">pas de calepinage</div>';
+}
+function renderPrepas(body) {
+  let any = false;
+  for (const p of wb.data.pieces || []) {
+    if (!(p.preparations || []).length) continue;
+    any = true;
+    const el = document.createElement('div'); el.className = 'prep-card';
+    el.innerHTML = `<h4>${esc(p.etiquette)} <span style="color:var(--ink-faint)">· ${esc(pieceDims(p))}</span></h4>
+      <ul>${p.preparations.map((pr) => `<li><b>${esc(pr.type)}</b> — ${esc(pr.cotes || '')} ${pr.pos ? '· ' + esc(pr.pos) : ''}</li>`).join('')}</ul>`;
+    el.querySelector('h4').style.cursor = 'pointer';
+    el.querySelector('h4').addEventListener('click', () => showPiece(p.etiquette));
+    body.appendChild(el);
+  }
+  if (!any) body.innerHTML = '<div class="placeholder">aucune préparation</div>';
+}
+function renderAsm(body) {
+  for (const m of wb.data.assemblage || []) {
+    const el = document.createElement('div'); el.className = 'asm-card'; el.id = 'asm-' + m.module;
+    el.innerHTML = `<h4>${esc(m.titre || m.module)}</h4><ol>${(m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+    body.appendChild(el);
+  }
+  if (!(wb.data.assemblage || []).length) body.innerHTML = '<div class="placeholder">pas de séquence d’assemblage</div>';
+}
+function suiviGroups() {
+  const groups = new Map();
+  for (const p of wb.data.pieces || []) { const k = p.reglageFS || '—'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
+  return groups;
+}
+function renderSuivi(body) {
+  for (const [reg, pieces] of suiviGroups()) {
+    const g = document.createElement('div'); g.className = 'reg-group';
+    const open = pieces.filter((p) => !wbDone(p.etiquette)).length;
+    g.innerHTML = `<h4>${esc(reg)} <span class="count">${open ? open + ' restantes' : '✓'}</span></h4>`;
+    for (const p of pieces) {
+      const row = document.createElement('div'); row.className = 'tick-row' + (wbDone(p.etiquette) ? ' done' : '');
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = wbDone(p.etiquette);
+      cb.addEventListener('change', () => tick(p.etiquette, cb.checked));
+      const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = p.etiquette;
+      lbl.addEventListener('click', () => showPiece(p.etiquette));
+      const dims = document.createElement('span'); dims.className = 'dims'; dims.textContent = pieceDims(p) + (p.panneau ? ' · ' + p.panneau : '');
+      row.append(cb, lbl, dims); g.appendChild(row);
+    }
+    body.appendChild(g);
+  }
+}
+function showPiece(etq) {
+  const p = wb.byEtq.get(etq); if (!p) return;
+  const body = pieceModal.querySelector('#piece-body');
+  body.innerHTML = `<h2>${esc(etq)}</h2>
+    <div class="row"><b>Dimensions</b><span>${esc(pieceDims(p))} mm — ${esc(p.reglageFS || '')}</span></div>
+    <div class="row"><b>Débit</b><span>panneau ${esc(p.panneau || '?')}, colonne ${esc(String(p.colonne ?? '?'))}</span></div>
+    ${(p.preparations || []).length ? `<div class="row"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
+    ${p.placeAssemblage ? `<div class="row"><b>Assemblage</b><span>${esc(p.placeAssemblage)}</span></div>` : ''}`;
+  const actions = document.createElement('div'); actions.className = 'actions'; actions.style.marginTop = '16px';
+  const goDebit = document.createElement('button'); goDebit.textContent = 'Voir au débit';
+  goDebit.addEventListener('click', () => { pieceModal.hidden = true; wbTab = 'debit'; renderWb(); flashPiece(etq); });
+  const goAsm = document.createElement('button'); goAsm.textContent = 'Voir à l’assemblage';
+  goAsm.addEventListener('click', () => { pieceModal.hidden = true; wbTab = 'assemblage'; renderWb(); page.querySelector('#asm-' + p.module)?.scrollIntoView({ behavior: 'smooth' }); });
+  const tickBtn = document.createElement('button'); tickBtn.textContent = wbDone(etq) ? 'Décocher' : 'Marquer faite ✓';
+  tickBtn.addEventListener('click', () => { pieceModal.hidden = true; tick(etq, !wbDone(etq)); });
+  actions.append(goDebit, goAsm, tickBtn); body.appendChild(actions);
+  pieceModal.hidden = false;
+}
+function flashPiece(etq) {
+  const el = page.querySelector(`.piece-block[data-etq="${CSS.escape(etq)}"]`);
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1700); }
+}
+function renderShop() {
+  const bodyEl = atelierFull.querySelector('#atelier-body');
+  const ordered = [];
+  for (const [, pieces] of suiviGroups()) ordered.push(...pieces);
+  const total = ordered.length;
+  const remaining = ordered.filter((p) => !wbDone(p.etiquette));
+  if (!remaining.length) { bodyEl.innerHTML = `<div class="etq">Terminé 🎉</div><div class="dims">${total} pièces débitées</div>`; return; }
+  const cur = remaining[0];
+  const doneCount = total - remaining.length;
+  bodyEl.innerHTML = `<div class="reg">${esc(cur.reglageFS || '')}</div><div class="etq">${esc(cur.etiquette)}</div>
+    <div class="dims">${esc(pieceDims(cur))} mm</div><div class="extra">${esc((cur.preparations || []).map((pr) => pr.type).join(' · ') || '')}</div>`;
+  const btn = document.createElement('button'); btn.className = 'done-btn'; btn.textContent = 'FAIT ✓';
+  btn.addEventListener('click', () => tick(cur.etiquette, true)); bodyEl.appendChild(btn);
+  bodyEl.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(100 * doneCount / total)}%"></div></div><div class="pcount">${doneCount}/${total} — réglage : ${esc(String(cur.reglageFS || '—'))}</div>`);
 }
 
 /* ── Tunnel VS Code ──────────────────────────────────────────────── */
