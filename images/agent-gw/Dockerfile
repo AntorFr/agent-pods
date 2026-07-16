@@ -45,6 +45,8 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+# Serveurs MCP stdio bundlés (maps/weather), lancés par le .mcp.json du workspace.
+COPY mcp_servers ./mcp_servers
 # Bundled content engine + styles from the frontend build stage (built once, never at runtime).
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css ./app/static/
 
