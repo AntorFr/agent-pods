@@ -1,0 +1,8 @@
+# Le stage frontend fait son propre `npm ci` : ne JAMAIS embarquer un node_modules
+# local (binaires natifs esbuild darwin/arm64 -> « Exec format error » dans le conteneur
+# Linux) ni un dist déjà buildé. Le build les régénère.
+frontend/node_modules
+frontend/dist
+**/__pycache__
+**/*.pyc
+.git
