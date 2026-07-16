@@ -11,14 +11,21 @@ Outils exposés :
   - weather_now      : conditions météo actuelles (Weather API)
   - weather_forecast : prévisions journalières (Weather API)
 
-APIs à activer sur la clé : Routes, Places (New), Geocoding, Weather.
+APIs à activer sur la clé : Routes, Places (New), Weather. (Pas besoin de la Geocoding
+API : la résolution adresse -> coordonnées passe par Places, déjà activé, qui renvoie la
+position. La clé n'y transite qu'en HEADER, jamais en query — pas de fuite dans les logs.)
 Un lieu peut toujours être donné en toutes lettres (« 12 rue X, Nantes ») ou en
-« lat,lng » ; les outils météo géocodent l'adresse au besoin.
+« lat,lng » ; les outils météo résolvent l'adresse au besoin.
 """
+import logging
 import os
 import re
 import httpx
 from mcp.server.fastmcp import FastMCP
+
+# httpx logge chaque requête en INFO, URL comprise. Weather passe la clé en query param
+# (les API Google météo n'acceptent que ça) -> on coupe ce log pour ne jamais l'exposer.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 LANG = "fr"
@@ -49,22 +56,30 @@ def _dig(d, *path, default=None):
 
 
 async def _geocode(client: httpx.AsyncClient, address: str) -> dict | str:
-    """Adresse -> {lat, lng, formatted, place_id}. Renvoie une str d'erreur si échec."""
-    r = await client.get(
-        "https://maps.googleapis.com/maps/api/geocode/json",
-        params={"address": address, "key": API_KEY, "language": LANG, "region": REGION},
+    """Adresse/lieu -> {lat, lng, formatted, place_id} via Places (Text Search). La clé
+    passe en HEADER (pas de fuite en query). Renvoie une str d'erreur si échec."""
+    r = await client.post(
+        "https://places.googleapis.com/v1/places:searchText",
+        headers={
+            "X-Goog-Api-Key": API_KEY,
+            "X-Goog-FieldMask": "places.location,places.formattedAddress,places.id,places.displayName",
+            "Content-Type": "application/json",
+        },
+        json={"textQuery": address, "maxResultCount": 1, "languageCode": LANG, "regionCode": REGION},
     )
     data = r.json()
-    status = data.get("status")
-    if status != "OK" or not data.get("results"):
-        return f"géocodage impossible pour « {address} » (statut Google : {status})."
-    top = data["results"][0]
-    loc = _dig(top, "geometry", "location", default={})
+    if r.status_code != 200:
+        return f"résolution impossible pour « {address} » : {_dig(data, 'error', 'message', default=r.status_code)}"
+    places = data.get("places") or []
+    if not places:
+        return f"aucun lieu trouvé pour « {address} »."
+    top = places[0]
+    loc = top.get("location") or {}
     return {
-        "lat": loc.get("lat"),
-        "lng": loc.get("lng"),
-        "formatted": top.get("formatted_address"),
-        "place_id": top.get("place_id"),
+        "lat": loc.get("latitude"),
+        "lng": loc.get("longitude"),
+        "formatted": top.get("formattedAddress") or _dig(top, "displayName", "text"),
+        "place_id": top.get("id"),
     }
 
 
