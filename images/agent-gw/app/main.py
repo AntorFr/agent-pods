@@ -29,7 +29,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth
+from . import auth, voyages
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
@@ -99,6 +99,7 @@ async def _lifespan(_app: FastAPI):
 
 app = FastAPI(title="agent-gw", lifespan=_lifespan)
 app.include_router(auth.router)
+app.include_router(voyages.router)
 _query_lock = asyncio.Lock()
 
 # Paths reachable without a session (PWA shell plumbing + auth flow itself).

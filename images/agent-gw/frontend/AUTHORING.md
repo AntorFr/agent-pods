@@ -29,7 +29,7 @@ carte.
 ```yaml
 ---
 type: projet             # projet | achat | cadeau | contact | recette | savoir-faire | machine |
-                         # outil | tache | espace
+                         # outil | tache | espace | voyage
 domaine: diy          # le nom du dossier RÉEL sous domaines/ (achats|cadeaux|contacts|cuisine|diy|maison|…)
 titre: Rangement garage   # optionnel — sinon le nom de fichier, mis en forme automatiquement
 status: en-cours           # vocabulaire FERMÉ, voir tableau ci-dessous — omis si le type n'en a pas
@@ -46,6 +46,7 @@ tags: [menuiserie, garage]
 | `cadeau` | `idée` → `acheté` → `offert` |
 | `tache` | pas de `status` ici — l'état est la case `- [ ]` / `- [x]` dans `todo/taches.md` (contrat séparé, voir plus bas) |
 | `machine`, `savoir-faire`, `outil` | **pas de `status`** — fiches de connaissance/possession, sans cycle de vie. Ne pas en inventer un « toujours disponible » ou autre. |
+| `voyage` | **pas de `status` en frontmatter** — le cycle (`idée → prépa → en-cours → clos`) vit dans `assets/voyage.json`, source unique (voir « Le contrat voyage » plus bas). |
 
 **N'utilise QUE ces valeurs, exactement orthographiées.** Si la situation réelle ne colle à
 aucune (par exemple un achat empêché par un fournisseur en rupture), garde le statut le plus
@@ -174,6 +175,24 @@ pas en domaine séparé — ex. la piscine vit dans `domaines/maison/piscine/` (
 dans son frontmatter), pas un domaine `piscine` à part (erreur corrigée le 2026-07-17 : elle
 avait été promue à tort). La navigation par cartes de sous-domaine s'en charge automatiquement,
 aucun code à demander.
+
+## Le contrat voyage (`domaines/voyages/<id>/`)
+
+Un voyage est un **app-module** (timeline + suggestions dans la PWA), pas une fiche : sa
+donnée vit dans **`assets/voyage.json`**, source unique — titre, `status`, `debut`/`fin`,
+`lieux` (géocodés une fois), `items` (cartes : hébergement, resto, activité, visite,
+trajet-résa). Le contrat détaillé du JSON est dans `images/agent-gw/VOYAGES.md` (repo
+`agent-pods`) — en cas de doute, c'est lui qui tranche.
+
+- **Ne duplique pas** dates/statut dans un frontmatter : le front lit le JSON.
+- Une **fiche `.md` optionnelle** (`type: voyage`, prose libre : contexte, envies) peut
+  accompagner le dossier — sans `status`.
+- Les **documents** (carte d'embarquement, confirmation — pièces jointes des mails de
+  résa) se classent dans `assets/` et se référencent dans l'item (`docs`).
+- **Consolidation** : l'UI écrit les gestes (confirmer/déplacer/écarter) dans un overlay
+  `assets/voyage-state.json`, **hors git**. À chaque passage sur un dossier voyage :
+  fusionne l'overlay dans `voyage.json` (statut/jour/creneau par item), supprime
+  l'overlay, puis commit — c'est ainsi que les gestes entrent dans l'historique.
 
 ## Ce qu'il ne faut pas faire
 

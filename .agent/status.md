@@ -3,12 +3,13 @@
 > MàJ : 2026-07-18
 
 **État :** Gateway + PWA Alfred en refonte (cahier des charges : `images/agent-gw/REDESIGN.md`).
-Spec v1 du planificateur de voyages posée (`images/agent-gw/VOYAGES.md`) — validée en session.
-Mockup fait (2026-07-18) dans l'artifact « Alfred — App » : tuile + domaine Voyages, timeline
-par jour (météo J+10, bandeaux hébergement, liaisons dérivées), tray drag & drop. À faire
-valider, puis figer `voyage.json` et implémenter.
+Module Voyages **implémenté côté corps** (2026-07-18, spec `images/agent-gw/VOYAGES.md`) :
+API `/api/voyage/*` (list, gestes → overlay `voyage-state.json`, météo/routes dérivées),
+module launcher (hub + timeline + tray DnD + fiche), type `voyage` au contrat AUTHORING.
+Vérifié sur gateway locale + fixture (gestes, refus, dégradation sans clé Google).
 
 **Prochaines étapes :**
 - [x] Mockup timeline Voyages (tray + drag & drop) dans l'artifact « Alfred — App »
-- [ ] Implémenter le module voyage : `type: voyage` (moteur + AUTHORING), timeline + API d'état, endpoints météo/routes
+- [x] Module voyage côté corps : API d'état, endpoints météo/routes, front launcher, AUTHORING
 - [ ] Côté cerveau (repo Alfred) : skill `voyages` + entrée DECISIONS.md
+- [ ] Déployer (rebuild image agent-gw) et créer le premier vrai dossier voyage

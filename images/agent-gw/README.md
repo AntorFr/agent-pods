@@ -19,6 +19,11 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
    confient des tâches à Alfred sans intermédiaire.
 5. **Sert la mémoire** — API `/api/memory/raw/...` (md, images, pièces jointes) que le
    moteur de rendu de la PWA consomme.
+6. **App-modules d'état** — workbooks menuiserie (`/api/workbook/*`) et voyages
+   (`/api/voyage/*`, spec `VOYAGES.md`) : la donnée (`workbook.json` / `voyage.json`) est
+   écrite par l'agent, les gestes de l'UI vont dans un overlay `*-state.json` frère (hors
+   git) ; météo et liaisons des voyages sont dérivées via les API Google (clé
+   `GOOGLE_MAPS_API_KEY`, déjà dans l'env du pod pour le MCP maps) et jamais stockées.
 
 Le pod porte un **2ᵉ conteneur `tunnel`** (image `claude-pod`) dédié au tunnel VS Code
 vers `/workspace` — accès dev direct, indépendant de la gateway.

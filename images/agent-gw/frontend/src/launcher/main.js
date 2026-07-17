@@ -154,7 +154,7 @@ async function sendMessage(text) {
         else if (ev === 'error') add('error', data.message);
       }
     }
-    if (currentRoute().startsWith('dom/') || currentRoute() === '') { memIndex = null; wbCache = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
+    if (currentRoute().startsWith('dom/') || currentRoute().startsWith('voyage') || currentRoute() === '') { memIndex = null; wbCache = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
   } catch (e) {
     add('error', String(e));
   } finally {
@@ -236,6 +236,7 @@ const APP_META = {
   admin:    { label: 'Admin',      ico: '🗄️', color: 'search' },
   administratif: { label: 'Administratif', ico: '🗄️', color: 'search' },
   sujets:   { label: 'Sujets',     ico: '❯', color: 'agenda' },
+  voyages:  { label: 'Voyages',    ico: '🌴', color: 'voyage', module: true },
 };
 const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
 function metaFor(name) {
@@ -359,6 +360,10 @@ function renderRoute() {
   if (window.innerWidth < 900) document.body.classList.toggle('canvas-open', route !== '');
   if (!route) return renderHome();
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
+  // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
+  // mène au hub (timeline), pas à la collection de fiches.
+  if (route === 'voyages' || route === 'dom/voyages') return renderVoyagesHub();
+  if (route.startsWith('voyage/')) return renderVoyage(decodeURIComponent(route.slice(7)));
   if (route.startsWith('dom/')) return renderDomain(route.slice(4));
   if (route === 'todo') return renderTodo();
   if (route === 'atelier') return renderAtelierHub();
@@ -404,6 +409,12 @@ function renderHome() {
     if (foot) foot.innerHTML = `<span class="pc">${st.total} à faire</span>${st.late ? `<span class="pc hot">${st.late} en retard</span>` : ''}`;
     const sub = page.querySelector('.subhi');
     if (sub) sub.textContent = `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${st.total} tâche${st.total > 1 ? 's' : ''} en cours${st.late ? `, dont ${st.late} en retard` : ''}.`;
+  });
+  voyagesTileInfo().then((v) => {
+    const tile = page.querySelector('.tile[href="#/dom/voyages"]');
+    if (!v || !tile) return;
+    if (v.st) tile.querySelector('.st').textContent = v.st;
+    tile.querySelector('.foot').innerHTML = `<span class="pc">${v.n} voyage${v.n > 1 ? 's' : ''}</span>${v.sug ? `<span class="pc hot">${v.sug} suggestion${v.sug > 1 ? 's' : ''}</span>` : ''}`;
   });
   renderBrief();
 }
@@ -905,6 +916,282 @@ function renderShop() {
   const btn = document.createElement('button'); btn.className = 'done-btn'; btn.textContent = 'FAIT ✓';
   btn.addEventListener('click', () => tick(cur.etiquette, true)); bodyEl.appendChild(btn);
   bodyEl.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(100 * doneCount / total)}%"></div></div><div class="pcount">${doneCount}/${total} — réglage : ${esc(String(cur.reglageFS || '—'))}</div>`);
+}
+
+/* ── App Voyages : timeline par jour + tray de suggestions ───────────
+   Spec : images/agent-gw/VOYAGES.md. La donnée (voyage.json) est écrite par
+   Alfred ; les gestes (drag & drop) vont dans l'overlay voyage-state.json via
+   l'API ; météo et liaisons sont dérivées au rendu, jamais stockées. */
+const VTYPE = {
+  hebergement: { ico: '🏠', c: '--maison', n: 'hébergement' },
+  resto: { ico: '🍽️', c: '--cuisine', n: 'resto' },
+  activite: { ico: '🚣', c: '--diy', n: 'activité' },
+  visite: { ico: '🏛️', c: '--agenda', n: 'visite' },
+  trajet: { ico: '🧭', c: '--proj', n: 'trajet' },
+};
+const vtypeOf = (t) => VTYPE[t] || { ico: '◆', c: '--voyage', n: t || 'carte' };
+const CRX = { matin: 0, midi: 1, 'apres-midi': 2, soir: 3 };
+const CRN = { matin: 'matin', midi: 'midi', 'apres-midi': 'après-midi', soir: 'soir' };
+const VMODE_API = { marche: 'WALK', voiture: 'DRIVE', velo: 'BICYCLE', transport: 'TRANSIT' };
+const VMODE_ICO = { marche: '🚶', voiture: '🚗', velo: '🚲', transport: '🚇' };
+// Google Weather `type` → picto (familles principales ; défaut nuage).
+const WX_ICO = { CLEAR: '☀️', MOSTLY_CLEAR: '🌤️', PARTLY_CLOUDY: '⛅', MOSTLY_CLOUDY: '🌥️', CLOUDY: '☁️', WINDY: '💨', FOG: '🌫️', HAZE: '🌫️', THUNDERSTORM: '⛈️', THUNDERSHOWER: '⛈️', SCATTERED_THUNDERSTORMS: '⛈️', SNOW: '🌨️' };
+const wxIco = (t) => WX_ICO[t] || (/RAIN|SHOWER/.test(t || '') ? '🌧️' : /THUNDER/.test(t || '') ? '⛈️' : /SNOW/.test(t || '') ? '🌨️' : '☁️');
+
+const vfmtDay = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+function vdaysOf(a, b) {
+  const out = []; const end = new Date(b + 'T12:00:00');
+  for (let d = new Date(a + 'T12:00:00'); d <= end; d.setDate(d.getDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
+}
+const vkmOf = (a, b) => { const r = Math.PI / 180, h = Math.sin((b.lat - a.lat) * r / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lng - a.lng) * r / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
+const vmin = (s) => { const m = Math.round(s / 60); return m >= 60 ? Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') : m + ' min'; };
+
+let voy = null; // { path, data, state, filter }
+let vdrag = false;
+const vRouteCache = new Map();
+async function vroute(a, b, mode) {
+  const key = `${a.lat.toFixed(4)},${a.lng.toFixed(4)}|${b.lat.toFixed(4)},${b.lng.toFixed(4)}|${mode}`;
+  if (vRouteCache.has(key)) return vRouteCache.get(key);
+  try {
+    const r = await fetch(`/api/voyage/route?frm=${a.lat},${a.lng}&to=${b.lat},${b.lng}&mode=${VMODE_API[mode]}`, { headers: headers(false) });
+    const j = r.ok ? await r.json() : { available: false };
+    vRouteCache.set(key, j);
+    return j;
+  } catch { return { available: false }; }
+}
+// Liaison dérivée (VOYAGES.md) : filtre par modes déclarés du voyage, présélection
+// à vol d'oiseau (gratuite), vérification API, escalade si plafond crevé
+// (marche > 30 min, vélo > 45 min), zone grise 20-30 min = les deux modes.
+async function vliaison(a, b, modes) {
+  if (!a || !b || a.lat == null || b.lat == null) return null;
+  const d = vkmOf(a, b);
+  if (d < 0.08) return null;
+  const has = (m) => modes.includes(m);
+  const fmt = (r) => `${VMODE_ICO[r.m]} ${vmin(r.s)}${r.km >= 8 ? ' · ' + Math.round(r.km) + ' km' : ''}`;
+  const one = async (m) => { const r = await vroute(a, b, m); return r.available ? { m, s: r.seconds, km: (r.meters || 0) / 1000 } : null; };
+  const pick = d <= 2 && has('marche') ? 'marche' : d <= 6 && has('velo') ? 'velo' : has('voiture') ? 'voiture' : has('transport') ? 'transport' : modes[0];
+  if (!pick) return null;
+  const r1 = await one(pick);
+  if (!r1) return null;
+  const cap = { marche: 1800, velo: 2700 }[pick];
+  if (cap && r1.s > cap) {
+    const up = has('voiture') ? 'voiture' : has('transport') ? 'transport' : null;
+    if (up) { const r2 = await one(up); if (r2) return fmt(r2); }
+  }
+  if (pick === 'marche' && r1.s > 1200 && r1.s <= 1800 && has('voiture')) {
+    const r2 = await one('voiture');
+    if (r2) return fmt(r1) + ' · ' + fmt(r2);
+  }
+  return fmt(r1);
+}
+
+async function voyagesTileInfo() {
+  try {
+    const r = await fetch('/api/voyage/list', { headers: headers(false) });
+    if (!r.ok) return null;
+    const { voyages } = await r.json();
+    if (!voyages.length) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    const next = voyages.find((v) => v.debut && v.fin && v.fin >= today);
+    let st = '';
+    if (next) {
+      const dj = Math.ceil((new Date(next.debut) - new Date(today)) / 86400000);
+      st = next.titre + (dj > 0 ? ` — J-${dj}` : ' — en cours');
+    }
+    return { st, n: voyages.length, sug: voyages.reduce((n, v) => n + (v.suggestions || 0), 0) };
+  } catch { return null; }
+}
+
+async function renderVoyagesHub() {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }]);
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+  let list;
+  try { const r = await fetch('/api/voyage/list', { headers: headers(false), cache: 'no-store' }); list = (await r.json()).voyages; }
+  catch { page.innerHTML = '<div class="wrap"><div class="empty">Voyages indisponibles.</div></div>'; return; }
+  let html = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>Voyages</h1><div class="lede">Un dossier par voyage — résas sourcées de Gmail, suggestions d’Alfred, timeline à composer.</div></div></div>`;
+  if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun voyage — demandez à Alfred d’en cadrer un (« on part en Corse du 8 au 22 août »).</div></div>'; return; }
+  html += '<div class="cards">';
+  for (const v of list) {
+    const dates = v.debut ? `${vfmtDay(v.debut)} → ${vfmtDay(v.fin)}` : 'sans dates — envie à cadrer';
+    const foot = [];
+    if (v.status) foot.push(`<span class="stat ${sc(v.status)}">${esc(v.status)}</span>`);
+    if (v.confirmes) foot.push(`<span class="tag">${v.confirmes} confirmée${v.confirmes > 1 ? 's' : ''}</span>`);
+    if (v.suggestions) foot.push(`<span class="tag">💡 ${v.suggestions}</span>`);
+    html += `<a class="card" href="#/voyage/${encodeURIComponent(v.path)}"><div class="ct">${esc(v.titre)}</div><div class="cmeta">${esc(dates)}${v.lieux?.length ? ' · ' + esc(v.lieux.join(' → ')) : ''}</div>${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
+  }
+  page.innerHTML = html + '</div></div>';
+}
+
+async function renderVoyage(path) {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }, { label: '…', hash: '#/voyage/' + encodeURIComponent(path) }]);
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+  let data, state;
+  try {
+    const [rd, rs] = await Promise.all([
+      fetch('/api/memory/raw/' + path, { headers: headers(false), cache: 'no-store' }),
+      fetch('/api/voyage/state?v=' + encodeURIComponent(path), { headers: headers(false), cache: 'no-store' }),
+    ]);
+    if (!rd.ok) throw new Error(rd.status);
+    data = await rd.json(); state = await rs.json();
+  } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Voyage illisible (' + esc(String(e)) + ').</div></div>'; return; }
+  voy = { path, data, state, filter: null };
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }, { label: data.titre || 'Voyage', hash: '#/voyage/' + encodeURIComponent(path) }]);
+  paintVoyage();
+}
+
+const vItems = () => (voy.data.items || []).map((it) => ({ ...it, ...(({ ts, ...o }) => o)(voy.state.items?.[it.id] || {}) }));
+const vDir = () => voy.path.replace(/assets\/voyage\.json$/, '');
+async function vgesture(payload) {
+  try {
+    const r = await fetch('/api/voyage/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ v: voy.path, ...payload }) });
+    if (!r.ok) { alert('Geste refusé : ' + ((await r.json()).detail || r.status)); return; }
+    voy.state = await r.json();
+  } catch (e) { alert('Geste impossible : ' + String(e)); }
+  paintVoyage();
+}
+
+function vitemHTML(it, extra) {
+  const T = vtypeOf(it.type);
+  const chips = [];
+  if (it.heure) chips.push(`<span class="chip">${esc(it.heure)}</span>`);
+  else if (it.creneau) chips.push(`<span class="chip">${CRN[it.creneau] || esc(it.creneau)}</span>`);
+  if (it.duree) chips.push(`<span class="chip">◷ ${esc(it.duree)}</span>`);
+  if (it.prix) chips.push(`<span class="chip">${esc(it.prix)}</span>`);
+  if (it.gmail) chips.push('<span class="chip due">📧 résa</span>');
+  return `<div class="vcard" draggable="true" title="Clic : fiche · Glisser : déplacer" data-vi="${esc(it.id)}" style="--ic:var(${T.c})"><span class="vico">${it.ico || T.ico}</span><div class="bd"><div class="vt">${esc(it.titre || it.id)}</div>${chips.length ? `<div class="vmeta">${chips.join('')}</div>` : ''}</div>${extra || ''}</div>`;
+}
+
+function paintVoyage() {
+  const d = voy.data;
+  const items = vItems();
+  const allSug = items.filter((i) => i.statut === 'suggestion');
+  const sug = allSug.filter((i) => !voy.filter || i.type === voy.filter);
+  const nEc = items.filter((i) => i.statut === 'ecartee').length;
+  const modes = d.modes || ['marche', 'voiture'];
+  const modesTags = modes.map((m) => `<span class="tag">${VMODE_ICO[m] || ''} ${esc(m)}</span>`).join('');
+  const props = `<div class="props"><span class="k">Statut</span><span class="stat ${sc(d.status)}">${esc(d.status || '—')}</span>${d.debut ? `<span class="k">Dates</span><span class="tag">${vfmtDay(d.debut)} → ${vfmtDay(d.fin)}</span>` : ''}<span class="k">Modes</span>${modesTags}</div>`;
+
+  // Voyage « idée » : pas de timeline, le tray seul — rien ne se confirme sans dates.
+  if (!d.debut || !d.fin) {
+    page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">Voyage à l’état d’idée — le tray vit, la timeline attend les dates.</div></div></div>${props}
+      <div class="callout">🗓️ <b>Posez les dates pour composer</b> — dites-le à Alfred (« on part du 12 au 26 avril ») : sans début ni fin, la confirmation est impossible.</div>
+      <div class="grouplabel">Suggestions <span class="hint">— par Alfred, en attendant</span></div>
+      <div class="cards">${allSug.map((i) => `<button class="card" data-open="${esc(i.id)}"><div class="ct">${vtypeOf(i.type).ico} ${esc(i.titre || i.id)}</div><div class="cmeta">${esc(i.hint || '')}</div><div class="foot"><span class="tag">${vtypeOf(i.type).n}</span></div></button>`).join('') || '<div class="empty">Aucune suggestion — demandez-en à Alfred.</div>'}</div></div>`;
+    page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
+    return;
+  }
+
+  const days = vdaysOf(d.debut, d.fin);
+  const liaisons = []; // {id, a, b, first} remplis après le paint (asynchrone)
+  const tl = days.map((day) => {
+    const band = items.find((i) => i.statut === 'confirme' && i.debut && i.fin && i.debut <= day && day < i.fin);
+    const cards = items
+      .filter((i) => i.statut === 'confirme' && i.jour === day)
+      .sort((a, b) => ((CRX[a.creneau] ?? 2) - (CRX[b.creneau] ?? 2)) || String(a.heure || '').localeCompare(String(b.heure || '')));
+    let flow = '';
+    let prev = band && band.lat != null ? band : null;
+    cards.forEach((c, ix) => {
+      if (prev && c.lat != null) {
+        const id = `vlia-${day}-${ix}`;
+        liaisons.push({ id, a: prev, b: c, first: ix === 0 && !!band });
+        flow += `<div class="vlink" id="${id}"><span class="lb">…</span></div>`;
+      }
+      flow += vitemHTML(c);
+      if (c.lat != null) prev = c;
+    });
+    if (!cards.length) flow = '<div class="vfree">— journée libre — déposez une carte</div>';
+    return `<div class="vday" data-day="${day}"><div class="vday-h"><span class="dn">${vfmtDay(day)}</span><span class="wx na" data-wx="${day}"></span></div>${band ? `<div class="vband" data-open="${esc(band.id)}">🏠 ${esc(band.titre || band.id)}<span class="fx">${band.debut === day ? 'arrivée' : ''}</span></div>` : ''}<div class="vflow">${flow}</div></div>`;
+  }).join('');
+
+  const types = [...new Set(allSug.map((i) => i.type))];
+  const tray = `<aside class="vtray"><div class="th">Suggestions <span class="cnt">${allSug.length}</span></div>
+    ${types.length > 1 ? `<div class="facets">${['', ...types].map((tp) => `<button class="pill ${(!tp && !voy.filter) || voy.filter === tp ? 'on' : ''}" data-tf="${esc(tp)}">${tp ? vtypeOf(tp).n : 'Tous'}</button>`).join('')}</div>` : ''}
+    ${sug.map((i) => `<div class="traycard" draggable="true" title="Clic : fiche · Glisser : confirmer" data-vi="${esc(i.id)}" style="--ic:var(${vtypeOf(i.type).c})"><button class="dis" data-dis="${esc(i.id)}" title="Écarter — conservée, jamais reproposée">✕</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}${i.prix ? `<div class="vmeta"><span class="chip">${esc(i.prix)}</span></div>` : ''}</div></div>`).join('') || '<div class="empty">Rien à trier — demandez des suggestions à Alfred.</div>'}
+    <div class="trayfoot">🖐 Glissez une carte sur un jour pour la confirmer${nEc ? ` · ${nEc} écartée${nEc > 1 ? 's' : ''} conservée${nEc > 1 ? 's' : ''}` : ''}</div></aside>`;
+
+  page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div></div>`;
+
+  // Fiches (clic), tray (filtre, écarter), drag & drop → API d'état.
+  page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
+  page.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => { voy.filter = b.dataset.tf || null; paintVoyage(); }));
+  page.querySelectorAll('[data-dis]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.dis, statut: 'ecartee' }); }));
+  page.querySelectorAll('.vcard,.traycard').forEach((c) => {
+    c.addEventListener('click', () => { if (!vdrag) openVFiche(c.dataset.vi); });
+    c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.vi); e.dataTransfer.effectAllowed = 'move'; c.classList.add('drag'); vdrag = true; });
+    c.addEventListener('dragend', () => { c.classList.remove('drag'); setTimeout(() => { vdrag = false; }, 0); });
+  });
+  page.querySelectorAll('.vday').forEach((dz) => {
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('dropok'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dropok'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault(); dz.classList.remove('dropok');
+      const it = vItems().find((x) => x.id === e.dataTransfer.getData('text/plain'));
+      if (!it || it.debut || it.fin) return; // les continus ne se déplacent pas
+      vgesture({ id: it.id, statut: 'confirme', jour: dz.dataset.day, creneau: it.creneau && CRX[it.creneau] != null ? it.creneau : 'apres-midi' });
+    });
+  });
+
+  // Météo (dérivée) : patch des jours couverts par la fenêtre fiable ; les autres
+  // restent vides côté futur lointain, « — » côté passé. L'absence, pas la fiction.
+  const today = new Date().toISOString().slice(0, 10);
+  page.querySelectorAll('[data-wx]').forEach((el) => {
+    const day = el.dataset.wx;
+    if (day < today) el.textContent = '—';
+    else { el.textContent = 'météo à J-10'; el.title = 'hors fenêtre fiable (J+10) — le picto apparaîtra à l’approche du départ'; }
+  });
+  fetch('/api/voyage/weather?v=' + encodeURIComponent(voy.path), { headers: headers(false) })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((wx) => {
+      if (!wx || !wx.available) return;
+      page.querySelectorAll('[data-wx]').forEach((el) => {
+        const w = wx.days[el.dataset.wx];
+        if (!w) return;
+        el.className = 'wx';
+        el.textContent = `${wxIco(w.type)} ${w.tmax != null ? Math.round(w.tmax) + '°' : ''}`;
+        if (w.desc) el.title = w.desc;
+      });
+    }).catch(() => {});
+
+  // Liaisons (dérivées) : remplies en asynchrone, recalculées à chaque paint —
+  // le chip suit le geste, rien n'est jamais stocké.
+  const modesDecl = modes.filter((m) => VMODE_API[m]);
+  for (const L of liaisons) {
+    vliaison(L.a, L.b, modesDecl).then((txt) => {
+      const el = document.getElementById(L.id);
+      if (!el) return;
+      if (!txt) { el.remove(); return; }
+      el.querySelector('.lb').textContent = (L.first ? 'de l’hôtel · ' : '') + txt;
+    });
+  }
+}
+
+const vModal = document.createElement('div');
+vModal.className = 'modal'; vModal.hidden = true;
+vModal.innerHTML = '<div class="card vfiche" id="vfiche-body"></div>';
+vModal.addEventListener('click', (e) => { if (e.target === vModal) vModal.hidden = true; });
+document.body.appendChild(vModal);
+function openVFiche(id) {
+  const it = vItems().find((x) => x.id === id);
+  if (!it) return;
+  const T = vtypeOf(it.type);
+  const cal = it.jour ? vfmtDay(it.jour) + (it.heure ? ' · ' + esc(it.heure) : it.creneau ? ' · ' + (CRN[it.creneau] || esc(it.creneau)) : '')
+    : it.debut ? `${vfmtDay(it.debut)} → ${vfmtDay(it.fin)}` : 'à placer sur la timeline';
+  const stCls = { suggestion: 'idee', confirme: 'achete', ecartee: 'bloque' }[it.statut] || 'encours';
+  const stLbl = { suggestion: 'suggestion', confirme: 'confirmé', ecartee: 'écartée' }[it.statut] || it.statut;
+  const chips = [it.duree ? `<span class="chip">◷ ${esc(it.duree)}</span>` : '', it.prix ? `<span class="chip">${esc(it.prix)}</span>` : ''].filter(Boolean).join('');
+  const desc = it.desc || it.hint || '';
+  const src = it.gmail ? '<div class="vsrc">📧 Résa retrouvée dans Gmail — la vérité du fil reste dans la boîte.</div>'
+    : it.place_id ? '<div class="vsrc">📍 Fiche maps — note, horaires, itinéraire via <span class="mono">place_id</span>.</div>' : '';
+  const docs = (it.docs || []).map((doc) => `<a class="vdoc" href="/api/memory/raw/${esc(vDir() + doc.fichier)}?download=1"><span class="ext">${esc((doc.fichier.split('.').pop() || 'doc').toUpperCase())}</span><div><div class="fn">${esc(doc.titre || doc.fichier)}</div><div class="fs">${esc(doc.fichier)}</div></div></a>`).join('');
+  const body = vModal.querySelector('#vfiche-body');
+  body.innerHTML = `<div class="vhead"><span class="vico">${it.ico || T.ico}</span><div><div class="vst">${esc(it.titre || it.id)}</div><div class="vsub">${T.n} · <span class="stat ${stCls}">${esc(stLbl)}</span> · ${cal}</div></div></div>
+    ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
+    ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
+    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
+    <span style="flex:1"></span><button class="vopen" data-close>Fermer</button></div>`;
+  body.querySelector('[data-close]').addEventListener('click', () => { vModal.hidden = true; });
+  vModal.hidden = false;
 }
 
 /* ── Tunnel VS Code ──────────────────────────────────────────────── */

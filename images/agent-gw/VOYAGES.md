@@ -36,14 +36,15 @@ domaines/voyages/
     └── assets/voyage.json  # la donnée du module (plomberie : mentionnée, jamais liée)
 ```
 
-- `index.md` : frontmatter **`type: voyage`** — extension du vocabulaire fermé, donc un acte
-  codé (moteur + AUTHORING.md + skill, en un geste coordonné). Champs : `debut:` / `fin:`
-  (AAAA-MM-JJ — absents tant que le voyage est une idée, obligatoires ensuite), `status:` au
-  cycle **`idée → prépa → en-cours → clos`** (`idée` ⇔ pas de dates), `titre:`, `tags:`.
-- La **vue domaine** est dérivée du frontmatter (cartes : titre, dates, statut, compteur de
-  cartes confirmées) — la collection générique suffit, zéro vue spécifique.
-- Le module s'embarque dans la fiche, patron du plan de débit :
-  `{% outil id="voyage" voyage="corse-2026" /%}`.
+- *(Amendé à l'implémentation, 2026-07-18.)* **`voyage.json` est la source unique** — titre,
+  `status` (cycle **`idée → prépa → en-cours → clos`**, `idée` ⇔ pas de dates), `debut`/`fin`,
+  lieux, items. **Pas de double vérité** : la fiche `.md` est *optionnelle* (prose libre,
+  `type: voyage`, sans `status` ni dates). Le type `voyage` est ajouté au vocabulaire
+  AUTHORING avec cette règle.
+- La **vue domaine est le hub de l'app** (`#/dom/voyages` intercepté par le module, comme
+  la tuile L'Atelier) : cartes dérivées de `/api/voyage/list` — dates, statut, compteurs.
+- Le module est routé (`#/voyage/<chemin>`), patron des workbooks — pas de tag
+  `{% outil %}` : c'est ainsi que les app-modules existants s'embarquent réellement.
 
 ## `voyage.json` — le contrat de données
 
@@ -133,8 +134,12 @@ domaines/voyages/
     calage, source (fil Gmail / maps), **documents** (`docs` : carte d'embarquement,
     confirmation…) et lien « ouvrir la page » (`web`). Consultation en surimpression : on ne
     quitte pas la timeline.
-- **Chaque geste écrit `voyage.json` via l'API d'état** (patron `/api/workbook/state`) —
-  persisté, historisé git, **zéro LLM au rendu ni dans le geste**.
+- **Chaque geste passe par l'API d'état** (`POST /api/voyage/state`, patron workbook) —
+  validé côté serveur (item existant, jour dans le voyage, jamais un continu) et écrit dans
+  un **overlay `voyage-state.json` frère, hors git** : la gateway n'écrit jamais la mémoire
+  *(amendé à l'implémentation — c'est la frontière établie du corps)*. **Alfred consolide**
+  l'overlay dans `voyage.json` à son prochain passage sur le dossier, puis commit : les
+  gestes entrent dans l'historique par lui. **Zéro LLM au rendu ni dans le geste.**
 
 ## Météo — dérivée, jamais stockée
 
@@ -187,6 +192,8 @@ Elle vivra dans le repo Alfred (`.claude/skills/voyages/`), sur le gabarit `corr
    un geste de l'utilisateur (app) ou une demande explicite (chat).
 4. **Calendar** : sur demande seule, création par défaut, modif/suppr = confirmation.
 5. **En voyage** : le canal mobile est le chat — Alfred lit `voyage.json` et répond par message.
+6. **Consolidation** : à chaque passage sur un dossier voyage, fusionner l'overlay
+   `voyage-state.json` (gestes de l'UI) dans `voyage.json`, supprimer l'overlay, commit.
 
 ## Hors v1
 
@@ -196,8 +203,8 @@ de la timeline ; carte géographique des étapes (candidate v2 naturelle : les i
 
 ## Ordre de construction
 
-1. **Mockup** timeline + tray dans l'artifact « Alfred — App » — valider les gestes avant le code.
-2. **Figer `voyage.json`** après le mockup (le geste révèle les champs).
-3. **Corps** : `type: voyage` (moteur + AUTHORING.md), module timeline + API d'état, endpoints
-   météo et routes (liaisons).
+1. ✅ **Mockup** timeline + tray dans l'artifact « Alfred — App » — gestes validés.
+2. ✅ **`voyage.json` figé** (le geste a révélé `desc`/`web`/`docs` et l'overlay d'état).
+3. ✅ **Corps** (2026-07-18) : `app/voyages.py` (list, état/gestes, météo, routes), module
+   launcher (`renderVoyagesHub`/`renderVoyage`), type `voyage` dans AUTHORING.md.
 4. **Cerveau** : skill `voyages` + entrée DECISIONS.md.
