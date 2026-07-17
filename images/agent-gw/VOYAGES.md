@@ -8,9 +8,11 @@
 ## Décisions structurantes
 
 - **Domaine `voyages`** : la vue domaine est une collection de cartes, une par voyage.
-- **Un voyage = une date de début + une date de fin, toujours.** Un seul lieu de résidence ou
-  plusieurs (périple), au choix. Pas de dates → pas de voyage : une envie sans dates reste un
-  sujet côté cerveau, le dossier naît quand les dates existent (même approximatives).
+- **Un voyage se compose entre un début et une fin** — un seul lieu de résidence ou plusieurs
+  (périple), au choix. Mais il peut **naître sans dates** (statut `idée`, amendement
+  2026-07-18) : on y **liste des suggestions**, rien de plus — **rien ne se confirme tant que
+  début/fin ne sont pas posés**. Poser les dates fait apparaître la timeline et ouvre la
+  confirmation.
 - **App-module dès la v1** : le drag & drop suggestions → timeline est le cœur du besoin, c'est
   du *comportement*, donc du code (jamais du Markdoc passif).
 - **Vue approximative assumée** : jour + créneau, pas de grille horaire. C'est les vacances,
@@ -18,8 +20,10 @@
 - **Mobile : la règle du shell ne bouge pas** (mobile = chat plein écran, pas de canvas).
   En voyage, Alfred fait la conciergerie **par message** en lisant le dossier (« le programme
   de demain ? »). Aucun rendu mobile de la timeline. *(Décision utilisateur, 2026-07-18.)*
-- **Trajets = cartes de la timeline en v1** : confirmés quand une résa existe (sourcée du
-  mail), estimés sinon (`travel_time`, estimation **datée**). La journée « on roule » se voit.
+- **Trajets : pas de cartes estimées** *(descopé 2026-07-18 — décision utilisateur)*. Le type
+  `trajet` ne sert qu'aux **résas réelles** (ferry, vol, train — sourcées Gmail). Entre deux
+  cartes, le temps de trajet est une **liaison dérivée** calculée au rendu (section
+  « Liaisons ») — jamais une carte à maintenir, jamais une donnée stockée.
 - **Météo par jour : régime dérivé, jamais stockée** (détail plus bas).
 - **Suggestions écartées conservées** (statut `ecartee`, masquées) — anti re-proposition.
 
@@ -34,7 +38,8 @@ domaines/voyages/
 
 - `index.md` : frontmatter **`type: voyage`** — extension du vocabulaire fermé, donc un acte
   codé (moteur + AUTHORING.md + skill, en un geste coordonné). Champs : `debut:` / `fin:`
-  (AAAA-MM-JJ, obligatoires), `status:` au cycle **`prépa → en-cours → clos`**, `titre:`, `tags:`.
+  (AAAA-MM-JJ — absents tant que le voyage est une idée, obligatoires ensuite), `status:` au
+  cycle **`idée → prépa → en-cours → clos`** (`idée` ⇔ pas de dates), `titre:`, `tags:`.
 - La **vue domaine** est dérivée du frontmatter (cartes : titre, dates, statut, compteur de
   cartes confirmées) — la collection générique suffit, zéro vue spécifique.
 - Le module s'embarque dans la fiche, patron du plan de débit :
@@ -48,6 +53,7 @@ domaines/voyages/
   "titre": "Corse — été 2026",
   "debut": "2026-08-08",
   "fin": "2026-08-22",
+  "modes": ["marche", "voiture"],
   "lieux": [
     { "id": "calvi", "nom": "Calvi", "lat": 42.567, "lng": 8.757,
       "arrivee": "2026-08-08", "depart": "2026-08-15" }
@@ -76,13 +82,18 @@ domaines/voyages/
   calage temporel** — jamais de copie, la carte est la même de bout en bout.
 - **Invariant** : un item `confirme` porte toujours un calage (`jour` ou `debut`/`fin`) ;
   une `suggestion` n'en porte jamais. L'app le garantit par construction (le drop assigne le
-  jour) ; la skill demande le jour avant de confirmer en chat.
+  jour) ; la skill demande le jour avant de confirmer en chat. **Corollaire** : dans un voyage
+  `idée` (sans dates), tout item est `suggestion` ou `ecartee` — la confirmation est
+  mécaniquement impossible, il n'y a pas de jour à poser.
 - **Créneaux** : `matin | midi | apres-midi | soir` — optionnel, c'est le rangement visuel
   dans le bloc jour. `heure` et `duree` sont du texte libre affiché tel quel.
 - **Traçabilité, zéro duplication** : `gmail` (fil source d'une résa — la vérité de la résa
-  reste dans Gmail), `place_id` (maps — la vérité du lieu reste chez maps). Un trajet sans
-  résa porte `duree_estimee` + `estimee_le` : l'estimation est **datée**, le temps réel se
-  redemande en chat le jour J, il ne pourrit pas dans un fichier.
+  reste dans Gmail), `place_id` (maps — la vérité du lieu reste chez maps). Un item `trajet`
+  n'existe **que** porté par une résa ; le trajet routier estimé est une **liaison** (dérivée
+  au rendu), jamais un item.
+- **`modes`** : les moyens de déplacement du voyage, déclarés au cadrage — défaut
+  `["marche", "voiture"]` ; `velo` / `transport` seulement si l'utilisateur les annonce (« on
+  emporte les vélos », « tout à pied et en métro »). Ils bornent le choix de mode des liaisons.
 - `lieu` : référence un `lieux[].id` du voyage (optionnel — rattache la carte à une étape,
   sert aussi à la météo). Les `lieux` sont géocodés une fois par Alfred à la création.
 - `prix`, `notes` : optionnels, texte libre.
@@ -93,7 +104,12 @@ domaines/voyages/
   date + **picto météo** + cartes ponctuelles rangées par créneau. Les **continus** en bandeau
   latéral le long de leurs jours (l'hébergement se lit d'un coup d'œil), les **trajets** dans
   le flux du jour.
+- **Liaisons** entre cartes consécutives d'un même jour : un mince connecteur « 🚶 12 min » /
+  « 🚗 35 min · 24 km », dérivé au rendu (section « Liaisons ») — recalculé au drag, le chip
+  suit le geste.
 - **Tray « Suggestions »** à côté de la timeline : les cartes `suggestion`, filtrables par type.
+- **Voyage `idée`** (sans dates) : pas de timeline — le tray seul, avec une invite « posez les
+  dates pour composer ».
 - **Gestes** :
   - drag tray → jour : la carte devient `confirme`, gagne le `jour` (et le créneau selon la
     zone de dépôt) ;
@@ -112,11 +128,37 @@ domaines/voyages/
   — l'absence plutôt que la fiction ; les pictos apparaissent d'eux-mêmes à l'approche du départ.
 - Piège connu (D25) : `day[0]` = journée **en cours**, jamais « hier ».
 
+## Liaisons — temps de trajet dérivés, jamais stockés
+
+Le temps de trajet entre deux cartes est une donnée **positionnelle** : elle dépend de l'ordre
+du jour, que le drag & drop change en permanence. La stocker à la création de la carte serait
+faux dès le premier déplacement — donc même régime que la météo : **calculée au rendu**.
+
+- **Origine** : la carte précédente du jour (ordre créneau/heure) ; pour la **première carte
+  du jour, l'hébergement actif** ce jour-là. Pas de liaison entre deux jours.
+- **Endpoint gateway** `/api/route` (Google Routes, appelée en direct par le corps), **sans
+  trafic** — l'approximation est le contrat des vacances — donc cache long (~24 h) par paire
+  origine/destination/mode.
+- **Choix du mode, en trois temps** :
+  1. **Filtre** : seulement les `modes` déclarés du voyage.
+  2. **Présélection à vol d'oiseau** (gratuite, zéro appel) : ≤ 2 km → marche ; ≤ 6 km → vélo
+     s'il est déclaré ; au-delà → voiture, sinon transport.
+  3. **Vérification et escalade** : on calcule le mode présélectionné ; s'il crève son plafond
+     (marche > 30 min, vélo > 45 min) → mode motorisé suivant. En zone grise (marche 20–30 min
+     et voiture déclarée), afficher **les deux** — « 🚶 25 min · 🚗 7 min », l'utilisateur tranche
+     en la lisant.
+- **Carte sans coordonnées** (`place_id`/`lieu` absents) → pas de liaison. L'absence plutôt
+  que la fiction, comme la météo.
+- En chat, Alfred peut annoncer un temps de trajet en passant (réflexe `maps`, D25) — il ne
+  l'écrit nulle part.
+
 ## La skill `voyages` (cerveau — hors de ce repo, pour la frontière)
 
 Elle vivra dans le repo Alfred (`.claude/skills/voyages/`), sur le gabarit `correspondance` :
 
-1. **Cadre** le voyage (dates obligatoires, lieux géocodés) et crée le dossier.
+1. **Cadre** le voyage et crée le dossier : dates si elles existent (sinon voyage `idée`,
+   tray seul), lieux géocodés, et **demande les modes de déplacement** (« vous aurez une
+   voiture ? des vélos ? ») plutôt que de les deviner.
 2. **Résas Gmail** → cartes `confirme` sourcées. Gardes `correspondance` intégrales
    (D17/D18/D24) : lecture à la demande, un mail ne déclenche jamais rien.
 3. **Suggestions** (`search_places` + jugement + mémoire des goûts) → cartes vers le **tray**.
@@ -135,5 +177,6 @@ de la timeline ; carte géographique des étapes (candidate v2 naturelle : les i
 
 1. **Mockup** timeline + tray dans l'artifact « Alfred — App » — valider les gestes avant le code.
 2. **Figer `voyage.json`** après le mockup (le geste révèle les champs).
-3. **Corps** : `type: voyage` (moteur + AUTHORING.md), module timeline + API d'état, endpoint météo.
+3. **Corps** : `type: voyage` (moteur + AUTHORING.md), module timeline + API d'état, endpoints
+   météo et routes (liaisons).
 4. **Cerveau** : skill `voyages` + entrée DECISIONS.md.
