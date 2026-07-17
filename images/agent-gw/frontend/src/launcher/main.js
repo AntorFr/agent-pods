@@ -5,7 +5,9 @@
 import './launcher.css';
 
 const $ = (id) => document.getElementById(id);
-const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Statut de frontmatter -> classe de pastille (.stat). Tolérant, défaut = accent.
+const sc = (s) => ({ 'en cours': 'encours', 'en-cours': 'encours', 'encours': 'encours', 'bloqué': 'bloque', 'bloque': 'bloque', 'clos': 'clos', 'fait': 'clos', 'terminé': 'clos', 'idée': 'idee', 'idee': 'idee', 'acheté': 'achete', 'achete': 'achete', 'offert': 'offert', 'à acheter': 'aacheter', 'a acheter': 'aacheter', 'veille': 'veille' }[String(s || '').toLowerCase()] || 'encours');
 
 /* ── Auth ────────────────────────────────────────────────────────── */
 let token = localStorage.getItem('gw_token') || '';
@@ -76,15 +78,15 @@ document.addEventListener('click', (e) => {
 
 /* ── Chat ────────────────────────────────────────────────────────── */
 const chat = $('chat'), input = $('input'), status = $('rail-status'), modelSel = $('model');
+const BUB = { agent: 'al', user: 'me', error: 'err' };
 function add(cls, text) {
-  let el;
-  if (cls === 'agent') { el = renderMd(text, ''); el.classList.add('msg', 'agent'); }
-  else { el = document.createElement('div'); el.className = 'msg ' + cls; el.textContent = text; }
+  const el = document.createElement('div');
+  el.className = 'bub ' + (BUB[cls] || cls);
+  if (cls === 'agent') el.appendChild(renderMd(text, '')); else el.textContent = text;
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
 function addTyping() {
-  const el = document.createElement('div');
-  el.className = 'msg agent';
+  const el = document.createElement('div'); el.className = 'bub al';
   el.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
@@ -101,7 +103,7 @@ const queue = [];
 const queuedEl = $('queued');
 function renderQueued() {
   queuedEl.innerHTML = '';
-  for (const t of queue) { const c = document.createElement('div'); c.className = 'chip'; c.textContent = t; queuedEl.appendChild(c); }
+  for (const t of queue) { const c = document.createElement('div'); c.className = 'qc'; c.textContent = t; queuedEl.appendChild(c); }
 }
 function submitText(text) { if (busy) { queue.push(text); renderQueued(); return; } sendMessage(text); }
 
@@ -201,27 +203,31 @@ window.addEventListener('mouseup', () => {
 
 /* ── Registre des apps ───────────────────────────────────────────── */
 // Teinte (hue HSL) + glyphe par domaine ; défaut = hash du nom.
-const APP_META = {
-  todo:     { label: 'Todo',      glyph: '◈', hue: 8,   module: true },
-  maison:   { label: 'Maison',    glyph: '⌂', hue: 158 },
-  piscine:  { label: 'Piscine',   glyph: '≋', hue: 196 },
-  projets:  { label: 'Projets',   glyph: '◳', hue: 232 },
-  cadeaux:  { label: 'Cadeaux',   glyph: '❖', hue: 330 },
-  contacts: { label: 'Contacts',  glyph: '☏', hue: 268 },
-  cuisine:  { label: 'Cuisine',   glyph: '⌘', hue: 24 },
-  achats:   { label: 'Achats',    glyph: '⛬', hue: 46 },
-  admin:    { label: 'Admin',     glyph: '▤', hue: 210 },
-  atelier:  { label: 'L’Atelier', glyph: '⚒', hue: 130, module: true },
-  diy:      { label: 'L’Atelier', glyph: '⚒', hue: 130, module: true },
-  sujets:   { label: 'Sujets',    glyph: '❯', hue: 188 },
+const IC = {
+  todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l4 4 12-12"/></svg>',
+  shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>',
 };
-function hueFor(name) {
-  if (APP_META[name]?.hue != null) return APP_META[name].hue;
-  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360; return h;
-}
+const APP_META = {
+  todo:     { label: 'Todo',       ico: IC.todo, color: 'todo', module: true },
+  atelier:  { label: 'L’Atelier',  ico: IC.shop, color: 'shop', module: true },
+  diy:      { label: 'L’Atelier',  ico: IC.shop, color: 'shop', module: true },
+  maison:   { label: 'Maison',     ico: '🏡', color: 'maison' },
+  piscine:  { label: 'Piscine',    ico: '💧', color: 'maison' },
+  projets:  { label: 'Projets',    ico: '🗂️', color: 'proj' },
+  cadeaux:  { label: 'Cadeaux',    ico: '🎁', color: 'cadeaux' },
+  contacts: { label: 'Contacts',   ico: '👤', color: 'contacts' },
+  cuisine:  { label: 'Cuisine',    ico: '🍳', color: 'cuisine' },
+  achats:   { label: 'Achats',     ico: '🛍️', color: 'achats' },
+  admin:    { label: 'Admin',      ico: '🗄️', color: 'search' },
+  administratif: { label: 'Administratif', ico: '🗄️', color: 'search' },
+  sujets:   { label: 'Sujets',     ico: '❯', color: 'agenda' },
+};
+const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
 function metaFor(name) {
-  const m = APP_META[name] || {};
-  return { label: m.label || name.charAt(0).toUpperCase() + name.slice(1), glyph: m.glyph || '◆', hue: hueFor(name), module: !!m.module };
+  const m = APP_META[name];
+  if (m) return { label: m.label, ico: m.ico, color: m.color, module: !!m.module };
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % COLORS.length;
+  return { label: prettify(name), ico: '◆', color: COLORS[h], module: false };
 }
 
 /* ── Mémoire (arbo) ──────────────────────────────────────────────── */
@@ -279,19 +285,20 @@ function ficheCount(prefix) {
 /* ── Routeur (hash) + fil d'Ariane ───────────────────────────────── */
 function currentRoute() { return decodeURIComponent(location.hash.replace(/^#\/?/, '')); }
 $('home').addEventListener('click', () => { location.hash = '#/'; });
+$('home2') && $('home2').addEventListener('click', () => { location.hash = '#/'; });
 
+let CR = [];
 function crumbs(parts) {
-  const el = $('crumbs'); el.innerHTML = '';
-  parts.forEach((p, i) => {
-    if (i) { const s = document.createElement('span'); s.className = 'sep'; s.textContent = '›'; el.appendChild(s); }
-    const a = document.createElement('a');
-    a.textContent = p.label; a.href = p.hash || '#/';
-    if (i === parts.length - 1) a.className = 'here';
-    el.appendChild(a);
-  });
+  CR = parts;
+  $('crumbs').innerHTML = parts.map((p, i) => i === parts.length - 1
+    ? `<span class="c">${esc(p.label)}</span>`
+    : `<a class="cb" href="${p.hash}">${esc(p.label)}</a><span class="s">›</span>`).join('');
+  $('back').style.display = parts.length > 1 ? 'flex' : 'none';
+  const sc = document.querySelector('.scroll'); if (sc) sc.scrollTop = 0;
 }
+$('back').addEventListener('click', () => { if (CR.length > 1) location.hash = CR[CR.length - 2].hash; });
 
-const page = $('page');
+const page = $('view');
 function renderRoute() {
   const route = currentRoute();
   if (window.innerWidth < 900) document.body.classList.toggle('canvas-open', route !== '');
@@ -304,28 +311,28 @@ function renderRoute() {
   renderHome();
 }
 
+function tileHTML(id, route, st, foot) {
+  const m = metaFor(id);
+  return `<a class="tile" href="${route}" style="--tc:var(--${m.color})"><span class="ico">${m.ico}</span><div class="nm">${esc(m.label)}</div><div class="st">${esc(st || '')}</div><div class="foot">${foot || ''}</div></a>`;
+}
 function renderHome() {
   crumbs([{ label: 'Accueil', hash: '#/' }]);
-  page.innerHTML = '';
-  const h = document.createElement('div');
-  h.innerHTML = `<div class="hello">Bonsoir, Monsieur.<span class="sub">Que puis-je pour vous ?</span></div>`;
-  page.appendChild(h);
-  const grid = document.createElement('div');
-  grid.className = 'mosaic';
-  const tiles = [
-    { id: 'todo', route: '#/todo' },
-    { id: 'atelier', route: '#/atelier' },
-    ...domains().filter((d) => d !== 'atelier' && d !== 'diy').map((d) => ({ id: d, route: '#/dom/' + d })),
-  ];
-  for (const t of tiles) {
-    const m = metaFor(t.id);
-    const count = m.module ? '' : countIn(t.id === 'sujets' ? 'sujets/' : 'domaines/' + t.id + '/') + ' fiches';
-    const tile = document.createElement('a');
-    tile.className = 'tile'; tile.href = t.route; tile.style.setProperty('--hue', m.hue);
-    tile.innerHTML = `<div class="glyph">${m.glyph}</div><div class="t-name">${esc(m.label)}</div><div class="t-count">${esc(count)}</div>`;
-    grid.appendChild(tile);
-  }
-  page.appendChild(grid);
+  const doms = domains().filter((d) => d !== 'atelier' && d !== 'diy');
+  const total = memInfo ? memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path)).length : 0;
+  const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const tools = [tileHTML('todo', '#/todo', 'Vos tâches', ''), tileHTML('atelier', '#/atelier', 'Suivi menuiserie', '<span class="pc">workbooks</span>')];
+  const domTiles = doms.map((d) => {
+    const n = countIn(d === 'sujets' ? 'sujets/' : 'domaines/' + d + '/');
+    return tileHTML(d, '#/dom/' + d, n + ' fiche' + (n > 1 ? 's' : ''), '');
+  });
+  page.innerHTML = `<div class="wrap">
+    <h1 class="hi">Bonsoir, Monsieur.<span class="m"> Que puis-je pour vous ?</span></h1>
+    <div class="subhi">${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${total} fiches en mémoire.</div>
+    <button class="cmd" id="cmdk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="ph">Demander à Alfred…</span><kbd>⌘K</kbd></button>
+    <div class="rowlabel">Transverse</div><div class="mosaic">${tools.join('')}</div>
+    <div class="rowlabel">Domaines</div><div class="mosaic">${domTiles.join('')}</div>
+  </div>`;
+  const cmd = $('cmdk'); if (cmd) cmd.addEventListener('click', () => input.focus());
 }
 
 async function renderDomain(subpath) {
@@ -336,75 +343,60 @@ async function renderDomain(subpath) {
   let acc = '';
   segs.forEach((s, i) => { acc = i ? acc + '/' + s : s; cr.push({ label: i ? prettify(s) : m.label, hash: '#/dom/' + acc }); });
   crumbs(cr);
-  page.innerHTML = '';
   const prefix = memPrefix(subpath);
   const { folders, files } = childrenOf(prefix);
+  const title = segs.length > 1 ? prettify(segs.at(-1)) : m.label;
+  const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status' : 'type';
+  const facetVals = [...new Set(files.map((p) => (memIndex.get(p) || {})[facetKey]).filter(Boolean))].sort();
 
-  // Sous-domaines : cartes de regroupement (clic = on descend d'un cran).
+  let html = `<div class="wrap" style="--dc:var(--${m.color})"><div class="chead"><div class="aico" style="--dc:var(--${m.color})">${m.ico}</div><div><h1>${esc(title)}</h1><div class="lede">${folders.length ? 'Cartes de sous-domaine → fiches.' : 'Cartes → fiche.'}</div></div></div>`;
   if (folders.length) {
-    const title = document.createElement('div'); title.className = 'section-title'; title.textContent = 'Sous-domaines';
-    page.appendChild(title);
-    const grid = document.createElement('div'); grid.className = 'cards'; page.appendChild(grid);
+    html += `<div class="grouplabel">Sous-domaines</div><div class="cards">`;
     for (const f of folders) {
       const n = ficheCount(prefix + f + '/');
-      const card = document.createElement('a'); card.className = 'card'; card.href = '#/dom/' + subpath + '/' + f;
-      card.innerHTML = `<div class="c-name">${esc(prettify(f))}</div><div class="c-meta"><span class="c-tag">${n} fiche${n > 1 ? 's' : ''}</span></div>`;
-      grid.appendChild(card);
+      html += `<a class="card" href="#/dom/${esc(subpath)}/${esc(f)}"><div class="persontop"><span class="avatar">${esc(prettify(f).charAt(0))}</span><span class="ct">${esc(prettify(f))}</span></div><div class="cmeta">${n} fiche${n > 1 ? 's' : ''}</div></a>`;
     }
+    html += `</div>`;
   }
-
-  // Fiches de ce niveau : cartes pilotées par le frontmatter + facette.
   if (files.length) {
-    if (folders.length) { const t = document.createElement('div'); t.className = 'section-title'; t.textContent = 'Fiches'; page.appendChild(t); }
-    const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status' : 'type';
-    const facetVals = [...new Set(files.map((p) => (memIndex.get(p) || {})[facetKey]).filter(Boolean))].sort();
+    if (folders.length) html += `<div class="grouplabel">Fiches</div>`;
+    html += `<div class="toolbar"><label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="dq" placeholder="Rechercher…"></label>`;
+    if (facetVals.length > 1) html += `<div class="facets" id="facets"><button class="pill on" data-f="">Tous</button>${facetVals.map((v) => `<button class="pill" data-f="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
+    html += `</div><div class="cards" id="dcards"></div>`;
+  }
+  html += `</div>`;
+  page.innerHTML = html;
+  if (!folders.length && !files.length) { page.querySelector('.wrap').insertAdjacentHTML('beforeend', '<div class="empty">Rien ici pour l’instant.</div>'); return; }
+
+  if (files.length) {
     let activeFacet = null;
-    const search = document.createElement('div'); search.className = 'search'; search.innerHTML = '<span>🔍</span>';
-    const inp = document.createElement('input'); inp.placeholder = 'Filtrer…'; search.appendChild(inp); page.appendChild(search);
-    let facetRow = null;
-    const cards = document.createElement('div'); cards.className = 'cards';
+    const cardsEl = $('dcards'), dq = $('dq'), facets = $('facets');
     const draw = () => {
-      const q = inp.value.toLowerCase();
-      cards.innerHTML = '';
+      const q = (dq.value || '').toLowerCase();
       const shown = files.filter((p) => {
         const fm = memIndex.get(p) || {};
         if (activeFacet && fm[facetKey] !== activeFacet) return false;
         return (p + ' ' + (fm.title || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
       });
-      if (!shown.length) { cards.innerHTML = '<div class="placeholder">Aucune fiche.</div>'; return; }
-      for (const p of shown) {
+      cardsEl.innerHTML = shown.length ? shown.map((p) => {
         const fm = memIndex.get(p) || {};
         const name = fm.title || prettify(p.split('/').pop());
-        const meta = [];
-        if (fm.type) meta.push(fm.type);
-        if (fm.status) meta.push(fm.status);
-        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 2).forEach((t) => meta.push('#' + t));
-        const card = document.createElement('a'); card.className = 'card'; card.href = '#/mem/' + p;
-        card.innerHTML = `<div class="c-name">${esc(name)}</div>` + (meta.length ? `<div class="c-meta">${meta.map((x) => `<span class="c-tag">${esc(x)}</span>`).join('')}</div>` : '');
-        cards.appendChild(card);
-      }
+        const foot = [];
+        if (fm.status) foot.push(`<span class="stat ${sc(fm.status)}">${esc(fm.status)}</span>`);
+        if (fm.type) foot.push(`<span class="tag">${esc(fm.type)}</span>`);
+        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 2).forEach((t) => foot.push(`<span class="tag">#${esc(t)}</span>`));
+        return `<a class="card" href="#/mem/${esc(p)}"><div class="ct">${esc(name)}</div>${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
+      }).join('') : '<div class="empty">Aucune fiche.</div>';
     };
-    if (facetVals.length > 1) {
-      facetRow = document.createElement('div'); facetRow.style.cssText = 'display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 2px';
-      for (const v of facetVals) {
-        const b = document.createElement('button'); b.className = 'c-tag'; b.style.cssText = 'padding:4px 11px;border:1px solid var(--line);border-radius:20px;background:var(--surface);cursor:pointer';
-        b.textContent = v;
-        b.addEventListener('click', () => {
-          activeFacet = activeFacet === v ? null : v;
-          [...facetRow.children].forEach((c) => { c.style.borderColor = 'var(--line)'; c.style.color = 'var(--ink-soft)'; });
-          if (activeFacet === v) { b.style.borderColor = 'var(--accent)'; b.style.color = 'var(--accent)'; }
-          draw();
-        });
-        facetRow.appendChild(b);
-      }
-      page.appendChild(facetRow);
-    }
-    page.appendChild(cards);
-    inp.addEventListener('input', draw);
+    dq.addEventListener('input', draw);
+    if (facets) facets.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-f]'); if (!b) return;
+      activeFacet = b.dataset.f || null;
+      [...facets.children].forEach((c) => c.classList.remove('on')); b.classList.add('on');
+      draw();
+    });
     draw();
   }
-
-  if (!folders.length && !files.length) page.innerHTML = '<div class="placeholder">Rien ici pour l’instant.</div>';
 }
 
 async function renderFiche(path) {
@@ -415,41 +407,52 @@ async function renderFiche(path) {
   if (APP_META[dom] || parts[0] === 'domaines' || parts[0] === 'sujets') cr.push({ label: metaFor(dom).label, hash: '#/dom/' + dom });
   cr.push({ label: parts.at(-1).replace(MD_EXT, ''), hash: '#/mem/' + path });
   crumbs(cr);
-  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
   const baseDir = parts.slice(0, -1).join('/');
+  const wrap = document.createElement('div'); wrap.className = 'wrap';
   if (MD_EXT.test(path)) {
     let text;
     try { const r = await fetch('/api/memory/raw/' + path, { headers: headers(false) }); if (!r.ok) throw 0; text = await r.text(); }
-    catch { page.innerHTML = '<div class="placeholder">Fiche introuvable.</div>'; return; }
-    page.innerHTML = '';
-    const wrap = document.createElement('div'); wrap.className = 'fiche';
+    catch { page.innerHTML = '<div class="wrap"><div class="empty">Fiche introuvable.</div></div>'; return; }
     if (window.Alfred?.render) {
       const { html } = window.Alfred.render(text, { baseDir });
       const doc = document.createElement('div'); doc.className = 'alfred-doc'; doc.innerHTML = html; wrap.appendChild(doc);
     } else { wrap.appendChild(renderMd(text, baseDir)); }
-    page.appendChild(wrap);
   } else if (IMG_EXT.test(path)) {
-    page.innerHTML = '';
-    const img = document.createElement('img'); img.src = '/api/memory/raw/' + path; img.style.maxWidth = '100%'; img.style.borderRadius = '10px';
-    page.appendChild(img);
+    const img = document.createElement('img'); img.src = '/api/memory/raw/' + path; img.className = 'shot'; wrap.appendChild(img);
   } else {
-    const a = document.createElement('a'); a.href = '/api/memory/raw/' + path + '?download=1'; a.textContent = 'Télécharger ' + parts.at(-1);
-    page.innerHTML = ''; page.appendChild(a);
+    const a = document.createElement('a'); a.href = '/api/memory/raw/' + path + '?download=1'; a.textContent = '↓ Télécharger ' + parts.at(-1); a.className = 'tag'; wrap.appendChild(a);
   }
-  $('canvas').scrollTop = 0;
+  page.innerHTML = ''; page.appendChild(wrap);
 }
 
 /* ── App Todo (port du parseur de l'ancienne UI) ─────────────────── */
+function mdInline(text) {
+  const src = text.replace(/\[\[([^\]]+)\]\]/g, (_, t) => `[${t.trim()}](/mem/${t.trim()})`);
+  return DOMPurify.sanitize(marked.parseInline(src));
+}
+function taskHTML(it, today) {
+  let text = it.text;
+  const due = text.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})([^)]*)\)/);
+  text = text.replace(/—?\s*\(échéance:[^)]*\)/, '').replace(/\*\(ajouté[^)]*\)\*/, '').trim();
+  const clean = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\[|\]\]/g, '');
+  const chips = [];
+  if (due) {
+    const d = due[1], late = d < today;
+    const lbl = d === today ? "aujourd'hui" : d;
+    chips.push(`<span class="chip ${late ? 'late' : 'due'}">${late ? '⚠ ' : ''}${esc(lbl)}${esc((due[2] || '').replace(/^,\s*/, ' · '))}</span>`);
+  }
+  return `<div class="task${it.done ? ' done' : ''}"><button class="cbox${it.done ? ' on' : ''}" data-mark="${esc(clean)}">✓</button><div class="bd"><div class="tt">${mdInline(text)}</div>${chips.length ? `<div class="meta">${chips.join('')}</div>` : ''}</div></div>`;
+}
 async function renderTodo() {
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Todo', hash: '#/todo' }]);
-  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
   if (!memInfo) await loadTree();
   const todoPath = memInfo?.todo;
-  if (!todoPath) { page.innerHTML = '<div class="placeholder">Pas de fichier todo.</div>'; return; }
-  const baseDir = todoPath.split('/').slice(0, -1).join('/');
+  if (!todoPath) { page.innerHTML = '<div class="wrap"><div class="empty">Pas de fichier todo.</div></div>'; return; }
   let md;
   try { const r = await fetch('/api/memory/raw/' + todoPath, { headers: headers(false) }); md = await r.text(); }
-  catch { page.innerHTML = '<div class="placeholder">Todo indisponible.</div>'; return; }
+  catch { page.innerHTML = '<div class="wrap"><div class="empty">Todo indisponible.</div></div>'; return; }
   const sections = []; let cur = null, item = null;
   for (const line of md.split('\n')) {
     const h = line.match(/^##\s+(.*)/);
@@ -460,45 +463,24 @@ async function renderTodo() {
     if (item && /^\s+\S/.test(line) && !/^\s*[-*#>]/.test(line)) item.text += ' ' + line.trim(); else item = null;
   }
   const today = new Date().toISOString().slice(0, 10);
-  page.innerHTML = '';
+  let html = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--todo)">${IC.todo}</div><div><h1>Todo</h1><div class="lede">Vos tâches, par section — cocher demande à Alfred de la marquer faite.</div></div></div>`;
   for (const sec of sections) {
     const open = sec.items.filter((i) => !i.done).length;
-    const title = document.createElement('div'); title.className = 'section-title';
-    title.textContent = sec.title.replace(/\(.*\)/, '').trim() + (sec.items.length ? ' · ' + open : '');
-    page.appendChild(title);
-    if (!sec.items.length) { page.insertAdjacentHTML('beforeend', '<div class="placeholder">rien</div>'); continue; }
-    for (const it of sec.items) page.appendChild(renderTask(it, baseDir, today));
+    html += `<div class="grp"><h3>${esc(sec.title.replace(/\(.*\)/, '').trim())} <span class="c">${sec.items.length ? open : ''}</span></h3>`;
+    html += sec.items.length ? sec.items.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left;padding:4px 0">rien</div>';
+    html += `</div>`;
   }
-}
-function renderTask(it, baseDir, today) {
-  let text = it.text;
-  const due = text.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})([^)]*)\)/);
-  text = text.replace(/—?\s*\(échéance:[^)]*\)/, '').replace(/\*\(ajouté[^)]*\)\*/, '').trim();
-  const el = document.createElement('div'); el.className = 'card' + (it.done ? ' done' : ''); el.style.flexDirection = 'row'; el.style.alignItems = 'flex-start'; el.style.gap = '10px';
-  const box = document.createElement('button');
-  box.textContent = it.done ? '☑' : '☐'; box.style.cssText = 'border:none;background:none;font-size:17px;line-height:1.2;color:var(--ink-soft)';
-  if (!it.done) box.addEventListener('click', () => {
-    input.value = 'Marque cette tâche comme faite : « ' + text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\[|\]\]/g, '') + ' »';
+  page.innerHTML = html + '</div>';
+  page.querySelector('.wrap').addEventListener('click', (e) => {
+    const b = e.target.closest('.cbox[data-mark]'); if (!b || b.classList.contains('on')) return;
+    input.value = 'Marque cette tâche comme faite : « ' + b.dataset.mark + ' »';
     input.focus(); input.dispatchEvent(new Event('input'));
   });
-  el.appendChild(box);
-  const body = document.createElement('div'); body.style.flex = '1'; body.style.minWidth = '0';
-  body.appendChild(renderMd(text, baseDir));
-  if (due) {
-    const d = due[1];
-    const b = document.createElement('div'); b.className = 'c-meta';
-    const tag = document.createElement('span'); tag.className = 'c-tag';
-    tag.style.color = d < today ? 'var(--crit)' : d === today ? 'var(--warn)' : '';
-    tag.textContent = (d < today ? '⚠ ' : '') + (d === today ? "aujourd'hui" : d) + (due[2] || '').replace(/^,\s*/, ' · ');
-    b.appendChild(tag); body.appendChild(b);
-  }
-  el.appendChild(body);
-  return el;
 }
 
 /* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */
 let wb = null;       // {path, data, state, byEtq}
-let wbTab = 'suivi';
+let wbTab = 'debit';
 const wbDone = (etq) => !!(wb.state.fait || {})[etq];
 const pieceDims = (p) => `${p.longueur}×${p.largeur}×${p.ep}`;
 
@@ -516,26 +498,24 @@ document.body.appendChild(atelierFull);
 
 async function renderAtelierHub() {
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }]);
-  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
   let list;
   try { const r = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' }); list = (await r.json()).workbooks; }
-  catch { page.innerHTML = '<div class="placeholder">Atelier indisponible.</div>'; return; }
-  page.innerHTML = '';
-  const t = document.createElement('div'); t.className = 'section-title'; t.textContent = 'Suivi menuiserie'; page.appendChild(t);
-  if (!list.length) { page.insertAdjacentHTML('beforeend', '<div class="placeholder">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div>'); return; }
-  const grid = document.createElement('div'); grid.className = 'cards'; page.appendChild(grid);
+  catch { page.innerHTML = '<div class="wrap"><div class="empty">Atelier indisponible.</div></div>'; return; }
+  let html = `<div class="wrap" style="--dc:var(--shop)"><div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>L’Atelier</h1><div class="lede">Suivi menuiserie — vos plans de débit.</div></div></div>`;
+  if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div></div>'; return; }
+  html += '<div class="grouplabel">Workbooks</div><div class="cards">';
   for (const w of list) {
     const pct = w.pieces ? Math.round(100 * w.done / w.pieces) : 0;
-    const last = w.lastActivity ? new Date(w.lastActivity).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'jamais';
-    const card = document.createElement('a'); card.className = 'card wb-card'; card.href = '#/atelier/' + encodeURIComponent(w.path);
-    card.innerHTML = `<div class="c-name">${esc(w.titre)}</div><div class="c-meta"><span class="c-tag">${w.done}/${w.pieces} pièces</span><span>${esc(last)}</span></div><div class="progress"><div style="width:${pct}%"></div></div>`;
-    grid.appendChild(card);
+    const last = w.lastActivity ? new Date(w.lastActivity).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'jamais';
+    html += `<a class="card" href="#/atelier/${encodeURIComponent(w.path)}"><div class="ct">${esc(w.titre)}</div><div class="cmeta">${w.done}/${w.pieces} pièces · ${esc(last)}</div><div class="bar"><i style="width:${pct}%"></i></div></a>`;
   }
+  page.innerHTML = html + '</div></div>';
 }
 
 async function renderWorkbook(path) {
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: '…', hash: '#/atelier/' + encodeURIComponent(path) }]);
-  page.innerHTML = '<div class="placeholder">chargement…</div>';
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
   let data, state;
   try {
     const [rd, rs] = await Promise.all([
@@ -544,7 +524,7 @@ async function renderWorkbook(path) {
     ]);
     if (!rd.ok) throw new Error(rd.status);
     data = await rd.json(); state = await rs.json();
-  } catch (e) { page.innerHTML = '<div class="placeholder">Workbook illisible (' + esc(String(e)) + ').</div>'; return; }
+  } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
   wb = { path, data, state, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: data.titre || data.projet || 'Workbook', hash: '#/atelier/' + encodeURIComponent(path) }]);
   renderWb();
@@ -560,71 +540,63 @@ function renderWb() {
   const d = wb.data;
   const total = (d.pieces || []).length;
   const done = Object.keys(wb.state.fait || {}).filter((e) => wb.byEtq.has(e)).length;
-  page.innerHTML = '';
-  const head = document.createElement('div'); head.className = 'wb-head';
-  head.innerHTML = `<h2>${esc(d.titre || d.projet || '')}</h2><span class="sub">${done}/${total}</span><span class="spacer"></span>`;
-  const shopBtn = document.createElement('button'); shopBtn.className = 'btn-accent'; shopBtn.textContent = '▶ Mode atelier';
-  shopBtn.addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
-  head.appendChild(shopBtn); page.appendChild(head);
-  const prog = document.createElement('div'); prog.className = 'wb-prog'; prog.style.marginBottom = '16px';
-  prog.innerHTML = `<div style="width:${total ? Math.round(100 * done / total) : 0}%"></div>`; page.appendChild(prog);
-  const tabs = document.createElement('div'); tabs.className = 'wb-tabs';
-  for (const [id, label] of [['debit', 'Débit'], ['prepas', 'Prépas'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']]) {
-    const b = document.createElement('button'); b.textContent = label; b.classList.toggle('active', wbTab === id);
-    b.addEventListener('click', () => { wbTab = id; renderWb(); }); tabs.appendChild(b);
-  }
-  page.appendChild(tabs);
-  const body = document.createElement('div'); page.appendChild(body);
+  const pct = total ? Math.round(100 * done / total) : 0;
+  const tabs = [['debit', 'Débit'], ['prepas', 'Prépas'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']];
+  page.innerHTML = `<div class="wrap" style="--dc:var(--shop)">
+    <div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} débité</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
+    <div class="prog"><i style="width:${pct}%"></i></div>
+    <div class="wbtabs">${tabs.map(([id, l]) => `<button class="wbtab${wbTab === id ? ' on' : ''}" data-w="${id}">${l}</button>`).join('')}</div>
+    <div id="wbbody"></div></div>`;
+  const body = $('wbbody');
   if (wbTab === 'debit') renderDebit(body);
   else if (wbTab === 'prepas') renderPrepas(body);
   else if (wbTab === 'assemblage') renderAsm(body);
   else renderSuivi(body);
+  page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = t.dataset.w; renderWb(); }));
+  $('shopmode').addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
 }
 
-function pieceBlock(etq) {
-  const p = wb.byEtq.get(etq);
-  const b = document.createElement('button');
-  b.className = 'piece-block' + (wbDone(etq) ? ' done' : ''); b.dataset.etq = etq;
-  b.innerHTML = `${esc(etq)}<div class="dims">${p ? esc(pieceDims(p)) : ''}</div>`;
-  b.addEventListener('click', () => showPiece(etq));
-  return b;
+// Plan de débit SVG à l'échelle (blueprint) — pièces colorées selon l'état.
+function cutSVG(pan) {
+  const dm = String(pan.dims || '').match(/(\d+)\s*[×x]\s*(\d+)/);
+  const W = dm ? +dm[1] : 2500, H = dm ? +dm[2] : 1250, trim = pan.trim || 15;
+  const S = 0.34, pad = 40, top = 46, gap = 20;
+  const SW = W * S, SH = H * S, TR = trim * S, vw = SW + pad * 2, vh = SH + top + pad;
+  let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><rect x="0" y="0" width="${SW}" height="${TR}" fill="var(--shop)" opacity=".16"/><rect x="0" y="0" width="${TR}" height="${SH}" fill="var(--shop)" opacity=".16"/>`;
+  let x = TR + gap * S;
+  for (const c of pan.colonnes || []) {
+    const cw = (c.largeur || 0) * S;
+    g += `<text x="${x + cw / 2}" y="-10" text-anchor="middle" fill="var(--shop)" font-family="var(--mono)" font-size="14" font-weight="700">${esc(String(c.largeur || ''))}</text>`;
+    let y = TR + gap * S;
+    for (const etq of c.pieces || []) {
+      const p = wb.byEtq.get(etq) || {}; const l = p.longueur || 0; const ph = l * S; const d = wbDone(etq);
+      const col = d ? 'var(--good)' : 'var(--shop)';
+      g += `<g class="cut" data-et="${esc(etq)}"><rect class="pcc" x="${x}" y="${y}" width="${cw}" height="${ph}" rx="4" fill="${col}" fill-opacity="${d ? .26 : .28}" stroke="${col}" stroke-width="2"/><text x="${x + cw / 2}" y="${y + ph / 2 - 1}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="700">${esc(etq.split('-').slice(-2).join('-'))}</text><text x="${x + cw / 2}" y="${y + ph / 2 + 14}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="10">${esc(String(c.largeur || ''))}×${l}</text></g>`;
+      y += ph + gap * S;
+    }
+    x += cw + gap * S;
+  }
+  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">${W} mm</text>${g}</g></svg>`;
 }
 function renderDebit(body) {
-  for (const pan of wb.data.calepinage || []) {
-    const el = document.createElement('div'); el.className = 'panel';
-    el.innerHTML = `<h4>${esc(pan.panneau)} — ${esc(pan.dims || '')}</h4>`;
-    const cols = document.createElement('div'); cols.className = 'cols';
-    for (const col of pan.colonnes || []) {
-      const c = document.createElement('div'); c.className = 'col';
-      c.innerHTML = `<h5>${esc(String(col.largeur))} mm · ${esc(col.reglageFS || '')}</h5>`;
-      for (const etq of col.pieces || []) c.appendChild(pieceBlock(etq));
-      cols.appendChild(c);
-    }
-    el.appendChild(cols); body.appendChild(el);
-  }
-  if (!(wb.data.calepinage || []).length) body.innerHTML = '<div class="placeholder">pas de calepinage</div>';
+  const pans = wb.data.calepinage || [];
+  if (!pans.length) { body.innerHTML = '<div class="empty">Pas de calepinage.</div>'; return; }
+  body.innerHTML = pans.map((pan) => `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>PANNEAU ${esc(pan.panneau || '')}</b><span>${esc(pan.dims || '')}</span></div><div class="cutwrap">${cutSVG(pan)}</div></div></div>`).join('')
+    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.5"></i>à débiter</span><span><i class="sw" style="background:var(--good);opacity:.5"></i>débité</span></div><div class="detail" id="det"></div>`;
+  body.querySelectorAll('.cut').forEach((g) => g.addEventListener('click', () => {
+    const etq = g.dataset.et; const p = wb.byEtq.get(etq) || {};
+    const det = $('det'); det.className = 'detail on';
+    det.innerHTML = `<h4>${esc(etq)}</h4><div class="dk"><span><b>Cotes</b> ${esc(pieceDims(p))} mm</span><span><b>Réglage</b> ${esc(p.reglageFS || '—')}</span></div>`;
+  }));
 }
 function renderPrepas(body) {
-  let any = false;
-  for (const p of wb.data.pieces || []) {
-    if (!(p.preparations || []).length) continue;
-    any = true;
-    const el = document.createElement('div'); el.className = 'prep-card';
-    el.innerHTML = `<h4>${esc(p.etiquette)} <span style="color:var(--ink-faint)">· ${esc(pieceDims(p))}</span></h4>
-      <ul>${p.preparations.map((pr) => `<li><b>${esc(pr.type)}</b> — ${esc(pr.cotes || '')} ${pr.pos ? '· ' + esc(pr.pos) : ''}</li>`).join('')}</ul>`;
-    el.querySelector('h4').style.cursor = 'pointer';
-    el.querySelector('h4').addEventListener('click', () => showPiece(p.etiquette));
-    body.appendChild(el);
-  }
-  if (!any) body.innerHTML = '<div class="placeholder">aucune préparation</div>';
+  const rows = (wb.data.pieces || []).filter((p) => (p.preparations || []).length);
+  body.innerHTML = rows.length ? rows.map((p) => `<div class="prep-card"><h4 data-piece="${esc(p.etiquette)}">${esc(p.etiquette)} · ${esc(pieceDims(p))}</h4><ul>${p.preparations.map((pr) => `<li><b>${esc(pr.type)}</b> — ${esc(pr.cotes || '')} ${pr.pos ? '· ' + esc(pr.pos) : ''}</li>`).join('')}</ul></div>`).join('') : '<div class="empty">Aucune préparation.</div>';
+  body.querySelectorAll('[data-piece]').forEach((h) => h.addEventListener('click', () => showPiece(h.dataset.piece)));
 }
 function renderAsm(body) {
-  for (const m of wb.data.assemblage || []) {
-    const el = document.createElement('div'); el.className = 'asm-card'; el.id = 'asm-' + m.module;
-    el.innerHTML = `<h4>${esc(m.titre || m.module)}</h4><ol>${(m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
-    body.appendChild(el);
-  }
-  if (!(wb.data.assemblage || []).length) body.innerHTML = '<div class="placeholder">pas de séquence d’assemblage</div>';
+  const mods = wb.data.assemblage || [];
+  body.innerHTML = mods.length ? mods.map((m) => `<div class="asm-card" id="asm-${esc(m.module)}"><h4 style="cursor:default">${esc(m.titre || m.module)}</h4><ol>${(m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`).join('') : '<div class="empty">Pas de séquence d’assemblage.</div>';
 }
 function suiviGroups() {
   const groups = new Map();
@@ -632,43 +604,34 @@ function suiviGroups() {
   return groups;
 }
 function renderSuivi(body) {
+  let html = '';
   for (const [reg, pieces] of suiviGroups()) {
-    const g = document.createElement('div'); g.className = 'reg-group';
     const open = pieces.filter((p) => !wbDone(p.etiquette)).length;
-    g.innerHTML = `<h4>${esc(reg)} <span class="count">${open ? open + ' restantes' : '✓'}</span></h4>`;
+    html += `<div class="sgrp"><div class="sh">${esc(reg)} · ${open ? open + ' restantes' : '✓ terminé'}</div>`;
     for (const p of pieces) {
-      const row = document.createElement('div'); row.className = 'tick-row' + (wbDone(p.etiquette) ? ' done' : '');
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = wbDone(p.etiquette);
-      cb.addEventListener('change', () => tick(p.etiquette, cb.checked));
-      const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = p.etiquette;
-      lbl.addEventListener('click', () => showPiece(p.etiquette));
-      const dims = document.createElement('span'); dims.className = 'dims'; dims.textContent = pieceDims(p) + (p.panneau ? ' · ' + p.panneau : '');
-      row.append(cb, lbl, dims); g.appendChild(row);
+      html += `<div class="srow${wbDone(p.etiquette) ? ' done' : ''}"><button class="cbox" data-tick="${esc(p.etiquette)}">${wbDone(p.etiquette) ? '✓' : ''}</button><span class="lbl" data-piece="${esc(p.etiquette)}">${esc(p.etiquette)}</span><span class="dim">${esc(pieceDims(p))}${p.panneau ? ' · ' + esc(p.panneau) : ''}</span></div>`;
     }
-    body.appendChild(g);
+    html += '</div>';
   }
+  body.innerHTML = html || '<div class="empty">Aucune pièce.</div>';
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
+  body.querySelectorAll('.srow [data-piece]').forEach((s) => s.addEventListener('click', () => showPiece(s.dataset.piece)));
 }
 function showPiece(etq) {
   const p = wb.byEtq.get(etq); if (!p) return;
   const body = pieceModal.querySelector('#piece-body');
   body.innerHTML = `<h2>${esc(etq)}</h2>
-    <div class="row"><b>Dimensions</b><span>${esc(pieceDims(p))} mm — ${esc(p.reglageFS || '')}</span></div>
-    <div class="row"><b>Débit</b><span>panneau ${esc(p.panneau || '?')}, colonne ${esc(String(p.colonne ?? '?'))}</span></div>
-    ${(p.preparations || []).length ? `<div class="row"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
-    ${p.placeAssemblage ? `<div class="row"><b>Assemblage</b><span>${esc(p.placeAssemblage)}</span></div>` : ''}`;
-  const actions = document.createElement('div'); actions.className = 'actions'; actions.style.marginTop = '16px';
-  const goDebit = document.createElement('button'); goDebit.textContent = 'Voir au débit';
-  goDebit.addEventListener('click', () => { pieceModal.hidden = true; wbTab = 'debit'; renderWb(); flashPiece(etq); });
-  const goAsm = document.createElement('button'); goAsm.textContent = 'Voir à l’assemblage';
-  goAsm.addEventListener('click', () => { pieceModal.hidden = true; wbTab = 'assemblage'; renderWb(); page.querySelector('#asm-' + p.module)?.scrollIntoView({ behavior: 'smooth' }); });
+    <div class="prow"><b>Dimensions</b><span>${esc(pieceDims(p))} mm — ${esc(p.reglageFS || '')}</span></div>
+    <div class="prow"><b>Débit</b><span>panneau ${esc(p.panneau || '?')}, colonne ${esc(String(p.colonne ?? '?'))}</span></div>
+    ${(p.preparations || []).length ? `<div class="prow"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
+    ${p.placeAssemblage ? `<div class="prow"><b>Assemblage</b><span>${esc(p.placeAssemblage)}</span></div>` : ''}`;
+  const actions = document.createElement('div'); actions.className = 'actions';
   const tickBtn = document.createElement('button'); tickBtn.textContent = wbDone(etq) ? 'Décocher' : 'Marquer faite ✓';
   tickBtn.addEventListener('click', () => { pieceModal.hidden = true; tick(etq, !wbDone(etq)); });
-  actions.append(goDebit, goAsm, tickBtn); body.appendChild(actions);
+  const close = document.createElement('button'); close.textContent = 'Fermer';
+  close.addEventListener('click', () => { pieceModal.hidden = true; });
+  actions.append(tickBtn, close); body.appendChild(actions);
   pieceModal.hidden = false;
-}
-function flashPiece(etq) {
-  const el = page.querySelector(`.piece-block[data-etq="${CSS.escape(etq)}"]`);
-  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1700); }
 }
 function renderShop() {
   const bodyEl = atelierFull.querySelector('#atelier-body');
@@ -694,7 +657,7 @@ $('tunnel-refresh').addEventListener('click', refreshTunnel);
 tunnelModal.addEventListener('click', (e) => { if (e.target === tunnelModal) tunnelModal.hidden = true; });
 function fmtAge(s) { if (s < 90) return s + ' s'; if (s < 5400) return Math.round(s / 60) + ' min'; return Math.round(s / 3600) + ' h'; }
 async function refreshTunnel() {
-  tunnelBody.innerHTML = '<div class="placeholder">chargement…</div>';
+  tunnelBody.innerHTML = '<div class="row">chargement…</div>';
   let t;
   try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (!r.ok) throw new Error(r.status); t = await r.json(); }
   catch (e) { tunnelBody.innerHTML = '<div class="row">État indisponible (' + esc(String(e)) + ').</div>'; return; }

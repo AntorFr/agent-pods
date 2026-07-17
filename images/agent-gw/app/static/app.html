@@ -5,50 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Alfred</title>
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="theme-color" content="#0B0E14">
+  <meta name="theme-color" content="#0B0D12">
   <link rel="stylesheet" href="/static/engine.css">
   <link rel="stylesheet" href="/static/launcher.css">
 </head>
 <body>
   <div id="shell">
-    <section id="rail">
-      <header id="rail-head">
-        <button class="blason" id="home" title="Accueil">A</button>
-        <span class="name">Alfred</span>
+    <aside class="chat">
+      <header class="brand">
+        <button class="crestbtn" id="home" title="Accueil" type="button"><span class="crest"><svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 53 L27 39 v27 z M50 53 L73 39 v27 z"/><circle cx="50" cy="53" r="7"/></svg></span></button>
+        <button class="namebtn" id="home2" type="button"><b>Alfred</b><span class="tag" style="display:block">à votre service</span></button>
         <span class="spacer"></span>
         <select id="model" title="Modèle"></select>
         <span id="rail-status" title="État"></span>
-        <button class="icon-btn" id="vsc" title="Tunnel VS Code">⧉</button>
-        <button class="icon-btn" id="reset" title="Nouvelle session">↺</button>
+        <button class="ib" id="vsc" title="Tunnel VS Code" type="button">⧉</button>
+        <button class="ib" id="reset" title="Nouvelle session" type="button">↺</button>
       </header>
-      <main id="chat"></main>
+      <div class="stream" id="chat"></div>
       <div id="queued"></div>
-      <form id="composer">
-        <button class="icon-btn" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
-        <textarea id="input" rows="1" placeholder="Écrire à Alfred…" autocomplete="off"></textarea>
-        <button id="send" type="submit" title="Envoyer">↑</button>
+      <form class="compose" id="composer">
+        <button class="shield" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
+        <textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea>
+        <button class="snd" id="send" type="submit" title="Envoyer">↑</button>
       </form>
-    </section>
+    </aside>
 
     <div id="gutter" title="Glisser pour redimensionner"></div>
 
-    <section id="canvas">
-      <div id="topbar">
-        <nav id="crumbs"></nav>
-        <span class="spacer"></span>
-        <button class="icon-btn" id="theme" title="Thème clair/sombre">◐</button>
+    <main class="main">
+      <div class="top">
+        <button class="back" id="back" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <nav class="crumbline" id="crumbs"></nav>
+        <button class="ib" id="theme" title="Thème clair/sombre" type="button">◐</button>
       </div>
-      <div id="page"></div>
-    </section>
+      <div class="scroll"><div class="view" id="view"></div></div>
+    </main>
   </div>
 
   <div class="modal" id="tunnel-modal" hidden>
     <div class="card">
       <h2>Tunnel VS Code</h2>
-      <div id="tunnel-body"><div class="placeholder">chargement…</div></div>
+      <div id="tunnel-body"><div class="row">chargement…</div></div>
       <div class="actions">
-        <button id="tunnel-refresh">⟳ Rafraîchir</button>
-        <button id="tunnel-close">Fermer</button>
+        <button id="tunnel-refresh" type="button">⟳ Rafraîchir</button>
+        <button id="tunnel-close" type="button">Fermer</button>
       </div>
     </div>
   </div>
