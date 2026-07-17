@@ -7,7 +7,15 @@ import './launcher.css';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Statut de frontmatter -> classe de pastille (.stat). Tolérant, défaut = accent.
-const sc = (s) => ({ 'en cours': 'encours', 'en-cours': 'encours', 'encours': 'encours', 'bloqué': 'bloque', 'bloque': 'bloque', 'clos': 'clos', 'fait': 'clos', 'terminé': 'clos', 'idée': 'idee', 'idee': 'idee', 'acheté': 'achete', 'achete': 'achete', 'offert': 'offert', 'à acheter': 'aacheter', 'a acheter': 'aacheter', 'veille': 'veille' }[String(s || '').toLowerCase()] || 'encours');
+const sc = (s) => ({
+  'en cours': 'encours', 'en-cours': 'encours', 'encours': 'encours',
+  'bloqué': 'bloque', 'bloque': 'bloque', 'en attente': 'bloque',
+  'clos': 'clos', 'fait': 'clos', 'terminé': 'clos', 'choix fait': 'clos', 'décidé': 'clos',
+  'idée': 'idee', 'idee': 'idee', 'en réflexion': 'idee', 'réflexion': 'idee',
+  'acheté': 'achete', 'achete': 'achete', 'offert': 'offert',
+  'à acheter': 'aacheter', 'a acheter': 'aacheter',
+  'veille': 'veille', 'référence retenue': 'veille', 'reference retenue': 'veille',
+}[String(s || '').toLowerCase().trim()] || 'encours');
 
 /* ── Auth ────────────────────────────────────────────────────────── */
 let token = localStorage.getItem('gw_token') || '';
@@ -75,6 +83,13 @@ document.addEventListener('click', (e) => {
   if (t && !/\.[a-z0-9]+$/i.test(t)) t += '.md';
   location.hash = '#/mem/' + t;
 });
+// Façade vidéo YouTube (moteur, blocks.js) : clic/Entrée charge l'iframe — jamais avant.
+function playEmbed(el) {
+  const id = el.dataset.yt; if (!id) return;
+  el.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1" title="YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+}
+document.addEventListener('click', (e) => { const el = e.target.closest('.ytembed[data-yt]'); if (el) playEmbed(el); });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Enter' && e.key !== ' ') return; const el = e.target.closest?.('.ytembed[data-yt]'); if (el) { e.preventDefault(); playEmbed(el); } });
 
 /* ── Chat ────────────────────────────────────────────────────────── */
 const chat = $('chat'), input = $('input'), status = $('rail-status'), modelSel = $('model');
@@ -111,7 +126,7 @@ async function sendMessage(text) {
   busy = true;
   add('user', text);
   const pending = addTyping();
-  status.classList.add('busy');
+  status.classList.add('busy'); status.title = 'Alfred travaille…';
   try {
     let res;
     const deadline = Date.now() + 180000;
@@ -139,12 +154,12 @@ async function sendMessage(text) {
         else if (ev === 'error') add('error', data.message);
       }
     }
-    if (currentRoute().startsWith('dom/') || currentRoute() === '') { memIndex = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
+    if (currentRoute().startsWith('dom/') || currentRoute() === '') { memIndex = null; wbCache = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
   } catch (e) {
     add('error', String(e));
   } finally {
     pending.remove();
-    status.classList.remove('busy');
+    status.classList.remove('busy'); status.title = 'Alfred est au repos';
     busy = false;
     syncConfirm();
     if (queue.length) { const next = queue.shift(); renderQueued(); sendMessage(next); }
@@ -242,7 +257,46 @@ async function loadIndex() {
   memIndex = new Map();
   try { const r = await fetch('/api/memory/index', { headers: headers(false) }); if (r.ok) { const { items } = await r.json(); for (const it of items) memIndex.set(it.path, it.fm || {}); } } catch {}
 }
+let wbCache = null;
+async function loadWorkbooks() {
+  if (wbCache) return wbCache;
+  try { const r = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' }); wbCache = (await r.json()).workbooks || []; } catch { wbCache = []; }
+  return wbCache;
+}
 const prettify = (s) => { s = s.replace(MD_EXT, '').replace(/-/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
+// Un wikilink SANS alias sort du moteur avec son chemin brut pour libellé — on le
+// remplace par le TITRE de la cible (frontmatter), sinon son nom de fichier joliment.
+function labelMemLinks(root) {
+  if (!memIndex) return;
+  root.querySelectorAll('a[href^="/mem/"]').forEach((a) => {
+    const t = decodeURIComponent(a.getAttribute('href').slice(5));
+    if (a.textContent.trim() !== t) return; // un alias explicite : on ne touche pas
+    let full = /\.[a-z0-9]+$/i.test(t) ? t : t + '.md';
+    let fm = memIndex.get(full);
+    if (!fm && memInfo) {
+      const base = ('/' + full.split('/').pop()).toLowerCase();
+      const e = memInfo.entries.find((x) => !x.dir && ('/' + x.path.toLowerCase()).endsWith(base));
+      if (e) { full = e.path; fm = memIndex.get(e.path); }
+    }
+    a.textContent = (fm && fm.titre) || prettify(full.split('/').pop());
+  });
+}
+async function todoStats() {
+  try {
+    const r = await fetch('/api/memory/raw/' + (memInfo?.todo || 'todo/taches.md'), { headers: headers(false) });
+    if (!r.ok) return null;
+    const md = await r.text();
+    const today = new Date().toISOString().slice(0, 10);
+    let total = 0, late = 0, active = false;
+    for (const line of md.split('\n')) {
+      if (/^##\s+Fait/i.test(line)) { active = false; continue; }
+      if (/^##\s/.test(line)) { active = true; continue; }
+      const t = active && line.match(/^- \[ \]\s+(.*)/);
+      if (t) { total++; const d = t[1].match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})/); if (d && d[1] < today) late++; }
+    }
+    return { total, late };
+  } catch { return null; }
+}
 // Sous-domaines de 1er niveau sous domaines/ + todo + sujets.
 function domains() {
   if (!memInfo) return [];
@@ -274,7 +328,7 @@ function childrenOf(prefix) {
     const rest = e.path.slice(prefix.length);
     if (!rest) continue;
     const slash = rest.indexOf('/');
-    if (slash >= 0) folders.add(rest.slice(0, slash));
+    if (slash >= 0) { const f = rest.slice(0, slash); if (f !== 'assets') folders.add(f); }
     else if (!e.dir && MD_EXT.test(rest) && !/^INDEX\.md$/i.test(rest)) files.push(e.path);
   }
   return { folders: [...folders].sort((a, b) => a.localeCompare(b, 'fr')), files: files.sort() };
@@ -321,41 +375,145 @@ function renderHome() {
   const doms = domains().filter((d) => d !== 'atelier' && d !== 'diy');
   const total = memInfo ? memInfo.entries.filter((e) => !e.dir && isFiche(e.path)).length : 0;
   const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
-  const tools = [tileHTML('todo', '#/todo', 'Vos tâches', ''), tileHTML('atelier', '#/atelier', 'Suivi menuiserie', '<span class="pc">workbooks</span>')];
+  const nAtelier = countIn('domaines/diy/');
+  const pc = (n, w = 'fiche') => `<span class="pc">${n} ${w}${n > 1 ? 's' : ''}</span>`;
+  const nProjets = countIn('domaines/diy/projets/');
+  const tools = [
+    tileHTML('todo', '#/todo', 'Vos tâches', ''),
+    tileHTML('projets', '#/dom/diy/projets', 'Vos chantiers', pc(nProjets, 'projet')),
+    tileHTML('atelier', '#/dom/diy', 'Machines · savoir-faire · outils', pc(nAtelier)),
+  ];
   const domTiles = doms.map((d) => {
     const n = countIn(d === 'sujets' ? 'sujets/' : 'domaines/' + d + '/');
-    return tileHTML(d, '#/dom/' + d, n + ' fiche' + (n > 1 ? 's' : ''), '');
+    return tileHTML(d, '#/dom/' + d, '', pc(n));
   });
+  const hour = new Date().getHours();
+  const salut = hour < 18 ? 'Bonjour' : 'Bonsoir';
   page.innerHTML = `<div class="wrap">
-    <h1 class="hi">Bonsoir, Monsieur.<span class="m"> Que puis-je pour vous ?</span></h1>
+    <h1 class="hi">${salut}, Monsieur.<span class="m"> Que puis-je pour vous ?</span></h1>
     <div class="subhi">${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${total} fiches en mémoire.</div>
     <button class="cmd" id="cmdk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="ph">Demander à Alfred…</span><kbd>⌘K</kbd></button>
+    <div id="brief-slot"></div>
     <div class="rowlabel">Transverse</div><div class="mosaic">${tools.join('')}</div>
     <div class="rowlabel">Domaines</div><div class="mosaic">${domTiles.join('')}</div>
   </div>`;
   const cmd = $('cmdk'); if (cmd) cmd.addEventListener('click', () => input.focus());
+  todoStats().then((st) => {
+    if (!st) return;
+    const foot = page.querySelector('.tile[href="#/todo"] .foot');
+    if (foot) foot.innerHTML = `<span class="pc">${st.total} à faire</span>${st.late ? `<span class="pc hot">${st.late} en retard</span>` : ''}`;
+    const sub = page.querySelector('.subhi');
+    if (sub) sub.textContent = `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${st.total} tâche${st.total > 1 ? 's' : ''} en cours${st.late ? `, dont ${st.late} en retard` : ''}.`;
+  });
+  renderBrief();
 }
 
-async function renderDomain(subpath) {
+/* « À la une » — brief curé par Alfred (memory/home/brief.json), régime matérialisé :
+   le front lit l'artefact tel quel, zéro LLM au rendu. Absent → section masquée. */
+const BRIEF_COLOR = { workbook: '--shop', fiche: '--maison', domaine: '--proj', todo: '--todo' };
+function briefRoute(cible) {
+  if (!cible) return null;
+  if (cible.type === 'todo') return '#/todo';
+  if (cible.type === 'fiche' && cible.path) return '#/mem/' + cible.path;
+  if (cible.type === 'domaine' && cible.path) return '#/dom/' + cible.path;
+  if (cible.type === 'workbook' && cible.path) return '#/atelier/' + encodeURIComponent(cible.path);
+  return null;
+}
+async function renderBrief() {
+  const slot = $('brief-slot'); if (!slot) return;
+  let brief;
+  try { const r = await fetch('/api/memory/raw/home/brief.json', { headers: headers(false), cache: 'no-store' }); if (!r.ok) return; brief = await r.json(); } catch { return; }
+  const items = (brief.items || []).slice(0, 4);
+  if (!items.length) return;
+  let age = '';
+  if (brief.generatedAt) {
+    const h = Math.round((Date.now() - new Date(brief.generatedAt).getTime()) / 3600000);
+    age = h < 1 ? 'à l’instant' : h < 24 ? `il y a ${h} h` : `il y a ${Math.round(h / 24)} j`;
+  }
+  slot.innerHTML = `<div class="rowlabel">À la une <span class="by">— choisi par Alfred${age ? ' · ' + age : ''}</span><button class="rf" type="button" title="Demander à Alfred de rafraîchir">↺</button></div>
+    <div class="brief">${items.map((it, i) => {
+      const route = briefRoute(it.cible);
+      const u = BRIEF_COLOR[it.cible?.type] || '--accent';
+      return `<${route ? `a href="${esc(route)}"` : 'span'} class="bitem" style="--u:var(${u})" title="${esc(it.raison || '')}"><span class="bi">${esc(it.ico || '•')}</span><span class="bt">${esc(it.titre || '')}</span></${route ? 'a' : 'span'}>`;
+    }).join('')}</div>`;
+  slot.querySelector('.rf').addEventListener('click', () => submitText('Rafraîchis ma une'));
+}
+
+// Collections « groupées » : même dossier, mais on entre par une facette du frontmatter
+// avant la liste (ex. Projets par catégorie majeure) plutôt que par des sous-dossiers.
+const GROUPED = {
+  'diy/projets': { key: 'cat', label: 'catégorie', labels: { menuiserie: 'Menuiserie', bricolage: 'Bricolage', electronique: 'Électronique', dev: 'Développement' } },
+};
+
+async function renderDomain(rawSubpath) {
   await loadIndex();
+  const [subpath, qs] = rawSubpath.split('?');
+  const groupSel = new URLSearchParams(qs || '').get('g');
   const segs = subpath.split('/');
   const m = metaFor(segs[0]);
   const cr = [{ label: 'Accueil', hash: '#/' }];
   let acc = '';
   segs.forEach((s, i) => { acc = i ? acc + '/' + s : s; cr.push({ label: i ? prettify(s) : m.label, hash: '#/dom/' + acc }); });
-  crumbs(cr);
+  const grouping = GROUPED[subpath];
+  if (grouping && groupSel) cr.push({ label: grouping.labels[groupSel] || prettify(groupSel), hash: `#/dom/${subpath}?g=${groupSel}` });
   const prefix = memPrefix(subpath);
-  const { folders, files } = childrenOf(prefix);
-  const title = segs.length > 1 ? prettify(segs.at(-1)) : m.label;
-  const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status' : 'type';
+  // Le dossier est un ESPACE (fiche-index homonyme, >1 page) → on entre directement
+  // dans sa vue d'ensemble, pas dans une mosaïque de cartes.
+  const spaceIdx = prefix + segs.at(-1) + '.md';
+  if (memIndex.has(spaceIdx) && ficheCount(prefix) > 1) {
+    location.replace('#/mem/' + spaceIdx);
+    return;
+  }
+  crumbs(cr);
+  let { folders, files } = childrenOf(prefix);
+  if (grouping) {
+    // Un projet peut être un ESPACE (dossier + fiche-index homonyme) : il est représenté
+    // par sa fiche-index dans le regroupement, au même titre qu'une fiche plate.
+    for (const f of folders) {
+      const idx = prefix + f + '/' + f + '.md';
+      if (memIndex.has(idx)) files.push(idx);
+    }
+    folders = []; // le regroupement vient du frontmatter, pas des dossiers
+    if (!groupSel) {
+      const counts = new Map();
+      for (const p of files) { const v = (memIndex.get(p) || {})[grouping.key]; if (v) counts.set(v, (counts.get(v) || 0) + 1); }
+      page.innerHTML = `<div class="wrap" style="--dc:var(--${m.color})"><div class="chead"><div class="aico" style="--dc:var(--${m.color})">${m.ico}</div><div><h1>${esc(prettify(segs.at(-1)))}</h1><div class="lede">Par ${grouping.label} — entrez dans une ${grouping.label}.</div></div></div>
+        <div class="grouplabel">Catégories</div><div class="cards">${[...counts.entries()].map(([v, n]) => `<a class="card" href="#/dom/${esc(subpath)}?g=${esc(v)}"><div class="persontop"><span class="avatar">${esc((grouping.labels[v] || v).charAt(0))}</span><span class="ct">${esc(grouping.labels[v] || v)}</span></div><div class="cmeta">${n} projet${n > 1 ? 's' : ''}</div></a>`).join('')}</div></div>`;
+      return;
+    }
+    files = files.filter((p) => (memIndex.get(p) || {})[grouping.key] === groupSel);
+  }
+  const title = grouping && groupSel ? (grouping.labels[groupSel] || prettify(groupSel)) : (segs.length > 1 ? prettify(segs.at(-1)) : m.label);
+  // Facette : statut (cycle de vie) sinon rôle (contacts) sinon type.
+  const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status'
+    : files.some((p) => (memIndex.get(p) || {}).role) ? 'role' : 'type';
   const facetVals = [...new Set(files.map((p) => (memIndex.get(p) || {})[facetKey]).filter(Boolean))].sort();
 
   let html = `<div class="wrap" style="--dc:var(--${m.color})"><div class="chead"><div class="aico" style="--dc:var(--${m.color})">${m.ico}</div><div><h1>${esc(title)}</h1><div class="lede">${folders.length ? 'Cartes de sous-domaine → fiches.' : 'Cartes → fiche.'}</div></div></div>`;
+  // L'Atelier (racine diy) : les OUTILS (workbooks de suivi) passent avant la connaissance.
+  if (subpath === 'diy') {
+    try {
+      const wbs = await loadWorkbooks();
+      if (wbs.length) {
+        html += `<div class="grouplabel">Outils <span class="hint">— suivi menuiserie</span></div><div class="cards">`;
+        for (const w of wbs) {
+          const pct = w.pieces ? Math.round(100 * w.done / w.pieces) : 0;
+          html += `<a class="card" href="#/atelier/${encodeURIComponent(w.path)}"><div class="ct">📐 ${esc(w.titre)}</div><div class="cmeta">${w.done}/${w.pieces} pièces débitées</div><div class="bar"><i style="width:${pct}%"></i></div></a>`;
+        }
+        html += `</div>`;
+      }
+    } catch {}
+  }
   if (folders.length) {
     html += `<div class="grouplabel">Sous-domaines</div><div class="cards">`;
     for (const f of folders) {
       const n = ficheCount(prefix + f + '/');
-      html += `<a class="card" href="#/dom/${esc(subpath)}/${esc(f)}"><div class="persontop"><span class="avatar">${esc(prettify(f).charAt(0))}</span><span class="ct">${esc(prettify(f))}</span></div><div class="cmeta">${n} fiche${n > 1 ? 's' : ''}</div></a>`;
+      // Un dossier-ESPACE (fiche-index homonyme) mène droit à sa vue d'ensemble.
+      const idx = prefix + f + '/' + f + '.md';
+      const isSpace = memIndex.has(idx) && n > 1;
+      const href = isSpace ? '#/mem/' + idx : `#/dom/${subpath}/${f}`;
+      const meta = isSpace ? `📑 ${n} pages` : `${n} fiche${n > 1 ? 's' : ''}`;
+      html += `<a class="card" href="${esc(href)}"><div class="persontop"><span class="avatar">${esc(prettify(f).charAt(0))}</span><span class="ct">${esc(prettify(f))}</span></div><div class="cmeta">${meta}</div></a>`;
     }
     html += `</div>`;
   }
@@ -372,21 +530,31 @@ async function renderDomain(subpath) {
   if (files.length) {
     let activeFacet = null;
     const cardsEl = $('dcards'), dq = $('dq'), facets = $('facets');
+    const wbs = grouping ? await loadWorkbooks() : [];
     const draw = () => {
       const q = (dq.value || '').toLowerCase();
       const shown = files.filter((p) => {
         const fm = memIndex.get(p) || {};
         if (activeFacet && fm[facetKey] !== activeFacet) return false;
-        return (p + ' ' + (fm.title || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
+        return (p + ' ' + (fm.titre || '') + ' ' + (fm.role || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
       });
       cardsEl.innerHTML = shown.length ? shown.map((p) => {
         const fm = memIndex.get(p) || {};
-        const name = fm.title || prettify(p.split('/').pop());
+        const name = fm.titre || prettify(p.split('/').pop());
         const foot = [];
         if (fm.status) foot.push(`<span class="stat ${sc(fm.status)}">${esc(fm.status)}</span>`);
-        if (fm.type) foot.push(`<span class="tag">${esc(fm.type)}</span>`);
-        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 2).forEach((t) => foot.push(`<span class="tag">#${esc(t)}</span>`));
-        return `<a class="card" href="#/mem/${esc(p)}"><div class="ct">${esc(name)}</div>${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
+        if (fm.role) foot.push(`<span class="tag">${esc(fm.role)}</span>`);
+        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 3).forEach((t) => foot.push(`<span class="tag">#${esc(t)}</span>`));
+        const meta = fm.tel ? `<div class="cmeta mono" style="font-size:12px">${esc(fm.tel)}</div>` : '';
+        // Projet-espace avec workbook → barre d'avancement dérivée (pièces débitées).
+        let bar = '';
+        const base = p.split('/').pop().replace(MD_EXT, '');
+        const dir = p.slice(0, p.lastIndexOf('/'));
+        if (dir.endsWith('/' + base)) {
+          const wb = wbs.find((w) => w.path.startsWith(dir + '/'));
+          if (wb && wb.pieces) bar = `<div class="bar"><i style="width:${Math.round(100 * wb.done / wb.pieces)}%"></i></div>`;
+        }
+        return `<a class="card" href="#/mem/${esc(p)}"><div class="ct">${esc(name)}</div>${meta}${bar}${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
       }).join('') : '<div class="empty">Aucune fiche.</div>';
     };
     dq.addEventListener('input', draw);
@@ -402,11 +570,25 @@ async function renderDomain(subpath) {
 
 async function renderFiche(path) {
   if (path && !/\.[a-z0-9]+$/i.test(path)) path += '.md';
+  // Wikilink COURT (style Obsidian) : `[[rangement-garage]]` sans chemin. Si le chemin
+  // n'existe pas tel quel, on résout par nom de fichier dans tout l'arbre (1er match).
+  if (!memInfo) await loadTree();
+  await loadIndex(); // titres (TOC d'espace, libellés) — en cache après le 1er appel
+  if (memInfo && !memInfo.entries.some((e) => !e.dir && e.path === path)) {
+    const base = ('/' + path.split('/').pop()).toLowerCase();
+    const hit = memInfo.entries.find((e) => !e.dir && ('/' + e.path.toLowerCase()).endsWith(base));
+    if (hit) path = hit.path;
+  }
   const parts = path.split('/');
-  const dom = parts[0] === 'domaines' ? parts[1] : parts[0];
+  const file = parts.at(-1);
+  let domSegs;
+  if (parts[0] === 'domaines') domSegs = parts.slice(1, -1);
+  else if (parts[0] === 'sujets') domSegs = ['sujets', ...parts.slice(1, -1)];
+  else domSegs = parts.slice(0, -1);
   const cr = [{ label: 'Accueil', hash: '#/' }];
-  if (APP_META[dom] || parts[0] === 'domaines' || parts[0] === 'sujets') cr.push({ label: metaFor(dom).label, hash: '#/dom/' + dom });
-  cr.push({ label: parts.at(-1).replace(MD_EXT, ''), hash: '#/mem/' + path });
+  let acc = '';
+  domSegs.forEach((s, i) => { acc = i ? acc + '/' + s : s; cr.push({ label: i === 0 ? metaFor(s).label : prettify(s), hash: '#/dom/' + acc }); });
+  cr.push({ label: file.replace(MD_EXT, ''), hash: '#/mem/' + path });
   crumbs(cr);
   page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
   const baseDir = parts.slice(0, -1).join('/');
@@ -415,9 +597,46 @@ async function renderFiche(path) {
     let text;
     try { const r = await fetch('/api/memory/raw/' + path, { headers: headers(false) }); if (!r.ok) throw 0; text = await r.text(); }
     catch { page.innerHTML = '<div class="wrap"><div class="empty">Fiche introuvable.</div></div>'; return; }
+    // Espace multi-pages : le dossier porte une fiche-index homonyme et >1 page →
+    // navigation d'espace (TOC latérale collante), même moteur de rendu.
+    const dir = parts.slice(0, -1).join('/');
+    const dirName = parts.length > 1 ? parts.at(-2) : '';
+    const spaceIndex = dir + '/' + dirName + '.md';
+    const spacePages = dirName && memInfo && memInfo.entries.some((e) => !e.dir && e.path === spaceIndex)
+      ? memInfo.entries.filter((e) => !e.dir && isFiche(e.path) && e.path.startsWith(dir + '/') && !e.path.slice(dir.length + 1).includes('/')).map((e) => e.path)
+      : [];
+    const isSpace = spacePages.length > 1;
     if (window.Alfred?.render) {
-      const { html } = window.Alfred.render(text, { baseDir });
-      const doc = document.createElement('div'); doc.className = 'alfred-doc'; doc.innerHTML = html; wrap.appendChild(doc);
+      const { frontmatter: fm, html } = window.Alfred.render(text, { baseDir });
+      const doc = document.createElement('div'); doc.className = 'alfred-doc'; doc.innerHTML = html;
+      // Barre de propriétés (maquette) : dérivée du frontmatter, injectée sous le h1.
+      const props = [];
+      const kv = (k, v) => props.push(`<span class="k">${k}</span>${v}`);
+      if (fm?.type) kv('Type', `<span class="tag">${esc(fm.type)}</span>`);
+      if (fm?.cat) kv('Catégorie', `<span class="tag">${esc(fm.cat)}</span>`);
+      if (fm?.role) kv('Rôle', `<span class="tag">${esc(fm.role)}</span>`);
+      if (fm?.status) kv('Statut', `<span class="stat ${sc(fm.status)}">${esc(fm.status)}</span>`);
+      if (fm?.tel) kv('Tél.', `<a class="tag" style="text-decoration:none" href="tel:${esc(String(fm.tel).replace(/\s/g, ''))}">${esc(fm.tel)}</a>`);
+      if (fm?.prix) kv('Prix', `<span class="price">${esc(fm.prix)}</span>`);
+      if (Array.isArray(fm?.tags) && fm.tags.length) kv('Tags', fm.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join(''));
+      if (props.length) {
+        const bar = document.createElement('div'); bar.className = 'props'; bar.innerHTML = props.join('');
+        const h1 = doc.querySelector('h1');
+        if (h1) h1.after(bar); else doc.prepend(bar);
+      }
+      labelMemLinks(doc);
+      if (isSpace) {
+        // Index d'abord, puis les pages triées par titre.
+        const label = (p) => (memIndex?.get(p)?.titre) || prettify(p.split('/').pop());
+        const pages = [spaceIndex, ...spacePages.filter((p) => p !== spaceIndex).sort((a, b) => label(a).localeCompare(label(b), 'fr'))];
+        const space = document.createElement('div'); space.className = 'space';
+        space.innerHTML = `<nav class="space-toc"><div class="lbl">Pages</div>${pages.map((p) => `<a class="tocitem${p === path ? ' on' : ''}" href="#/mem/${esc(p)}">${esc(p === spaceIndex ? 'Vue d’ensemble' : label(p))}</a>`).join('')}</nav>`;
+        const content = document.createElement('div'); content.className = 'space-content';
+        content.appendChild(doc); space.appendChild(content);
+        wrap.appendChild(space);
+      } else {
+        wrap.appendChild(doc);
+      }
     } else { wrap.appendChild(renderMd(text, baseDir)); }
   } else if (IMG_EXT.test(path)) {
     const img = document.createElement('img'); img.src = '/api/memory/raw/' + path; img.className = 'shot'; wrap.appendChild(img);
@@ -464,19 +683,39 @@ async function renderTodo() {
     if (item && /^\s+\S/.test(line) && !/^\s*[-*#>]/.test(line)) item.text += ' ' + line.trim(); else item = null;
   }
   const today = new Date().toISOString().slice(0, 10);
-  let html = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--todo)">${IC.todo}</div><div><h1>Todo</h1><div class="lede">Vos tâches, par section — cocher demande à Alfred de la marquer faite.</div></div></div>`;
-  for (const sec of sections) {
-    const open = sec.items.filter((i) => !i.done).length;
-    html += `<div class="grp"><h3>${esc(sec.title.replace(/\(.*\)/, '').trim())} <span class="c">${sec.items.length ? open : ''}</span></h3>`;
-    html += sec.items.length ? sec.items.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left;padding:4px 0">rien</div>';
-    html += `</div>`;
-  }
-  page.innerHTML = html + '</div>';
-  page.querySelector('.wrap').addEventListener('click', (e) => {
-    const b = e.target.closest('.cbox[data-mark]'); if (!b || b.classList.contains('on')) return;
-    input.value = 'Marque cette tâche comme faite : « ' + b.dataset.mark + ' »';
-    input.focus(); input.dispatchEvent(new Event('input'));
-  });
+  const all = sections.flatMap((s) => s.items);
+  const dueOf = (t) => { const m = t.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})/); return m ? m[1] : null; };
+  // Format réel du contrat todo (voir en-tête de todo/taches.md) : (durée: ~Xh) / (durée: X min).
+  const estOf = (t) => { const m = t.match(/\(durée\s*:?\s*~?\s*(\d+)\s*min/i); if (m) return +m[1]; const h = t.match(/\(durée\s*:?\s*~?\s*(\d+)\s*h\b/i); return h ? +h[1] * 60 : null; };
+  const late = all.filter((i) => !i.done && dueOf(i.text) && dueOf(i.text) < today);
+  const rapides = all.filter((i) => !i.done && estOf(i.text) != null && estOf(i.text) <= 30);
+  let view = null;
+
+  const dynv = (id, ico, name, arr, c) => `<button class="dynv${view === id ? ' on' : ''}" data-v="${id}" style="--c:var(--${c})"><span class="dico">${ico}</span><span><span class="dn">${name}</span><span class="dc">${arr.length} tâche${arr.length > 1 ? 's' : ''}</span></span></button>`;
+  const body = () => {
+    if (view === 'late' || view === 'rapides') {
+      const arr = view === 'late' ? late : rapides;
+      return arr.length ? arr.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left">Aucune tâche dans cette vue.</div>';
+    }
+    return sections.map((sec) => {
+      const open = sec.items.filter((i) => !i.done).length;
+      return `<div class="grp"><h3>${esc(sec.title.replace(/\(.*\)/, '').trim())} <span class="c">${sec.items.length ? open : ''}</span></h3>`
+        + (sec.items.length ? sec.items.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left;padding:4px 0">rien</div>') + '</div>';
+    }).join('');
+  };
+  const render = () => {
+    page.innerHTML = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--todo)">${IC.todo}</div><div><h1>Todo</h1><div class="lede">Vos tâches — cocher demande à Alfred de la marquer faite.</div></div></div>
+      <div class="dynviews">${dynv('late', '⚠', 'En retard', late, 'crit')}${dynv('rapides', '◷', 'Rapides', rapides, 'good')}${view ? '<button class="dynv" data-v="all"><span class="dico" style="--c:var(--search)">▦</span><span><span class="dn">Toutes</span><span class="dc">retour</span></span></button>' : ''}</div>
+      <div>${body()}</div></div>`;
+    labelMemLinks(page);
+    page.querySelectorAll('.dynv').forEach((b) => b.addEventListener('click', () => { view = b.dataset.v === 'all' ? null : (view === b.dataset.v ? null : b.dataset.v); render(); }));
+    page.querySelector('.wrap').addEventListener('click', (e) => {
+      const cb = e.target.closest('.cbox[data-mark]'); if (!cb || cb.classList.contains('on')) return;
+      input.value = 'Marque cette tâche comme faite : « ' + cb.dataset.mark + ' »';
+      input.focus(); input.dispatchEvent(new Event('input'));
+    });
+  };
+  render();
 }
 
 /* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */
@@ -557,27 +796,45 @@ function renderWb() {
   $('shopmode').addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
 }
 
-// Plan de débit SVG à l'échelle (blueprint) — pièces colorées selon l'état.
+// Plan de débit SVG à l'échelle (blueprint). Le workbook.json (émis par la skill
+// menuiserie) ne fournit PAS les positions physiques : `colonnes` = groupes de RÉGLAGE
+// de scie, la plaque brute vient de meta.plaque (ex. « 2800 × 2070 mm »). On dessine
+// donc un nesting en bandes (shelf) : pièces à l'échelle réelle (longueur × largeur),
+// posées de gauche à droite, retour à la ligne au bord de plaque — approximation
+// honnête d'un calepinage, pas une promesse de placement exact.
 function cutSVG(pan) {
-  const dm = String(pan.dims || '').match(/(\d+)\s*[×x]\s*(\d+)/);
-  const W = dm ? +dm[1] : 2500, H = dm ? +dm[2] : 1250, trim = pan.trim || 15;
-  const S = 0.34, pad = 40, top = 46, gap = 20;
-  const SW = W * S, SH = H * S, TR = trim * S, vw = SW + pad * 2, vh = SH + top + pad;
-  let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/><rect x="0" y="0" width="${SW}" height="${TR}" fill="var(--shop)" opacity=".16"/><rect x="0" y="0" width="${TR}" height="${SH}" fill="var(--shop)" opacity=".16"/>`;
-  let x = TR + gap * S;
+  const pm = String(wb.data.meta?.plaque || '').match(/(\d+)\s*[×x]\s*(\d+)/);
+  const W = pm ? +pm[1] : 2800, H = pm ? +pm[2] : 2070;
+  const kerf = wb.data.meta?.kerf || 4;
+  const S = 0.30, pad = 40, top = 46, gap = Math.max(kerf, 12);
+  const SW = W * S;
+  // Pré-calcul du placement (unités mm), pour connaître la hauteur consommée.
+  const placed = [];
+  let x = gap, y = gap, rowH = 0;
   for (const c of pan.colonnes || []) {
-    const cw = (c.largeur || 0) * S;
-    g += `<text x="${x + cw / 2}" y="-10" text-anchor="middle" fill="var(--shop)" font-family="var(--mono)" font-size="14" font-weight="700">${esc(String(c.largeur || ''))}</text>`;
-    let y = TR + gap * S;
     for (const etq of c.pieces || []) {
-      const p = wb.byEtq.get(etq) || {}; const l = p.longueur || 0; const ph = l * S; const d = wbDone(etq);
-      const col = d ? 'var(--good)' : 'var(--shop)';
-      g += `<g class="cut" data-et="${esc(etq)}"><rect class="pcc" x="${x}" y="${y}" width="${cw}" height="${ph}" rx="4" fill="${col}" fill-opacity="${d ? .26 : .28}" stroke="${col}" stroke-width="2"/><text x="${x + cw / 2}" y="${y + ph / 2 - 1}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="12" font-weight="700">${esc(etq.split('-').slice(-2).join('-'))}</text><text x="${x + cw / 2}" y="${y + ph / 2 + 14}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="10">${esc(String(c.largeur || ''))}×${l}</text></g>`;
-      y += ph + gap * S;
+      const p = wb.byEtq.get(etq) || {};
+      const w = p.longueur || 0, h = p.largeur || 0;
+      if (x + w > W - gap && x > gap) { x = gap; y += rowH + gap; rowH = 0; }
+      placed.push({ etq, x, y, w, h, reglage: c.reglageFS || '' });
+      x += w + gap; rowH = Math.max(rowH, h);
     }
-    x += cw + gap * S;
   }
-  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">${W} mm</text>${g}</g></svg>`;
+  // Cadre = zone réellement occupée (la disposition est indicative : si le métrage
+  // dépasse une plaque physique, on ne ment pas en tronquant — on enveloppe tout).
+  const usedH = Math.max(y + rowH + gap, H * 0.25);
+  const SH = usedH * S;
+  const vw = SW + pad * 2, vh = SH + top + pad;
+  let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/>`;
+  for (const pc of placed) {
+    const d = wbDone(pc.etq);
+    const col = d ? 'var(--good)' : 'var(--shop)';
+    const px = pc.x * S, py = pc.y * S, pw = pc.w * S, ph = pc.h * S;
+    const short = pc.etq.replace(/^[^-]+-/, '');
+    const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.75)));
+    g += `<g class="cut" data-et="${esc(pc.etq)}"><rect class="pcc" x="${px}" y="${py}" width="${pw}" height="${ph}" rx="3" fill="${col}" fill-opacity="${d ? .26 : .28}" stroke="${col}" stroke-width="2"/><text x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text><text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${pc.w}×${pc.h}</text></g>`;
+  }
+  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">plaque ${W} mm — disposition indicative, groupée par réglage</text>${g}</g></svg>`;
 }
 function renderDebit(body) {
   const pans = wb.data.calepinage || [];
