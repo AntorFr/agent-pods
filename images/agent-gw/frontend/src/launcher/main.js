@@ -927,11 +927,11 @@ async function refreshTunnel() {
     const c = document.createElement('button'); c.className = 'code'; c.textContent = t.code;
     c.addEventListener('click', async () => { try { await navigator.clipboard.writeText(t.code); c.textContent = 'copié ✓'; setTimeout(() => { c.textContent = t.code; }, 1500); } catch {} });
     tunnelBody.appendChild(c);
-    if (t.deviceUrl) { const a = document.createElement('a'); a.href = t.deviceUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Ouvrir ' + new URL(t.deviceUrl).hostname; a.style.cssText = 'display:block;text-align:center;margin-top:12px'; tunnelBody.appendChild(a); }
+    if (t.deviceUrl) { const a = document.createElement('a'); a.className = 'golink'; a.href = t.deviceUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Ouvrir ' + new URL(t.deviceUrl).hostname; tunnelBody.appendChild(a); }
   } else {
     tunnelBody.insertAdjacentHTML('beforeend', '<div class="row">Aucun appairage en attente (dernier signe de vie il y a ' + fmtAge(t.age) + ').</div>');
   }
-  if (t.openUrl) { const a = document.createElement('a'); a.href = t.openUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Ouvrir dans vscode.dev →'; a.style.cssText = 'display:block;margin-top:10px'; tunnelBody.appendChild(a); }
+  if (t.openUrl) { const a = document.createElement('a'); a.className = 'golink sub'; a.href = t.openUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Ouvrir dans vscode.dev →'; tunnelBody.appendChild(a); }
 }
 async function pollTunnel() { try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (r.ok) { const t = await r.json(); $('vsc').classList.toggle('pending', !!t.pending); } } catch {} }
 setInterval(pollTunnel, 120000);
