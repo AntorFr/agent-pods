@@ -64,10 +64,13 @@ domaines/voyages/
       "lieu": "calvi", "gmail": "thread:189ab42…", "notes": "petit-déj inclus" },
     { "id": "ferry-aller", "type": "trajet", "statut": "confirme",
       "titre": "Ferry Toulon → L'Île-Rousse", "jour": "2026-08-08", "heure": "08:00",
-      "duree": "5 h 45", "gmail": "thread:188ff…" },
+      "duree": "5 h 45", "gmail": "thread:188ff…",
+      "docs": [{ "fichier": "assets/embarquement-aller.pdf", "titre": "Cartes d'embarquement" }] },
     { "id": "resto-anna", "type": "resto", "statut": "suggestion",
       "titre": "Chez Anna", "creneau": "soir", "duree": "~2 h",
-      "lieu": "calvi", "place_id": "ChIJxx…", "prix": "~60 €" }
+      "lieu": "calvi", "place_id": "ChIJxx…", "prix": "~60 €",
+      "desc": "Terrasse sous les remparts, cuisine corse simple et juste — réserver dès 19 h.",
+      "web": "https://chez-anna.example" }
   ]
 }
 ```
@@ -97,6 +100,17 @@ domaines/voyages/
 - `lieu` : référence un `lieux[].id` du voyage (optionnel — rattache la carte à une étape,
   sert aussi à la météo). Les `lieux` sont géocodés une fois par Alfred à la création.
 - `prix`, `notes` : optionnels, texte libre.
+- **`desc` + `web` — la fiche de la carte.** `desc` : 2-3 phrases rédigées par Alfred au moment
+  où il crée la carte (pourquoi c'est proposé, le conseil pratique). C'est un **jugement
+  consigné, durable — donc stocké**, contrairement à la météo et aux liaisons qui, elles, se
+  dérivent. `web` : lien vers la page du lieu (site officiel, tiré des détails maps ou du mail
+  de résa).
+- **`docs` — les documents de la carte** : `[{ "fichier": "assets/…", "titre": "…" }]`. Les
+  fichiers vivent dans `assets/` du dossier voyage, **classés là par Alfred** — typiquement la
+  pièce jointe du mail de résa (carte d'embarquement, confirmation, billet, contrat de
+  location). Le fil Gmail reste la *source* de la résa ; le document, lui, est un fichier de
+  la mémoire, sous la main le jour J. La fiche les rend en cartes de téléchargement (même
+  rendu que `{% piece-jointe %}`).
 
 ## L'app-module (front)
 
@@ -114,7 +128,11 @@ domaines/voyages/
   - drag tray → jour : la carte devient `confirme`, gagne le `jour` (et le créneau selon la
     zone de dépôt) ;
   - drag jour → jour : elle glisse (le calage change, rien d'autre) ;
-  - écarter : statut `ecartee`, la carte sort du tray sans disparaître du fichier.
+  - écarter : statut `ecartee`, la carte sort du tray sans disparaître du fichier ;
+  - **ouvrir** (clic) : la carte se déplie en **fiche** — description d'Alfred (`desc`),
+    calage, source (fil Gmail / maps), **documents** (`docs` : carte d'embarquement,
+    confirmation…) et lien « ouvrir la page » (`web`). Consultation en surimpression : on ne
+    quitte pas la timeline.
 - **Chaque geste écrit `voyage.json` via l'API d'état** (patron `/api/workbook/state`) —
   persisté, historisé git, **zéro LLM au rendu ni dans le geste**.
 
@@ -159,9 +177,12 @@ Elle vivra dans le repo Alfred (`.claude/skills/voyages/`), sur le gabarit `corr
 1. **Cadre** le voyage et crée le dossier : dates si elles existent (sinon voyage `idée`,
    tray seul), lieux géocodés, et **demande les modes de déplacement** (« vous aurez une
    voiture ? des vélos ? ») plutôt que de les deviner.
-2. **Résas Gmail** → cartes `confirme` sourcées. Gardes `correspondance` intégrales
-   (D17/D18/D24) : lecture à la demande, un mail ne déclenche jamais rien.
-3. **Suggestions** (`search_places` + jugement + mémoire des goûts) → cartes vers le **tray**.
+2. **Résas Gmail** → cartes `confirme` sourcées, et les **documents utiles classés** dans
+   `assets/` (carte d'embarquement, confirmation — la pièce jointe du mail rejoint le dossier).
+   Gardes `correspondance` intégrales (D17/D18/D24) : lecture à la demande, un mail ne
+   déclenche jamais rien.
+3. **Suggestions** (`search_places` + jugement + mémoire des goûts) → cartes vers le **tray**,
+   chacune livrée avec sa fiche (`desc` rédigée + `web`).
    Alfred **ne place jamais rien sur la timeline de sa propre initiative** — le placement est
    un geste de l'utilisateur (app) ou une demande explicite (chat).
 4. **Calendar** : sur demande seule, création par défaut, modif/suppr = confirmation.
