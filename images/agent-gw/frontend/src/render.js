@@ -6,10 +6,13 @@ import YAML from 'yaml';
 import { config } from './blocks.js';
 
 // [[target]] and [[target|label]] → a memory link the front intercepts.
+// A wikilink pointing at an image is EMBEDDED (Obsidian-style), root-relative.
 const WIKILINK = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const WL_IMG = /\.(png|jpe?g|gif|webp|svg|heic|heif|avif)$/i;
 function expandWikilinks(src) {
   return src.replace(WIKILINK, (_, target, label) => {
     const t = target.trim();
+    if (WL_IMG.test(t)) return `![${(label || '').trim()}](/api/memory/raw/${t})`;
     return `[${(label || t).trim()}](/mem/${t})`;
   });
 }

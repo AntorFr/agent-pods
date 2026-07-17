@@ -6,7 +6,9 @@ import { renderPage } from './render.js';
 
 export function render(source, opts) {
   const { frontmatter, html, errors } = renderPage(source, opts);
-  return { frontmatter, html: DOMPurify.sanitize(html), errors };
+  // ADD_ATTR target : DOMPurify le retire par défaut ; le moteur ne l'émet que sur les
+  // liens externes / assets bruts (toujours accompagné de rel=noopener, cf. blocks.js).
+  return { frontmatter, html: DOMPurify.sanitize(html, { ADD_ATTR: ['target'] }), errors };
 }
 
 export { renderPage };

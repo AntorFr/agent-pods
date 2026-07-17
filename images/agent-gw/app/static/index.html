@@ -557,6 +557,13 @@ document.addEventListener('click', (e) => {
   if (target && !/\.[a-z0-9]+$/i.test(target)) target += '.md';
   openMemory(target);
 });
+// Façade vidéo YouTube (moteur, blocks.js) : clic/Entrée charge l'iframe — jamais avant.
+function playEmbed(el) {
+  const id = el.dataset.yt; if (!id) return;
+  el.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1" title="YouTube" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+}
+document.addEventListener('click', (e) => { const el = e.target.closest('.ytembed[data-yt]'); if (el) playEmbed(el); });
+document.addEventListener('keydown', (e) => { if (e.key !== 'Enter' && e.key !== ' ') return; const el = e.target.closest?.('.ytembed[data-yt]'); if (el) { e.preventDefault(); playEmbed(el); } });
 
 /* ── Chat ───────────────────────────────────────────────────────── */
 function add(cls, text) {

@@ -27,6 +27,10 @@ Attendre l'Omni avant la méthode maison sur l'Endurance.
 
 {% web url="https://www.youtube.com/watch?v=8FQ7LSB7K3w" titre="Impression de voiles LEGO sur tissu" /%}
 
+{% web url="https://brickstickershop.com/fortuna" titre="Voiles toutes faites" /%}
+
+Voir [la commande](assets/DISPANO.pdf) et [les notes](notes-couture.md).
+
 {% piece-jointe fichier="assets/Fortuna_sails_A4.pdf" /%}
 
 {% outil id="debit" projet="rangement-garage" /%}
@@ -42,7 +46,10 @@ const checks = [
   ['wikilink → /mem/', html.includes('href="/mem/voiles-lego-impression"')],
   ['image resolved with baseDir', html.includes('/api/memory/raw/domaines/diy/projets/voiles-lego-fortuna/assets/inspiration-1.png')],
   ['gallery rendered', html.includes('class="gallery"')],
-  ['web card', html.includes('class="webcard"') && html.includes('youtube.com')],
+  ['youtube → embedded player facade', html.includes('class="ytembed"') && html.includes('data-yt="8FQ7LSB7K3w"') && !html.includes('<iframe')],
+  ['web card (non-youtube)', html.includes('class="webcard"') && html.includes('brickstickershop.com')],
+  ['relative asset link → raw, new tab', html.includes('href="/api/memory/raw/domaines/diy/projets/voiles-lego-fortuna/assets/DISPANO.pdf"') && html.includes('target="_blank"')],
+  ['relative .md link → /mem/ route', html.includes('href="/mem/domaines/diy/projets/voiles-lego-fortuna/notes-couture.md"')],
   ['attachment', html.includes('class="attach"') && html.includes('PDF')],
   ['module embed', html.includes('data-module="debit"') && html.includes('data-projet="rangement-garage"')],
   ['no raw script injection surface', !/<script/i.test(html)],
