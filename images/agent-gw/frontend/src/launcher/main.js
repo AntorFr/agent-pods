@@ -254,9 +254,10 @@ function domains() {
   }
   return [...set].filter(Boolean).sort();
 }
+const isFiche = (p) => MD_EXT.test(p) && !/(^|\/)INDEX\.md$/i.test(p) && !p.startsWith('sujets/archive');
 function countIn(prefix) {
   if (!memInfo) return 0;
-  return memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path) && e.path.startsWith(prefix)).length;
+  return memInfo.entries.filter((e) => !e.dir && isFiche(e.path) && e.path.startsWith(prefix)).length;
 }
 // Préfixe mémoire d'un sous-chemin d'app (ex. "cadeaux/frere" -> "domaines/cadeaux/frere/").
 function memPrefix(subpath) {
@@ -274,12 +275,12 @@ function childrenOf(prefix) {
     if (!rest) continue;
     const slash = rest.indexOf('/');
     if (slash >= 0) folders.add(rest.slice(0, slash));
-    else if (!e.dir && MD_EXT.test(rest)) files.push(e.path);
+    else if (!e.dir && MD_EXT.test(rest) && !/^INDEX\.md$/i.test(rest)) files.push(e.path);
   }
   return { folders: [...folders].sort((a, b) => a.localeCompare(b, 'fr')), files: files.sort() };
 }
 function ficheCount(prefix) {
-  return memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path) && e.path.startsWith(prefix) && !e.path.startsWith('sujets/archive')).length;
+  return memInfo.entries.filter((e) => !e.dir && isFiche(e.path) && e.path.startsWith(prefix)).length;
 }
 
 /* ── Routeur (hash) + fil d'Ariane ───────────────────────────────── */
@@ -318,7 +319,7 @@ function tileHTML(id, route, st, foot) {
 function renderHome() {
   crumbs([{ label: 'Accueil', hash: '#/' }]);
   const doms = domains().filter((d) => d !== 'atelier' && d !== 'diy');
-  const total = memInfo ? memInfo.entries.filter((e) => !e.dir && MD_EXT.test(e.path)).length : 0;
+  const total = memInfo ? memInfo.entries.filter((e) => !e.dir && isFiche(e.path)).length : 0;
   const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const tools = [tileHTML('todo', '#/todo', 'Vos tâches', ''), tileHTML('atelier', '#/atelier', 'Suivi menuiserie', '<span class="pc">workbooks</span>')];
   const domTiles = doms.map((d) => {
