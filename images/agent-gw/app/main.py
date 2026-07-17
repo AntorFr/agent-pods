@@ -561,21 +561,25 @@ async def chat(request: Request):
 
 
 @app.get("/")
+@app.get("/app")
 async def index():
-    # no-cache: the app JS is inlined here, so the browser must revalidate
-    # index.html every load or it serves a stale frontend after a deploy.
+    # La nouvelle UI (launcher) EST l'app depuis la bascule du 2026-07-18.
+    # /app reste un alias (liens/onglets de la période de migration).
+    # no-cache : le navigateur doit revalider le shell à chaque chargement,
+    # sinon il sert un frontend périmé après un déploiement.
     return FileResponse(
-        STATIC_DIR / "index.html",
+        STATIC_DIR / "app.html",
         headers={"Cache-Control": "no-cache, must-revalidate"},
     )
 
 
-@app.get("/app")
-async def launcher():
-    # Nouvelle UI (shell launcher), servie EN PARALLÈLE de / le temps de la
-    # migration. Bascule prévue : faire pointer / ici quand elle est complète.
+@app.get("/legacy")
+async def legacy():
+    # L'ancienne UI (arbre + 3 colonnes), gardée en filet de sécurité le temps
+    # de roder la nouvelle. À retirer avec app/static/index.html quand plus personne
+    # ne s'en sert.
     return FileResponse(
-        STATIC_DIR / "app.html",
+        STATIC_DIR / "index.html",
         headers={"Cache-Control": "no-cache, must-revalidate"},
     )
 
