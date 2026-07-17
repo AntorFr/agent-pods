@@ -426,9 +426,18 @@ async def memory_index():
             if any(part.startswith(".") for part in rel.parts):
                 continue
             try:
-                fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="ignore")[:4000])
+                text = p.read_text(encoding="utf-8", errors="ignore")[:4000]
             except OSError:
-                fm = {}
+                items.append({"path": str(rel), "fm": {}})
+                continue
+            fm = _parse_frontmatter(text)
+            # Alfred écrit souvent le statut EN CLAIR dans le corps (`**Statut : …**`
+            # / `**État : …**`), pas en frontmatter. On le récupère pour les pastilles
+            # et les facettes, tronqué au 1er séparateur (—, (, ,).
+            if not fm.get("status"):
+                m = re.search(r"\*\*(?:Statut|État|Etat)\s*:?\s*([^*\n—(,]+)", text, re.I)
+                if m:
+                    fm["status"] = m.group(1).strip()
             items.append({"path": str(rel), "fm": fm})
     return {"root": MEMORY_DIR, "items": items}
 
