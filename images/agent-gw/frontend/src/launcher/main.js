@@ -932,6 +932,9 @@ const VTYPE = {
 const vtypeOf = (t) => VTYPE[t] || { ico: '◆', c: '--voyage', n: t || 'carte' };
 const CRX = { matin: 0, midi: 1, 'apres-midi': 2, soir: 3 };
 const CRN = { matin: 'matin', midi: 'midi', 'apres-midi': 'après-midi', soir: 'soir' };
+// L'ordre des cartes EST le déroulé du jour : rang explicite (`ordre`, posé par le
+// drop) ; repli sur l'ancien créneau pour les items qui n'ont jamais été déplacés.
+const vrank = (i) => (typeof i.ordre === 'number' ? i.ordre : ((CRX[i.creneau] ?? 2) + 1) * 1000);
 const VMODE_API = { marche: 'WALK', voiture: 'DRIVE', velo: 'BICYCLE', transport: 'TRANSIT' };
 const VMODE_ICO = { marche: '🚶', voiture: '🚗', velo: '🚲', transport: '🚇' };
 // Google Weather `type` → picto (familles principales ; défaut nuage).
@@ -1055,7 +1058,6 @@ function vitemHTML(it, extra) {
   const T = vtypeOf(it.type);
   const chips = [];
   if (it.heure) chips.push(`<span class="chip">${esc(it.heure)}</span>`);
-  else if (it.creneau) chips.push(`<span class="chip">${CRN[it.creneau] || esc(it.creneau)}</span>`);
   if (it.duree) chips.push(`<span class="chip">◷ ${esc(it.duree)}</span>`);
   if (it.prix) chips.push(`<span class="chip">${esc(it.prix)}</span>`);
   if (it.gmail) chips.push('<span class="chip due">📧 résa</span>');
@@ -1088,7 +1090,7 @@ function paintVoyage() {
     const band = items.find((i) => i.statut === 'confirme' && i.debut && i.fin && i.debut <= day && day < i.fin);
     const cards = items
       .filter((i) => i.statut === 'confirme' && i.jour === day)
-      .sort((a, b) => ((CRX[a.creneau] ?? 2) - (CRX[b.creneau] ?? 2)) || String(a.heure || '').localeCompare(String(b.heure || '')));
+      .sort((a, b) => (vrank(a) - vrank(b)) || String(a.heure || '').localeCompare(String(b.heure || '')));
     let flow = '';
     let prev = band && band.lat != null ? band : null;
     cards.forEach((c, ix) => {
@@ -1128,7 +1130,21 @@ function paintVoyage() {
       e.preventDefault(); dz.classList.remove('dropok');
       const it = vItems().find((x) => x.id === e.dataTransfer.getData('text/plain'));
       if (!it || it.debut || it.fin) return; // les continus ne se déplacent pas
-      vgesture({ id: it.id, statut: 'confirme', jour: dz.dataset.day, creneau: it.creneau && CRX[it.creneau] != null ? it.creneau : 'apres-midi' });
+      const day = dz.dataset.day;
+      // Position de dépôt → rang fractionnaire entre les deux voisins.
+      const others = vItems()
+        .filter((x) => x.statut === 'confirme' && x.jour === day && x.id !== it.id)
+        .sort((a, b) => vrank(a) - vrank(b));
+      let idx = others.length;
+      const els = [...dz.querySelectorAll('.vcard')].filter((c) => c.dataset.vi !== it.id);
+      for (let k = 0; k < els.length; k++) {
+        const r = els[k].getBoundingClientRect();
+        if (e.clientY < r.top + r.height / 2) { idx = k; break; }
+      }
+      const r1 = idx > 0 ? vrank(others[idx - 1]) : null;
+      const r2 = idx < others.length ? vrank(others[idx]) : null;
+      const ordre = r1 != null && r2 != null ? (r1 + r2) / 2 : r2 != null ? r2 - 10 : r1 != null ? r1 + 10 : 1000;
+      vgesture({ id: it.id, statut: 'confirme', jour: day, ordre });
     });
   });
   // Geste inverse : une carte du planning glissée sur le tray redevient suggestion.
@@ -1200,11 +1216,17 @@ function openVFiche(id) {
   body.innerHTML = `<div class="vhead"><span class="vico">${it.ico || T.ico}</span><div><div class="vst">${esc(it.titre || it.id)}</div><div class="vsub">${T.n} · <span class="stat ${stCls}">${esc(stLbl)}</span> · ${cal}</div></div></div>
     ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
     ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
+    ${it.statut === 'confirme' && !it.debut ? `<div class="vhour"><span class="vby" style="margin:0">Heure</span><input type="time" id="vh-in" value="${esc(String(it.heure || '').replace('h', ':'))}"><button class="vopen" data-sethour>Poser</button>${it.heure ? '<button class="vopen" data-clearhour>Effacer</button>' : ''}<span class="vhint">optionnelle — l’ordre des cartes fait le déroulé, l’heure l’annote</span></div>` : ''}
     <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
     <span style="flex:1"></span><button class="vopen" data-close>Fermer</button></div>`;
   body.querySelector('[data-close]').addEventListener('click', () => { vModal.hidden = true; });
   const untray = body.querySelector('[data-untray]');
   if (untray) untray.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'suggestion' }); });
+  // Poser/effacer l'heure : on refixe rang et jour tels quels, seule l'heure change.
+  const setH = body.querySelector('[data-sethour]');
+  if (setH) setH.addEventListener('click', () => { const val = body.querySelector('#vh-in').value; vModal.hidden = true; vgesture({ id: it.id, statut: 'confirme', jour: it.jour, ordre: vrank(it), heure: val || null }); });
+  const clrH = body.querySelector('[data-clearhour]');
+  if (clrH) clrH.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'confirme', jour: it.jour, ordre: vrank(it), heure: null }); });
   vModal.hidden = false;
 }
 

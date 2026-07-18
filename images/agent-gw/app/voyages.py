@@ -38,6 +38,7 @@ STATUTS = {"suggestion", "confirme", "ecartee"}
 CRENEAUX = {"matin", "midi", "apres-midi", "soir"}
 MODES_API = {"WALK", "DRIVE", "BICYCLE", "TRANSIT"}
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_HEURE = re.compile(r"^\d{1,2}[:h]\d{2}$")
 _LATLNG = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
 
@@ -151,11 +152,30 @@ async def voyage_gesture(request: Request):
             if creneau not in CRENEAUX:
                 raise HTTPException(status_code=400, detail="bad creneau")
             ov["creneau"] = creneau
+        # L'ordre des cartes EST le déroulé du jour : rang posé par le drop
+        # (fractionnaire — insérer entre deux voisins ne renumérote personne).
+        ordre = body.get("ordre")
+        if ordre is not None:
+            if not isinstance(ordre, (int, float)) or isinstance(ordre, bool):
+                raise HTTPException(status_code=400, detail="bad ordre")
+            ov["ordre"] = ordre
+        # L'heure est une ANNOTATION optionnelle (posée depuis la fiche), jamais
+        # une grille : absente du body = intacte ; null = effacée.
+        if "heure" in body:
+            heure = body.get("heure")
+            if heure in (None, ""):
+                ov["heure"] = None
+            elif isinstance(heure, str) and _HEURE.match(heure.strip()):
+                ov["heure"] = heure.strip().replace("h", ":")
+            else:
+                raise HTTPException(status_code=400, detail="bad heure")
     else:
         # Retour au tray ou écart : le calage saute — un item non confirmé n'est
         # jamais calé (invariant), même si le calage venait de voyage.json.
         ov["jour"] = None
         ov["creneau"] = None
+        ov["ordre"] = None
+        ov["heure"] = None
     state = _load_v_state(vf)
     state["items"][item_id] = ov
     vf.with_name("voyage-state.json").write_text(

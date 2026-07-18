@@ -15,8 +15,11 @@
   confirmation.
 - **App-module dès la v1** : le drag & drop suggestions → timeline est le cœur du besoin, c'est
   du *comportement*, donc du code (jamais du Markdoc passif).
-- **Vue approximative assumée** : jour + créneau, pas de grille horaire. C'est les vacances,
-  pas un Gantt — une heure ferme (ferry) s'affiche telle quelle, mais rien ne l'exige.
+- **Vue approximative assumée** : jour + **ordre des cartes**, pas de grille horaire — c'est
+  les vacances, pas un Gantt. *(Amendé 2026-07-18, décision utilisateur : le créneau
+  matin/après-midi sort du geste — l'ordre des cartes suffit à le dire.)* Une **heure**
+  optionnelle s'annote depuis la fiche de la carte ; une heure ferme de résa (ferry)
+  s'affiche telle quelle.
 - **Mobile : la règle du shell ne bouge pas** (mobile = chat plein écran, pas de canvas).
   En voyage, Alfred fait la conciergerie **par message** en lisant le dossier (« le programme
   de demain ? »). Aucun rendu mobile de la timeline. *(Décision utilisateur, 2026-07-18.)*
@@ -89,8 +92,12 @@ domaines/voyages/
   jour) ; la skill demande le jour avant de confirmer en chat. **Corollaire** : dans un voyage
   `idée` (sans dates), tout item est `suggestion` ou `ecartee` — la confirmation est
   mécaniquement impossible, il n'y a pas de jour à poser.
-- **Créneaux** : `matin | midi | apres-midi | soir` — optionnel, c'est le rangement visuel
-  dans le bloc jour. `heure` et `duree` sont du texte libre affiché tel quel.
+- **Ordre & heure** *(remplace les créneaux, amendé 2026-07-18)* : `ordre` = rang de la carte
+  dans son jour, **posé par la position de dépôt** (fractionnaire : insérer entre deux
+  voisins ne renumérote personne) — l'ordre des cartes EST le déroulé du jour. `heure` =
+  **annotation** optionnelle posée depuis la fiche, jamais une grille. `creneau` survit en
+  simple **conseil** porté par une suggestion (affiché en fiche) et sert de repli de tri
+  aux items jamais déplacés. `duree` reste du texte libre affiché tel quel.
 - **Traçabilité, zéro duplication** : `gmail` (fil source d'une résa — la vérité de la résa
   reste dans Gmail), `place_id` (maps — la vérité du lieu reste chez maps). Un item `trajet`
   n'existe **que** porté par une résa ; le trajet routier estimé est une **liaison** (dérivée
@@ -126,9 +133,10 @@ domaines/voyages/
 - **Voyage `idée`** (sans dates) : pas de timeline — le tray seul, avec une invite « posez les
   dates pour composer ».
 - **Gestes** :
-  - drag tray → jour : la carte devient `confirme`, gagne le `jour` (et le créneau selon la
-    zone de dépôt) ;
-  - drag jour → jour : elle glisse (le calage change, rien d'autre) ;
+  - drag tray → jour : la carte devient `confirme`, gagne le `jour` et son **rang à la
+    position de dépôt** ;
+  - drag jour → jour (ou dans le même jour) : elle glisse — jour et rang changent, rien d'autre ;
+  - **poser/effacer une heure** depuis la fiche de la carte (annotation, sans effet sur l'ordre) ;
   - drag planning → tray (ou « ↩ Rendre aux suggestions » dans la fiche) : elle redevient
     `suggestion` et **son calage saute** (invariant) — on change d'avis sans rien perdre ;
   - écarter : statut `ecartee`, la carte sort du tray sans disparaître du fichier ;
