@@ -1108,7 +1108,7 @@ function paintVoyage() {
   const tray = `<aside class="vtray"><div class="th">Suggestions <span class="cnt">${allSug.length}</span></div>
     ${types.length > 1 ? `<div class="facets">${['', ...types].map((tp) => `<button class="pill ${(!tp && !voy.filter) || voy.filter === tp ? 'on' : ''}" data-tf="${esc(tp)}">${tp ? vtypeOf(tp).n : 'Tous'}</button>`).join('')}</div>` : ''}
     ${sug.map((i) => `<div class="traycard" draggable="true" title="Clic : fiche · Glisser : confirmer" data-vi="${esc(i.id)}" style="--ic:var(${vtypeOf(i.type).c})"><button class="dis" data-dis="${esc(i.id)}" title="Écarter — conservée, jamais reproposée">✕</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}${i.prix ? `<div class="vmeta"><span class="chip">${esc(i.prix)}</span></div>` : ''}</div></div>`).join('') || '<div class="empty">Rien à trier — demandez des suggestions à Alfred.</div>'}
-    <div class="trayfoot">🖐 Glissez une carte sur un jour pour la confirmer${nEc ? ` · ${nEc} écartée${nEc > 1 ? 's' : ''} conservée${nEc > 1 ? 's' : ''}` : ''}</div></aside>`;
+    <div class="trayfoot">🖐 Une carte sur un jour = confirmée · une carte du planning ici = rendue aux suggestions${nEc ? ` · ${nEc} écartée${nEc > 1 ? 's' : ''} conservée${nEc > 1 ? 's' : ''}` : ''}</div></aside>`;
 
   page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div></div>`;
 
@@ -1131,6 +1131,18 @@ function paintVoyage() {
       vgesture({ id: it.id, statut: 'confirme', jour: dz.dataset.day, creneau: it.creneau && CRX[it.creneau] != null ? it.creneau : 'apres-midi' });
     });
   });
+  // Geste inverse : une carte du planning glissée sur le tray redevient suggestion.
+  const trayEl = page.querySelector('.vtray');
+  if (trayEl) {
+    trayEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; trayEl.classList.add('dropok'); });
+    trayEl.addEventListener('dragleave', () => trayEl.classList.remove('dropok'));
+    trayEl.addEventListener('drop', (e) => {
+      e.preventDefault(); trayEl.classList.remove('dropok');
+      const it = vItems().find((x) => x.id === e.dataTransfer.getData('text/plain'));
+      if (!it || it.debut || it.fin || it.statut !== 'confirme') return;
+      vgesture({ id: it.id, statut: 'suggestion' });
+    });
+  }
 
   // Météo (dérivée) : patch des jours couverts par la fenêtre fiable ; les autres
   // restent vides côté futur lointain, « — » côté passé. L'absence, pas la fiction.
@@ -1188,9 +1200,11 @@ function openVFiche(id) {
   body.innerHTML = `<div class="vhead"><span class="vico">${it.ico || T.ico}</span><div><div class="vst">${esc(it.titre || it.id)}</div><div class="vsub">${T.n} · <span class="stat ${stCls}">${esc(stLbl)}</span> · ${cal}</div></div></div>
     ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
     ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
-    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
+    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
     <span style="flex:1"></span><button class="vopen" data-close>Fermer</button></div>`;
   body.querySelector('[data-close]').addEventListener('click', () => { vModal.hidden = true; });
+  const untray = body.querySelector('[data-untray]');
+  if (untray) untray.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'suggestion' }); });
   vModal.hidden = false;
 }
 

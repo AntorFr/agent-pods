@@ -151,6 +151,11 @@ async def voyage_gesture(request: Request):
             if creneau not in CRENEAUX:
                 raise HTTPException(status_code=400, detail="bad creneau")
             ov["creneau"] = creneau
+    else:
+        # Retour au tray ou écart : le calage saute — un item non confirmé n'est
+        # jamais calé (invariant), même si le calage venait de voyage.json.
+        ov["jour"] = None
+        ov["creneau"] = None
     state = _load_v_state(vf)
     state["items"][item_id] = ov
     vf.with_name("voyage-state.json").write_text(

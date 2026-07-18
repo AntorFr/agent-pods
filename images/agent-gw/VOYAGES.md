@@ -129,6 +129,8 @@ domaines/voyages/
   - drag tray → jour : la carte devient `confirme`, gagne le `jour` (et le créneau selon la
     zone de dépôt) ;
   - drag jour → jour : elle glisse (le calage change, rien d'autre) ;
+  - drag planning → tray (ou « ↩ Rendre aux suggestions » dans la fiche) : elle redevient
+    `suggestion` et **son calage saute** (invariant) — on change d'avis sans rien perdre ;
   - écarter : statut `ecartee`, la carte sort du tray sans disparaître du fichier ;
   - **ouvrir** (clic) : la carte se déplie en **fiche** — description d'Alfred (`desc`),
     calage, source (fil Gmail / maps), **documents** (`docs` : carte d'embarquement,
