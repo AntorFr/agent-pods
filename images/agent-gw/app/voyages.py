@@ -177,7 +177,11 @@ async def voyage_gesture(request: Request):
         ov["ordre"] = None
         ov["heure"] = None
     state = _load_v_state(vf)
-    state["items"][item_id] = ov
+    # Déplacer ne perd pas les annotations : on FUSIONNE avec l'entrée existante
+    # (l'heure posée survit à un changement de jour/rang). Le retour au tray et
+    # l'écart, eux, remplacent tout — leur ov nulle explicitement le calage.
+    prev = state["items"].get(item_id) or {}
+    state["items"][item_id] = {**prev, **ov} if statut == "confirme" else ov
     vf.with_name("voyage-state.json").write_text(
         json.dumps(state, ensure_ascii=False, indent=1)
     )

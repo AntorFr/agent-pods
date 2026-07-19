@@ -952,6 +952,19 @@ const vmin = (s) => { const m = Math.round(s / 60); return m >= 60 ? Math.floor(
 
 let voy = null; // { path, data, state, filter }
 let vdrag = false;
+let vdragId = null; // id de la carte en cours de drag (dataTransfer est illisible en dragover)
+// Point d'insertion dans un jour : index avant lequel la carte tombera, d'après
+// la position verticale du curseur face aux cartes déjà en place.
+function vdropIndex(dz, y, skipId) {
+  const els = [...dz.querySelectorAll('.vcard')].filter((c) => c.dataset.vi !== skipId);
+  let idx = els.length;
+  for (let k = 0; k < els.length; k++) {
+    const r = els[k].getBoundingClientRect();
+    if (y < r.top + r.height / 2) { idx = k; break; }
+  }
+  return { idx, els };
+}
+function vclearIns() { page.querySelectorAll('.inst,.insb').forEach((x) => x.classList.remove('inst', 'insb')); }
 const vRouteCache = new Map();
 async function vroute(a, b, mode) {
   const key = `${a.lat.toFixed(4)},${a.lng.toFixed(4)}|${b.lat.toFixed(4)},${b.lng.toFixed(4)}|${mode}`;
@@ -1065,6 +1078,7 @@ function vitemHTML(it, extra) {
 }
 
 function paintVoyage() {
+  vdrag = false; vdragId = null; // le DOM est reconstruit, aucun drag ne survit au rendu
   const d = voy.data;
   const items = vItems();
   const allSug = items.filter((i) => i.statut === 'suggestion');
@@ -1120,14 +1134,20 @@ function paintVoyage() {
   page.querySelectorAll('[data-dis]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.dis, statut: 'ecartee' }); }));
   page.querySelectorAll('.vcard,.traycard').forEach((c) => {
     c.addEventListener('click', () => { if (!vdrag) openVFiche(c.dataset.vi); });
-    c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.vi); e.dataTransfer.effectAllowed = 'move'; c.classList.add('drag'); vdrag = true; });
-    c.addEventListener('dragend', () => { c.classList.remove('drag'); setTimeout(() => { vdrag = false; }, 0); });
+    c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.vi); e.dataTransfer.effectAllowed = 'move'; c.classList.add('drag'); vdrag = true; vdragId = c.dataset.vi; });
+    c.addEventListener('dragend', () => { c.classList.remove('drag'); vclearIns(); setTimeout(() => { vdrag = false; vdragId = null; }, 0); });
   });
   page.querySelectorAll('.vday').forEach((dz) => {
-    dz.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('dropok'); });
-    dz.addEventListener('dragleave', () => dz.classList.remove('dropok'));
+    dz.addEventListener('dragover', (e) => {
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('dropok');
+      // Liseré d'insertion : au-dessus de la carte visée, ou sous la dernière.
+      const { idx, els } = vdropIndex(dz, e.clientY, vdragId);
+      vclearIns();
+      if (els.length) (idx < els.length ? els[idx].classList.add('inst') : els[els.length - 1].classList.add('insb'));
+    });
+    dz.addEventListener('dragleave', (e) => { if (!dz.contains(e.relatedTarget)) { dz.classList.remove('dropok'); vclearIns(); } });
     dz.addEventListener('drop', (e) => {
-      e.preventDefault(); dz.classList.remove('dropok');
+      e.preventDefault(); dz.classList.remove('dropok'); vclearIns();
       const it = vItems().find((x) => x.id === e.dataTransfer.getData('text/plain'));
       if (!it || it.debut || it.fin) return; // les continus ne se déplacent pas
       const day = dz.dataset.day;
@@ -1135,12 +1155,7 @@ function paintVoyage() {
       const others = vItems()
         .filter((x) => x.statut === 'confirme' && x.jour === day && x.id !== it.id)
         .sort((a, b) => vrank(a) - vrank(b));
-      let idx = others.length;
-      const els = [...dz.querySelectorAll('.vcard')].filter((c) => c.dataset.vi !== it.id);
-      for (let k = 0; k < els.length; k++) {
-        const r = els[k].getBoundingClientRect();
-        if (e.clientY < r.top + r.height / 2) { idx = k; break; }
-      }
+      const { idx } = vdropIndex(dz, e.clientY, it.id);
       const r1 = idx > 0 ? vrank(others[idx - 1]) : null;
       const r2 = idx < others.length ? vrank(others[idx]) : null;
       const ordre = r1 != null && r2 != null ? (r1 + r2) / 2 : r2 != null ? r2 - 10 : r1 != null ? r1 + 10 : 1000;
