@@ -46,7 +46,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 # Serveurs MCP stdio bundlés (maps/weather), lancés par le .mcp.json du workspace.
+# DEPRECATED : remplacés par le hub rosetta (via rosetta-bridge) — à retirer,
+# avec leurs clés d'API dans l'env du pod, une fois la bascule vérifiée en prod.
 COPY mcp_servers ./mcp_servers
+# rosetta-bridge : relais stdio->HTTP vers le hub rosetta (refresh de token
+# client_credentials intégré, stdlib seule). Copie identique dans claude-pod.
+COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
 # Bundled content engine + launcher shell (built once, never at runtime).
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css ./app/static/
 

@@ -59,6 +59,12 @@ RUN apt-get update \
 
 COPY --from=vscode-cli /usr/local/bin/code /usr/local/bin/code
 
+# rosetta-bridge: stdio->HTTP MCP relay to the rosetta hub, spawned by the
+# workspace .mcp.json. Stdlib-only on purpose: the bare python3 above suffices,
+# no venv to keep in sync. Token lifecycle (client_credentials) lives inside.
+# Identical copy in agent-gw — both containers spawn the same tools.
+COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
+
 # Rename the stock `node` user (uid 1000) — this pod hosts an agent, not a build
 RUN usermod -l agent -d /home/agent -m node \
     && groupmod -n agent node \
