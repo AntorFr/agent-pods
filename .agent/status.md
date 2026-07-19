@@ -1,8 +1,15 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-19
+> MàJ : 2026-07-20
 
-**État :** **rosetta-bridge livré dans les deux images** (claude-pod 0.4.0, agent-gw
+**État :** **pièces jointes du chat livrées côté code (agent-gw, non taguée)** : bouton 📎
+(+ appareil photo) + glisser-déposer + coller ; `POST /api/upload` pose les fichiers dans
+`GW_STATE_DIR/inbox/` (hors repo mémoire, purge TTL), `/api/chat` les résout (garde
+anti-traversée) et préfixe le prompt d'une note anti-injection (D17) — Alfred les lit via
+son outil `Read`. Front rebuildé (bundle + statics à jour). **À faire : tag `agent-gw-v0.21.0`
+→ image → bump du manifeste k8s.** Voir plus bas.
+
+**État (précédent) :** **rosetta-bridge livré dans les deux images** (claude-pod 0.4.0, agent-gw
 0.20.0) : relais stdio→HTTP vers le hub `rosetta.mcp.berard.me` (repo rosetta-mcp, EN
 PROD sur tantive — maps + transit, clés d'API côté serveur), refresh de token
 client_credentials (`agent-alfred`) intégré, stdlib seule — testé e2e en conteneur
@@ -18,7 +25,10 @@ data + groups.tunnel), `.mcp.json` → rosetta-bridge (repo + /workspace du pod)
 bridge vérifié in situ dans le conteneur tunnel (initialize → serverInfo maps).
 
 **Prochaines étapes :**
-- [ ] Après quelques jours de bascule sans accroc : agent-gw 0.21.0 sans `mcp_servers/`, retirer
+- [ ] **Pièces jointes** : taguer `agent-gw-v0.21.0` (CI build l'image) puis bumper `image.tag`
+      dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD déploie. Tester en prod : 📎 sur mobile,
+      drop + coller sur desktop, un envoi fichiers-seuls, un PDF lu par Alfred.
+- [ ] Après quelques jours de bascule sans accroc : agent-gw 0.22.0 sans `mcp_servers/`, retirer
       GOOGLE_MAPS/SNCF/IDFM de `externalSecrets.data` d'alfred-helm.yml
 - [ ] **Rosetta / Google** : scoper le MCP Google en SOUS-AGENT `correspondance`
       (`AgentDefinition.mcpServers`) pour sortir ~6-9k du socle des tours ordinaires —

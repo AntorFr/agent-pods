@@ -1,5 +1,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
+# Required by FastAPI to parse multipart bodies (chat file attachments).
+python-multipart>=0.0.9
 claude-agent-sdk>=0.1
 authlib>=1.3
 itsdangerous>=2.2

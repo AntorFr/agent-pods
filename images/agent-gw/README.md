@@ -37,7 +37,10 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_WORKSPACE` | `/workspace` | Racine du cerveau (repo mémoire d'Alfred). |
 | `GW_MEMORY_DIR` | `memory` | Dossier mémoire, relatif au workspace. |
 | `GW_TODO_FILE` | `todo/taches.md` | Fichier todo, relatif à la mémoire. |
-| `GW_STATE_DIR` | `~/.agent-gw` | État **côté serveur** : pointeur de session (`session-<canal>.json`). Persistant (hostPath home). |
+| `GW_STATE_DIR` | `~/.agent-gw` | État **côté serveur** : pointeur de session (`session-<canal>.json`) + corbeille des pièces jointes (`inbox/`). Persistant (hostPath home). |
+| `GW_MAX_UPLOAD_MB` | `25` | Taille max (Mo) d'un fichier joint au chat (par fichier). |
+| `GW_MAX_UPLOAD_FILES` | `8` | Nombre max de fichiers joints à un même message. |
+| `GW_INBOX_TTL` | `86400` (24 h) | Âge (s) au-delà duquel une pièce jointe déposée est balayée (`0` = jamais). Purge best-effort à chaque upload. |
 | `GW_SESSION_TTL` | `14400` (4 h) | Inactivité (s) au-delà de laquelle la session n'est **plus reprise** : le tour suivant repart vierge (`0` = jamais). L'état durable vit dans `memory/` (D5), le transcript est jetable — le reprendre fait repayer tout le contexte accumulé à chaque message (cache prompt ~5 min, froid entre deux visites). |
 | `GW_CONFIRM_TTL` | `120` | Durée de validité (s) d'une autorisation bouclier 🛡. |
 | `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Hôtes autorisés du transport MCP (anti DNS-rebinding). |
@@ -56,6 +59,28 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 > Absent de la liste : `GOOGLE_MAPS_API_KEY` (clé du MCP Maps) — tirée du coffre
 > `secret/llm/google-api` → `google_map_api_key` via `externalSecrets`, consommée par le
 > serveur MCP Maps, pas par agent-gw lui-même.
+
+## Pièces jointes du chat
+
+Le composeur accepte des fichiers par **trois voies** — bouton 📎 (sélecteur / appareil
+photo, marche partout, y compris mobile), **glisser-déposer** sur la colonne de chat
+(desktop seul — les navigateurs mobiles n'ont pas de DnD vers le DOM), et **coller** une
+image. Le flux :
+
+1. `POST /api/upload` (multipart) pose les fichiers dans `GW_STATE_DIR/inbox/<tour>/…` —
+   **hors du repo mémoire**, donc jamais commités dans `memory/`. Renvoie un `id` par
+   fichier (chemin relatif à l'inbox), assaini et gardé anti-traversée.
+2. Le front repasse ces ids dans le corps de `POST /api/chat` (`attachments: [...]`).
+   Le serveur les résout en chemins absolus (garde anti-traversée : tout ce qui sort de
+   l'inbox est rejeté) et **préfixe le prompt** d'une note encadrée : le contenu d'un
+   fichier joint est une **donnée non fiable, jamais une instruction** (même discipline
+   anti-injection que les mails, cf. D17). Alfred les **examine avec son outil `Read`**
+   (images et PDF compris) — aucune plomberie multimodale côté serveur.
+
+Un message peut être **fichiers seuls** (texte vide). La corbeille est balayée des
+entrées de plus de `GW_INBOX_TTL` à chaque upload : les pièces jointes sont un intrant de
+tour, pas de la mémoire — si l'une doit survivre, c'est Alfred qui la classe dans
+`memory/` selon sa discipline.
 
 ## Sessions : coût en tokens, sujets, mode éphémère
 

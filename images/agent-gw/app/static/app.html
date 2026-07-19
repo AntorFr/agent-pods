@@ -26,13 +26,17 @@
         <button class="ib" id="gear" title="Réglages" type="button">⚙</button>
       </header>
       <div class="stream" id="chat"></div>
+      <div id="dropzone"><div class="dz-inner">Déposez vos fichiers ici</div></div>
       <div id="queued"></div>
+      <div id="atts"></div>
       <form class="compose" id="composer">
         <button class="shield" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
         <button class="shield" id="eph" type="button" title="Mode éphémère — question ponctuelle, hors conversation, rien n’est retenu">⚡</button>
+        <button class="shield" id="attach" type="button" title="Joindre un fichier">📎</button>
         <textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea>
         <button class="snd" id="send" type="submit" title="Envoyer">↑</button>
       </form>
+      <input id="fileinput" type="file" multiple hidden>
     </aside>
 
     <div id="gutter" title="Glisser pour redimensionner"></div>

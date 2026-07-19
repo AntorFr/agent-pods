@@ -124,21 +124,76 @@ const queue = [];
 const queuedEl = $('queued');
 function renderQueued() {
   queuedEl.innerHTML = '';
-  for (const t of queue) { const c = document.createElement('div'); c.className = 'qc'; c.textContent = t; queuedEl.appendChild(c); }
+  for (const q of queue) { const c = document.createElement('div'); c.className = 'qc'; c.textContent = q.text || `📎 ${q.atts.length} fichier${q.atts.length > 1 ? 's' : ''}`; queuedEl.appendChild(c); }
 }
-function submitText(text) { if (busy) { queue.push(text); renderQueued(); return; } sendMessage(text); }
+function submitText(text, atts) { if (busy) { queue.push({ text, atts: atts || [] }); renderQueued(); return; } sendMessage(text, undefined, atts); }
 
-async function sendMessage(text, forceEph) {
+/* ── Pièces jointes ──────────────────────────────────────────────── */
+// Sélectionnées côté client (picker 📎, glisser-déposer, coller), montrées en
+// vignettes avant l'envoi ; poussées à /api/upload au moment de l'envoi, puis
+// leurs ids voyagent dans le corps de /api/chat. Miroir des limites serveur.
+const MAX_ATTS = 8, MAX_ATT_BYTES = 25 * 1024 * 1024;
+const attsEl = $('atts'), fileInput = $('fileinput');
+let pendingAtts = []; // { file, name, kind, url? }
+function attKind(f) { return (/^image\//.test(f.type) || IMG_EXT.test(f.name)) ? 'image' : 'file'; }
+function attExt(name) { return (name.includes('.') ? name.split('.').pop() : '?').slice(0, 4).toUpperCase(); }
+function addFiles(fileList) {
+  for (const f of fileList) {
+    if (pendingAtts.length >= MAX_ATTS) { add('error', `Maximum ${MAX_ATTS} fichiers par message.`); break; }
+    if (f.size > MAX_ATT_BYTES) { add('error', `« ${f.name} » dépasse 25 Mo.`); continue; }
+    const kind = attKind(f);
+    pendingAtts.push({ file: f, name: f.name, kind, url: kind === 'image' ? URL.createObjectURL(f) : null });
+  }
+  renderAtts();
+}
+function renderAtts() {
+  attsEl.innerHTML = '';
+  pendingAtts.forEach((a, i) => {
+    const c = document.createElement('div'); c.className = 'att';
+    c.innerHTML = (a.url ? `<img src="${a.url}" alt="">` : `<span class="ext">${attExt(a.name)}</span>`)
+      + `<span class="an" title="${esc(a.name)}">${esc(a.name)}</span><button class="ax" type="button" title="Retirer">✕</button>`;
+    c.querySelector('.ax').addEventListener('click', () => { if (a.url) URL.revokeObjectURL(a.url); pendingAtts.splice(i, 1); renderAtts(); });
+    attsEl.appendChild(c);
+  });
+}
+// Bulle utilisateur avec, optionnellement, une rangée de vignettes jointes.
+function addUser(text, eph, atts) {
+  const el = document.createElement('div');
+  el.className = 'bub me' + (eph ? ' eph' : '');
+  if (text) el.textContent = text;
+  if (atts && atts.length) {
+    const row = document.createElement('div'); row.className = 'batts';
+    for (const a of atts) {
+      const t = document.createElement('span'); t.className = 'batt'; t.title = a.name;
+      t.innerHTML = a.url ? `<img src="${a.url}" alt="">` : `<span class="ext">${attExt(a.name)}</span>`;
+      row.appendChild(t);
+    }
+    el.appendChild(row);
+  }
+  chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
+}
+
+async function sendMessage(text, forceEph, atts) {
   const eph = forceEph !== undefined ? forceEph : ephOn;
   busy = true;
-  add('user', text, eph);
+  addUser(text, eph, atts);
   const pending = addTyping();
   status.classList.add('busy'); status.title = 'Alfred travaille…';
   try {
+    let attIds = [];
+    if (atts && atts.length) {
+      // Poser les fichiers d'abord ; on ne lance le tour qu'avec leurs ids.
+      const fd = new FormData();
+      for (const a of atts) fd.append('files', a.file, a.name);
+      const up = await fetch('/api/upload', { method: 'POST', headers: headers(false), body: fd });
+      if (up.status === 401) { pending.remove(); if (!onUnauthorized()) await askToken(); return; }
+      if (!up.ok) throw new Error((await up.json().catch(() => ({}))).detail || 'échec de l’envoi des fichiers');
+      attIds = (await up.json()).files.map((f) => f.id);
+    }
     let res;
     const deadline = Date.now() + 180000;
     while (true) {
-      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined, ephemeral: eph || undefined, ephemeral_session: (eph && ephSession) || undefined }) });
+      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined, ephemeral: eph || undefined, ephemeral_session: (eph && ephSession) || undefined, attachments: attIds.length ? attIds : undefined }) });
       if (res.status !== 409) break;
       if (Date.now() > deadline) throw new Error('Alfred est occupé depuis un moment — réessayez.');
       await new Promise((r) => setTimeout(r, 1500));
@@ -170,18 +225,41 @@ async function sendMessage(text, forceEph) {
     status.classList.remove('busy'); status.title = 'Alfred est au repos';
     busy = false;
     syncConfirm();
-    if (queue.length) { const next = queue.shift(); renderQueued(); sendMessage(next); }
+    if (queue.length) { const next = queue.shift(); renderQueued(); sendMessage(next.text, undefined, next.atts); }
   }
 }
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = input.value.trim();
-  if (!text) return;
+  const atts = pendingAtts;
+  if (!text && !atts.length) return;
   input.value = ''; input.style.height = 'auto';
-  submitText(text);
+  pendingAtts = []; renderAtts();
+  submitText(text, atts);
 });
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); } });
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+
+/* ── Joindre : picker 📎, coller, glisser-déposer ────────────────── */
+$('attach').addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files.length) addFiles(fileInput.files); fileInput.value = ''; });
+input.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+// Glisser-déposer sur la colonne de chat (desktop ; les navigateurs mobiles
+// n'ont pas de DnD vers le DOM — d'où le picker 📎 qui, lui, marche partout).
+// On ne réagit qu'à un glissé de FICHIERS ('Files') : les cartes de voyage se
+// glissent en 'text/plain' et ne doivent pas déclencher l'overlay.
+const chatPane = document.querySelector('.chat'), dropzone = $('dropzone');
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+let dragDepth = 0;
+chatPane.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; dropzone.classList.add('on'); });
+chatPane.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+chatPane.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropzone.classList.remove('on'); });
+chatPane.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; dropzone.classList.remove('on'); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+// Un fichier lâché hors de la zone ne doit pas faire naviguer le navigateur.
+['dragover', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (hasFiles(e) && !e.target?.closest?.('.chat')) e.preventDefault(); }));
 $('reset').addEventListener('click', async () => {
   if (!confirm('Repartir sur une session vierge (sans consolidation) ?')) return;
   await fetch('/api/reset', { method: 'POST', headers: headers(false) });

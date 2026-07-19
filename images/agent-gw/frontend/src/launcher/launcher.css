@@ -32,7 +32,7 @@ button{ font:inherit; color:inherit; cursor:pointer; background:none; border:non
 
 /* ── Grille : rail chat | poignée | canvas ─────────────────────────── */
 #shell{ display:flex; height:100dvh; overflow:hidden; }
-.chat{ flex:0 0 var(--rail); min-width:300px; max-width:60%; display:flex; flex-direction:column; min-height:0; background:var(--surface); border-right:1px solid var(--line); }
+.chat{ position:relative; flex:0 0 var(--rail); min-width:300px; max-width:60%; display:flex; flex-direction:column; min-height:0; background:var(--surface); border-right:1px solid var(--line); }
 #gutter{ flex:0 0 6px; cursor:col-resize; position:relative; }
 #gutter::after{ content:""; position:absolute; inset:0 2px; background:var(--line); transition:background .15s; } #gutter:hover::after,#gutter.drag::after{ background:var(--accent); }
 
@@ -60,6 +60,22 @@ button{ font:inherit; color:inherit; cursor:pointer; background:none; border:non
 .bub.me.eph{ background:color-mix(in srgb,var(--accent) 55%,var(--surface2)); border:1px dashed var(--accent); }
 .typing{ display:flex; gap:4px; } .typing span{ width:6px; height:6px; border-radius:50%; background:var(--ink-faint); animation:blink 1.2s infinite; } .typing span:nth-child(2){ animation-delay:.2s; } .typing span:nth-child(3){ animation-delay:.4s; } @keyframes blink{ 0%,60%,100%{ opacity:.25; } 30%{ opacity:1; } }
 #queued{ display:flex; flex-wrap:wrap; gap:6px; padding:0 15px 8px; } #queued:empty{ display:none; } #queued .qc{ font:11.5px var(--mono); padding:3px 9px; border-radius:20px; background:var(--surface2); border:1px solid var(--line); color:var(--ink-soft); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Pièces jointes — bandeau de vignettes avant l'envoi */
+#atts{ display:flex; flex-wrap:wrap; gap:8px; padding:0 15px 8px; } #atts:empty{ display:none; }
+.att{ display:flex; align-items:center; gap:8px; max-width:220px; padding:5px 6px 5px 5px; border-radius:11px; background:var(--surface2); border:1px solid var(--line); }
+.att img{ width:34px; height:34px; border-radius:7px; object-fit:cover; flex:0 0 auto; }
+.att .ext{ width:34px; height:34px; border-radius:7px; display:grid; place-items:center; background:var(--sink); color:var(--ink-soft); font:700 10px var(--mono); flex:0 0 auto; }
+.att .an{ font:12px var(--sans); color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.att .ax{ flex:0 0 auto; width:20px; height:20px; border-radius:50%; border:1px solid var(--line); background:var(--surface); color:var(--ink-faint); font-size:11px; line-height:1; } .att .ax:hover{ color:var(--crit); border-color:var(--crit); }
+/* Vignettes dans la bulle utilisateur une fois envoyée */
+.bub.me .batts{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.bub.me .batt{ width:44px; height:44px; border-radius:8px; overflow:hidden; display:grid; place-items:center; background:rgba(0,0,0,.14); flex:0 0 auto; }
+.bub.me .batt img{ width:100%; height:100%; object-fit:cover; }
+.bub.me .batt .ext{ font:700 10px var(--mono); color:#04222a; }
+/* Overlay de dépôt (glisser-déposer, desktop) — purement visuel, laisse passer les events */
+#dropzone{ position:absolute; inset:0; z-index:8; pointer-events:none; display:none; padding:14px; background:color-mix(in srgb,var(--accent) 12%,var(--surface)); } #dropzone.on{ display:block; }
+#dropzone .dz-inner{ border:2px dashed var(--accent); border-radius:16px; width:100%; height:100%; display:grid; place-items:center; color:var(--accent); font:600 14px var(--sans); }
 
 .compose{ padding:12px 14px; border-top:1px solid var(--line); display:flex; gap:8px; align-items:flex-end; }
 .compose textarea{ flex:1; background:var(--surface2); border:1px solid var(--line); border-radius:15px; padding:9px 13px; color:var(--ink); font:14px var(--sans); resize:none; max-height:120px; } .compose textarea:focus{ outline:none; border-color:var(--accent); }
