@@ -139,7 +139,11 @@ domaines/voyages/
   - **poser/effacer une heure** depuis la fiche de la carte (annotation, sans effet sur l'ordre) ;
   - drag planning → tray (ou « ↩ Rendre aux suggestions » dans la fiche) : elle redevient
     `suggestion` et **son calage saute** (invariant) — on change d'avis sans rien perdre ;
-  - écarter : statut `ecartee`, la carte sort du tray sans disparaître du fichier ;
+  - écarter (✕ du tray, ou « ✕ Écarter » dans la fiche — y compris une confirmée, dont le
+    calage saute) : statut `ecartee`, la carte sort de la vue sans disparaître du fichier ;
+    les écartées restent **consultables au pied du tray** (compteur dépliable) avec
+    « ↺ Reprendre ». La **suppression réelle** d'un item n'est pas un geste UI : elle se
+    demande à Alfred (édition de `voyage.json`) ;
   - **ouvrir** (clic) : la carte se déplie en **fiche** — description d'Alfred (`desc`),
     calage, source (fil Gmail / maps), **documents** (`docs` : carte d'embarquement,
     confirmation…) et lien « ouvrir la page » (`web`). Consultation en surimpression : on ne

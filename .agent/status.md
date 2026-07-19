@@ -19,5 +19,5 @@ module Voyages livré côté corps (spec `VOYAGES.md`).
 - [ ] Test d'intégration sur un Voice PE (désactiver son entité `assist_satellite`
       dans HA d'abord) ; ajuster VAD/timeouts ; voix « alfred » à ajouter dans
       nestor-voice
-- [ ] Côté cerveau (repo Alfred) : décision D26 (canal vocal) + registre vocal
+- [ ] Côté cerveau (repo Alfred) : décision D27 (canal vocal — D26 est pris par les voyages) + registre vocal
 - [ ] Déployer agent-gw refondu (voyages) + créer le premier vrai dossier voyage

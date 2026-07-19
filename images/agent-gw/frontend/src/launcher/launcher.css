@@ -212,6 +212,10 @@ h2.sec{ font:600 18px/1.3 var(--serif); margin:24px 0 10px; }
 .vhour .vhint{ flex-basis:100%; margin-top:0; }
 .vopen{ display:inline-block; border:1px solid var(--line); border-radius:9px; padding:7px 12px; font:600 12px var(--sans); color:var(--ink-soft); text-decoration:none; }
 .vopen:hover{ border-color:var(--accent); color:var(--accent); }
+.vopen.crit:hover{ border-color:var(--crit); color:var(--crit); }
+.eclink{ font:inherit; color:inherit; padding:0; text-decoration:underline dotted; }
+.eclink:hover{ color:var(--ink); }
+.traycard.ec{ opacity:.55; cursor:default; } .traycard.ec:hover{ transform:none; }
 @media (max-width:980px){ .vwrap{ flex-direction:column; } .vtray{ position:static; flex-basis:auto; width:100%; } }
 
 /* ── Mobile : chat plein écran, canvas masqué (règle historique) ─── */

@@ -1124,7 +1124,8 @@ function paintVoyage() {
   const tray = `<aside class="vtray"><div class="th">Suggestions <span class="cnt">${allSug.length}</span></div>
     ${types.length > 1 ? `<div class="facets">${['', ...types].map((tp) => `<button class="pill ${(!tp && !voy.filter) || voy.filter === tp ? 'on' : ''}" data-tf="${esc(tp)}">${tp ? vtypeOf(tp).n : 'Tous'}</button>`).join('')}</div>` : ''}
     <div class="traygrid">${sug.map((i) => `<div class="traycard" draggable="true" title="Clic : fiche · Glisser : confirmer" data-vi="${esc(i.id)}" style="--ic:var(${vtypeOf(i.type).c})"><button class="dis" data-dis="${esc(i.id)}" title="Écarter — conservée, jamais reproposée">✕</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}${i.prix ? `<div class="vmeta"><span class="chip">${esc(i.prix)}</span></div>` : ''}</div></div>`).join('') || '<div class="empty">Rien à trier — demandez des suggestions à Alfred.</div>'}</div>
-    <div class="trayfoot">🖐 Une carte sur un jour = confirmée · une carte du planning ici = rendue aux suggestions${nEc ? ` · ${nEc} écartée${nEc > 1 ? 's' : ''} conservée${nEc > 1 ? 's' : ''}` : ''}</div></aside>`;
+    <div class="trayfoot">🖐 Une carte sur un jour = confirmée · une carte du planning ici = rendue aux suggestions${nEc ? ` · <button class="eclink" data-ectoggle>${nEc} écartée${nEc > 1 ? 's' : ''} ${voy.showEc ? '▾' : '▸'}</button>` : ''}</div>
+    ${voy.showEc && nEc ? `<div class="traygrid">${items.filter((i) => i.statut === 'ecartee').map((i) => `<div class="traycard ec" data-vi="${esc(i.id)}"><button class="dis" data-rest="${esc(i.id)}" title="Reprendre dans les suggestions" style="opacity:1">↺</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}</div></div>`).join('')}</div>` : ''}</aside>`;
 
   page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div></div>`;
 
@@ -1132,6 +1133,9 @@ function paintVoyage() {
   page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
   page.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => { voy.filter = b.dataset.tf || null; paintVoyage(); }));
   page.querySelectorAll('[data-dis]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.dis, statut: 'ecartee' }); }));
+  page.querySelectorAll('[data-rest]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.rest, statut: 'suggestion' }); }));
+  const ecT = page.querySelector('[data-ectoggle]');
+  if (ecT) ecT.addEventListener('click', () => { voy.showEc = !voy.showEc; paintVoyage(); });
   page.querySelectorAll('.vcard,.traycard').forEach((c) => {
     c.addEventListener('click', () => { if (!vdrag) openVFiche(c.dataset.vi); });
     c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.vi); e.dataTransfer.effectAllowed = 'move'; c.classList.add('drag'); vdrag = true; vdragId = c.dataset.vi; });
@@ -1232,11 +1236,15 @@ function openVFiche(id) {
     ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
     ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
     ${it.statut === 'confirme' && !it.debut ? `<div class="vhour"><span class="vby" style="margin:0">Heure</span><input type="time" id="vh-in" value="${esc(String(it.heure || '').replace('h', ':'))}"><button class="vopen" data-sethour>Poser</button>${it.heure ? '<button class="vopen" data-clearhour>Effacer</button>' : ''}<span class="vhint">optionnelle — l’ordre des cartes fait le déroulé, l’heure l’annote</span></div>` : ''}
-    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
+    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut !== 'ecartee' && !it.debut ? `<button class="vopen crit" data-ecarter>✕ Écarter</button>` : ''}${it.statut === 'ecartee' ? `<button class="vopen" data-restfiche>↺ Reprendre dans les suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
     <span style="flex:1"></span><button class="vopen" data-close>Fermer</button></div>`;
   body.querySelector('[data-close]').addEventListener('click', () => { vModal.hidden = true; });
   const untray = body.querySelector('[data-untray]');
   if (untray) untray.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'suggestion' }); });
+  const ecB = body.querySelector('[data-ecarter]');
+  if (ecB) ecB.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'ecartee' }); });
+  const restB = body.querySelector('[data-restfiche]');
+  if (restB) restB.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'suggestion' }); });
   // Poser/effacer l'heure : on refixe rang et jour tels quels, seule l'heure change.
   const setH = body.querySelector('[data-sethour]');
   if (setH) setH.addEventListener('click', () => { const val = body.querySelector('#vh-in').value; vModal.hidden = true; vgesture({ id: it.id, statut: 'confirme', jour: it.jour, ordre: vrank(it), heure: val || null }); });
