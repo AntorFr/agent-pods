@@ -710,6 +710,19 @@ async def chat(request: Request):
             "explicite.]\n\n" + prompt
         )
 
+    # Rebond rosetta : le tour porte l'identité de la personne connectée à la
+    # PWA — un access token frais (audience rosetta), injecté dans l'env du
+    # spawn Claude où rosetta-bridge le présente aux addons user-data
+    # (/google). Résolu AVANT la tâche de fond (la requête meurt avec le SSE).
+    # Sans session SSO ni refresh token : pas d'injection, les addons
+    # génériques vivent sur l'identité machine.
+    turn_env: dict[str, str] = {}
+    session_user = request.session.get("user") if hasattr(request, "session") else None
+    if session_user:
+        user_token = await auth.user_access_token(session_user)
+        if user_token:
+            turn_env["ROSETTA_USER_TOKEN"] = user_token
+
     async def run_turn() -> None:
         async with _query_lock:
             options = ClaudeAgentOptions(
@@ -717,6 +730,7 @@ async def chat(request: Request):
                 resume=eph_resume if ephemeral else _load_session_id(),
                 permission_mode=PERMISSION_MODE,
                 model=model,
+                env=turn_env or None,
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt={"type": "preset", "preset": "claude_code"},

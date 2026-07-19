@@ -6,10 +6,20 @@ gateway falls back to the static bearer token (dev / troubleshooting mode).
 
 Sessions are signed cookies (Starlette SessionMiddleware) carrying only the
 username — the IdP is consulted at login, never per request.
+
+Rebond rosetta : le login demande aussi `offline_access` ; le refresh token
+de CHAQUE utilisateur est rangé côté serveur (~/.agent-gw/oidc-tokens.json,
+jamais dans le cookie) et `user_access_token()` fournit un access token frais
+— injecté par le gateway dans l'env de chaque session Claude, où
+rosetta-bridge le présente aux addons à données utilisateur (/google).
 """
 
+import json
 import os
+import time
+from pathlib import Path
 
+import httpx
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -38,12 +48,82 @@ if oidc_enabled:
         client_id=OIDC_CLIENT_ID,
         client_secret=OIDC_CLIENT_SECRET,
         client_kwargs={
-            "scope": "openid profile email groups",
+            # offline_access -> refresh token, la graine du rebond rosetta.
+            "scope": "openid profile email groups offline_access",
             "code_challenge_method": "S256",
             # Authelia rejects client_secret_post — be explicit.
             "token_endpoint_auth_method": "client_secret_basic",
         },
     )
+
+
+# --- Rebond rosetta : refresh tokens par utilisateur, côté serveur ----------
+
+_STATE_DIR = Path(os.environ.get("GW_STATE_DIR", str(Path.home() / ".agent-gw")))
+_TOKENS_FILE = _STATE_DIR / "oidc-tokens.json"
+
+
+def _load_tokens() -> dict:
+    try:
+        return json.loads(_TOKENS_FILE.read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_tokens(store: dict) -> None:
+    _STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _TOKENS_FILE.write_text(json.dumps(store))
+    _TOKENS_FILE.chmod(0o600)
+
+
+def _remember_tokens(username: str, token: dict) -> None:
+    """Called at login: seed/refresh the user's server-side token entry."""
+    if not token.get("refresh_token"):
+        return  # offline_access not granted (client not migrated yet): no rebond
+    store = _load_tokens()
+    store[username] = {
+        "refresh_token": token["refresh_token"],
+        "access_token": token.get("access_token", ""),
+        "expires_at": time.time() + int(token.get("expires_in", 3600)) - 60,
+    }
+    _save_tokens(store)
+
+
+async def user_access_token(username: str) -> str | None:
+    """A live access token carrying the user's identity (audience rosetta),
+    refreshed silently; None when no session material exists (pre-migration
+    login, revoked grant...) — callers simply skip the injection then."""
+    store = _load_tokens()
+    entry = store.get(username)
+    if not entry:
+        return None
+    if entry.get("access_token") and time.time() < entry.get("expires_at", 0):
+        return entry["access_token"]
+    refresh = entry.get("refresh_token")
+    if not refresh:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"{OIDC_ISSUER.rstrip('/')}/api/oidc/token",
+                data={"grant_type": "refresh_token", "refresh_token": refresh},
+                auth=(OIDC_CLIENT_ID, OIDC_CLIENT_SECRET),
+            )
+    except httpx.HTTPError:
+        return None  # Authelia down: the turn runs without user identity
+    if r.status_code != 200:
+        # Revoked/expired grant: drop the entry, next login re-seeds it.
+        store.pop(username, None)
+        _save_tokens(store)
+        return None
+    data = r.json()
+    entry["access_token"] = data["access_token"]
+    entry["expires_at"] = time.time() + int(data.get("expires_in", 3600)) - 60
+    if data.get("refresh_token"):  # rotation: always keep the latest
+        entry["refresh_token"] = data["refresh_token"]
+    store[username] = entry
+    _save_tokens(store)
+    return entry["access_token"]
 
 
 @router.get("/auth/login")
@@ -66,7 +146,9 @@ async def callback(request: Request):
     groups = userinfo.get("groups") or []
     if OIDC_ALLOWED_GROUP and OIDC_ALLOWED_GROUP not in groups:
         raise HTTPException(status_code=403, detail="group not allowed")
-    request.session["user"] = userinfo.get("preferred_username", "?")
+    username = userinfo.get("preferred_username", "?")
+    _remember_tokens(username, token)
+    request.session["user"] = username
     return RedirectResponse("/")
 
 

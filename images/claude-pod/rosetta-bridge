@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 # Identical copy in images/agent-gw/rosetta-bridge — keep both in sync (the
 # docker build context is images/<name>, so the file cannot be shared).
-"""rosetta-bridge — stdio-to-HTTP MCP relay with OAuth token refresh.
+"""rosetta-bridge — stdio-to-HTTP MCP relay with OAuth token handling.
 
 Claude Code only supports static headers for HTTP MCP servers, but rosetta
 (the MCP hub) wants short-lived OAuth access tokens. This bridge closes the
 gap: Claude talks newline-delimited JSON-RPC on stdio (as with any local MCP
 server), the bridge forwards every message to the hub over HTTPS and handles
-the token lifecycle itself: fetched via client_credentials, kept in memory
-only, renewed before expiry, one retry on 401.
+the tokens itself, in memory only.
+
+Two identities, tried in order:
+  1. ROSETTA_USER_TOKEN — a per-session USER access token injected by the
+     gateway at Claude spawn time (the PWA session rebond). Required by
+     user-data addons (/google), accepted everywhere else too.
+  2. The body's machine identity (AGENT_CLIENT_ID/SECRET, client_credentials),
+     fetched and refreshed against Authelia. Enough for the generic addons.
 
 Standard library only, on purpose: it must run on the bare python3 of every
 agent body image, with zero dependency to keep in sync.
@@ -16,6 +22,7 @@ agent body image, with zero dependency to keep in sync.
 Usage:  rosetta-bridge <addon>          (e.g. rosetta-bridge maps)
 
 Env:
+  ROSETTA_USER_TOKEN                     per-session user identity (optional)
   AGENT_CLIENT_ID / AGENT_CLIENT_SECRET  machine identity (Authelia client)
   ROSETTA_URL        default https://rosetta.mcp.berard.me
   ROSETTA_TOKEN_URL  default https://auth.berard.me/api/oidc/token
@@ -33,9 +40,11 @@ import urllib.request
 
 TIMEOUT = 60.0  # generous: some upstream tools wait on slow provider APIs
 
+USER_TOKEN = os.environ.get("ROSETTA_USER_TOKEN", "")
+
 
 class TokenManager:
-    """Serves a valid bearer token, refreshing it under a lock when stale."""
+    """Serves a valid machine bearer token, refreshing it under a lock."""
 
     def __init__(self):
         self.url = os.environ.get("ROSETTA_TOKEN_URL", "https://auth.berard.me/api/oidc/token")
@@ -79,6 +88,14 @@ def parse_http_response(resp) -> list:
     return [json.loads(body)]
 
 
+def _http_failure(label: str, exc: urllib.error.HTTPError) -> str:
+    try:
+        body = exc.read().decode("utf-8", "replace")[:200]
+    except Exception:
+        body = ""
+    return f"HTTP {exc.code} (identité {label}) {body}".strip()
+
+
 def relay(message: dict, endpoint: str, tokens: TokenManager, out_lock: threading.Lock) -> None:
     data = json.dumps(message).encode()
 
@@ -94,23 +111,47 @@ def relay(message: dict, endpoint: str, tokens: TokenManager, out_lock: threadin
         )
         return urllib.request.urlopen(req, timeout=TIMEOUT)
 
+    attempts = []
+    if USER_TOKEN:
+        attempts.append(("session utilisateur", lambda retry: USER_TOKEN))
+    if tokens.client_id:
+        attempts.append(("machine", lambda retry: tokens.get(force=retry)))
+
+    replies = None
+    failure = "aucune identité configurée (ni ROSETTA_USER_TOKEN ni AGENT_CLIENT_ID)"
     try:
-        try:
-            resp = post(tokens.get())
-        except urllib.error.HTTPError as exc:
-            if exc.code != 401:
-                raise
-            resp = post(tokens.get(force=True))  # stale token: refresh once, retry
-        with resp:
-            replies = parse_http_response(resp)
-    except Exception as exc:  # network, auth, hub down... fail the call, not the bridge
+        for label, supply in attempts:
+            try:
+                resp = post(supply(False))
+            except urllib.error.HTTPError as exc:
+                if exc.code == 401 and label == "machine":
+                    # Stale cached machine token: refresh once, retry.
+                    try:
+                        resp = post(supply(True))
+                    except urllib.error.HTTPError as exc2:
+                        failure = _http_failure(label, exc2)
+                        continue
+                elif exc.code in (401, 403):
+                    # Identity rejected (expired session token, machine token on
+                    # a user-data addon...): try the next identity.
+                    failure = _http_failure(label, exc)
+                    continue
+                else:
+                    raise
+            with resp:
+                replies = parse_http_response(resp)
+            break
+    except Exception as exc:  # network, hub down... fail the call, not the bridge
+        failure = f"{type(exc).__name__}: {exc}"
+
+    if replies is None:
         if "id" not in message:
-            print(f"rosetta-bridge: dropped notification: {exc}", file=sys.stderr, flush=True)
+            print(f"rosetta-bridge: dropped notification: {failure}", file=sys.stderr, flush=True)
             return
         replies = [{
             "jsonrpc": "2.0",
             "id": message["id"],
-            "error": {"code": -32000, "message": f"rosetta-bridge: {type(exc).__name__}: {exc}"},
+            "error": {"code": -32000, "message": f"rosetta-bridge: {failure}"},
         }]
 
     with out_lock:
