@@ -38,6 +38,7 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_MEMORY_DIR` | `memory` | Dossier mémoire, relatif au workspace. |
 | `GW_TODO_FILE` | `todo/taches.md` | Fichier todo, relatif à la mémoire. |
 | `GW_STATE_DIR` | `~/.agent-gw` | État **côté serveur** : pointeur de session (`session-<canal>.json`). Persistant (hostPath home). |
+| `GW_SESSION_TTL` | `14400` (4 h) | Inactivité (s) au-delà de laquelle la session n'est **plus reprise** : le tour suivant repart vierge (`0` = jamais). L'état durable vit dans `memory/` (D5), le transcript est jetable — le reprendre fait repayer tout le contexte accumulé à chaque message (cache prompt ~5 min, froid entre deux visites). |
 | `GW_CONFIRM_TTL` | `120` | Durée de validité (s) d'une autorisation bouclier 🛡. |
 | `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Hôtes autorisés du transport MCP (anti DNS-rebinding). |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_REDIRECT_URI` / `OIDC_ALLOWED_GROUP` | `""` / `""` / `""` / `admins` | Client OIDC Authelia. Dès qu'`OIDC_ISSUER` est posé, l'auth passe en OIDC (le bearer `GW_AUTH_TOKEN` devient inutilisé). |
@@ -55,6 +56,32 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 > Absent de la liste : `GOOGLE_MAPS_API_KEY` (clé du MCP Maps) — tirée du coffre
 > `secret/llm/google-api` → `google_map_api_key` via `externalSecrets`, consommée par le
 > serveur MCP Maps, pas par agent-gw lui-même.
+
+## Sessions : coût en tokens, sujets, mode éphémère
+
+Trois mécanismes bornent la consommation (chaque tour rejoue tout le transcript, cache
+prompt froid entre deux visites — le poids de la session EST le coût marginal du message) :
+
+- **TTL d'inactivité** (`GW_SESSION_TTL`) : passé le délai, le pointeur n'est plus repris,
+  le tour suivant repart sur une session vierge. Alfred redécouvre l'état dans `memory/`
+  (c'est le design, cf. D5) ; `/api/history` devient vide en même temps, la PWA repart
+  propre au rechargement.
+- **Compteur de contexte** (`GET /api/session`) : `context_tokens` = input + cache du
+  **dernier appel API** du transcript — ce que le prochain message repaiera. La PWA
+  l'affiche en pastille indicative (orange ≥ 60k, rouge ≥ 120k) ; agir se fait par les
+  boutons voisins (▤ Sujets, ↺ nouvelle session).
+- **Menu Sujets** (PWA) : la « compaction UX ». Changer de sujet = Alfred **consolide**
+  la conversation dans `memory/` (un tour), la session est **réinitialisée**, puis la
+  fiche `sujets/<x>.md` est **rechargée** en point de reprise. La reprise passe par la
+  mémoire, jamais par un vieux transcript. La liste vient de `sujets/INDEX.md` (titre,
+  dernière activité, accroche) — la table qu'Alfred discipline déjà. Chaque ligne porte
+  un bouton 🗄 : l'archivage est demandé **à l'agent** (skill archivage : distiller,
+  ranger, index, commit) — le front ne déplace jamais le fichier lui-même.
+- **Mode éphémère ⚡** (`POST /api/chat`, `ephemeral: true`) : parenthèse jetable pour les
+  questions ponctuelles (« le RER A est perturbé ? ») — pas de resume du pointeur, pas de
+  sauvegarde : le tour ne paie pas l'historique et ne l'engraisse pas. Un enchaînement
+  reste possible : le front repasse le `session_id` reçu (`ephemeral_session`), gardé en
+  RAM seulement. Les bulles ⚡ (pointillés) disparaissent au rechargement — assumé.
 
 ## Sessions & reprise après sinistre (DR)
 

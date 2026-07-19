@@ -33,13 +33,14 @@ async function askToken() { token = prompt('Jeton d’accès :') || ''; localSto
 /* ── Thème ───────────────────────────────────────────────────────── */
 const savedTheme = localStorage.getItem('gw_theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
-$('theme').addEventListener('click', () => {
+function toggleTheme() {
   const cur = document.documentElement.dataset.theme
     || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   const next = cur === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
   localStorage.setItem('gw_theme', next);
-});
+}
+$('theme').addEventListener('click', toggleTheme);
 
 /* ── Markdown (chat + liens mémoire) — porté de l'ancienne UI ─────── */
 marked.setOptions({ gfm: true, breaks: true });
@@ -94,9 +95,9 @@ document.addEventListener('keydown', (e) => { if (e.key !== 'Enter' && e.key !==
 /* ── Chat ────────────────────────────────────────────────────────── */
 const chat = $('chat'), input = $('input'), status = $('rail-status'), modelSel = $('model');
 const BUB = { agent: 'al', user: 'me', error: 'err' };
-function add(cls, text) {
+function add(cls, text, eph) {
   const el = document.createElement('div');
-  el.className = 'bub ' + (BUB[cls] || cls);
+  el.className = 'bub ' + (BUB[cls] || cls) + (eph ? ' eph' : '');
   if (cls === 'agent') el.appendChild(renderMd(text, '')); else el.textContent = text;
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
@@ -114,6 +115,11 @@ fetch('/api/models').then((r) => r.json()).then(({ models }) => {
 modelSel.addEventListener('change', () => localStorage.setItem('gw_model', modelSel.value));
 
 let busy = false;
+// Mode éphémère ⚡ : la parenthèse jetable. Tant que le toggle est actif, les
+// tours tournent hors conversation principale (pas de resume du pointeur, pas
+// de sauvegarde) ; l'id de la parenthèse ne vit qu'en RAM — recharger la page
+// ou couper le toggle la referme.
+let ephOn = false, ephSession = null;
 const queue = [];
 const queuedEl = $('queued');
 function renderQueued() {
@@ -122,16 +128,17 @@ function renderQueued() {
 }
 function submitText(text) { if (busy) { queue.push(text); renderQueued(); return; } sendMessage(text); }
 
-async function sendMessage(text) {
+async function sendMessage(text, forceEph) {
+  const eph = forceEph !== undefined ? forceEph : ephOn;
   busy = true;
-  add('user', text);
+  add('user', text, eph);
   const pending = addTyping();
   status.classList.add('busy'); status.title = 'Alfred travaille…';
   try {
     let res;
     const deadline = Date.now() + 180000;
     while (true) {
-      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined }) });
+      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined, ephemeral: eph || undefined, ephemeral_session: (eph && ephSession) || undefined }) });
       if (res.status !== 409) break;
       if (Date.now() > deadline) throw new Error('Alfred est occupé depuis un moment — réessayez.');
       await new Promise((r) => setTimeout(r, 1500));
@@ -150,8 +157,9 @@ async function sendMessage(text) {
         const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
         const ev = /^event: (.*)$/m.exec(raw)?.[1];
         const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] || '{}');
-        if (ev === 'text') { add('agent', data.text); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
+        if (ev === 'text') { add('agent', data.text, eph); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
         else if (ev === 'error') add('error', data.message);
+        else if (ev === 'done') { if (data.ephemeral) ephSession = data.session_id; else refreshSession(); }
       }
     }
     if (currentRoute().startsWith('dom/') || currentRoute().startsWith('voyage') || currentRoute() === '') { memIndex = null; wbCache = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
@@ -175,9 +183,128 @@ $('composer').addEventListener('submit', (e) => {
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); } });
 input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
 $('reset').addEventListener('click', async () => {
-  if (!confirm('Repartir sur une session vierge ?')) return;
+  if (!confirm('Repartir sur une session vierge (sans consolidation) ?')) return;
   await fetch('/api/reset', { method: 'POST', headers: headers(false) });
   chat.innerHTML = ''; queue.length = 0; renderQueued();
+  ctxBtn.hidden = true;
+});
+
+/* ── Compteur de contexte (tokens) ───────────────────────────────── */
+// Le poids affiché = input + cache du dernier appel API : ce que chaque
+// nouveau message repaiera. C'est le signal « un reset s'impose ».
+const ctxBtn = $('ctx');
+const fmtTok = (n) => (n >= 1000 ? Math.round(n / 1000) + 'k' : String(n));
+async function refreshSession() {
+  try {
+    const r = await fetch('/api/session', { headers: headers(false), cache: 'no-store' });
+    if (!r.ok) return;
+    const s = await r.json();
+    const n = s.active ? s.context_tokens : null;
+    if (n == null) { ctxBtn.hidden = true; return; }
+    ctxBtn.hidden = false;
+    ctxBtn.textContent = fmtTok(n);
+    ctxBtn.classList.toggle('warn', n >= 60000 && n < 120000);
+    ctxBtn.classList.toggle('hot', n >= 120000);
+    ctxBtn.title = `Poids du contexte : ${n.toLocaleString('fr-FR')} tokens, rejoués à chaque message. Au-delà, changez de sujet (▤) ou repartez à neuf (↺).`;
+  } catch {}
+}
+
+/* ── Mode éphémère ⚡ ─────────────────────────────────────────────── */
+const ephBtn = $('eph');
+const PLACEHOLDER = input.getAttribute('placeholder');
+function setEph(v) {
+  ephOn = v;
+  if (!v) ephSession = null; // la parenthèse se referme
+  ephBtn.classList.toggle('on', v);
+  input.placeholder = v ? 'Question éphémère — rien ne sera retenu…' : PLACEHOLDER;
+}
+ephBtn.addEventListener('click', () => setEph(!ephOn));
+
+/* ── Sujets : reprendre un fil ───────────────────────────────────── */
+// La « compaction UX » : consolider la conversation dans memory/ (si elle a un
+// contenu), repartir sur une session vierge, recharger la fiche du sujet. La
+// reprise passe par la mémoire, jamais par un vieux transcript (D5).
+const sujModal = $('sujets-modal'), sujBody = $('sujets-body');
+function closeSujets() { sujModal.hidden = true; }
+$('sujets-close').addEventListener('click', closeSujets);
+sujModal.addEventListener('click', (e) => { if (e.target === sujModal) closeSujets(); });
+$('sujets').addEventListener('click', openSujets);
+
+async function listSujets() {
+  await loadTree(); await loadIndex();
+  // sujets/INDEX.md — la table qu'Alfred discipline : titre, date, accroche.
+  const meta = new Map();
+  try {
+    const r = await fetch('/api/memory/raw/sujets/INDEX.md', { headers: headers(false), cache: 'no-store' });
+    if (r.ok) {
+      for (const line of (await r.text()).split('\n')) {
+        const m = line.match(/^\|\s*(.+?)\s*\|\s*\[.*?\]\((.+?\.md)\)\s*\|\s*(\S*)\s*\|\s*(.*?)\s*\|/);
+        if (m) meta.set('sujets/' + m[2], { titre: m[1], date: m[3], accroche: m[4] });
+      }
+    }
+  } catch {}
+  const files = (memInfo?.entries || []).filter((e) => !e.dir && e.path.startsWith('sujets/') && isFiche(e.path));
+  return files.map(({ path }) => {
+    const m = meta.get(path) || {};
+    const fm = memIndex.get(path) || {};
+    return { path, titre: m.titre || fm.titre || prettify(path.split('/').pop()), date: m.date || '', accroche: m.accroche || '' };
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.titre.localeCompare(b.titre, 'fr'));
+}
+
+async function openSujets() {
+  sujModal.hidden = false;
+  sujBody.innerHTML = '<div class="row">chargement…</div>';
+  const items = await listSujets();
+  if (!items.length) { sujBody.innerHTML = '<div class="row">Aucun sujet en cours.</div>'; return; }
+  const box = document.createElement('div'); box.className = 'sujlist';
+  for (const it of items) {
+    const row = document.createElement('div'); row.className = 'suj'; row.setAttribute('role', 'button'); row.tabIndex = 0;
+    row.innerHTML = `<span class="body"><span class="st1"><b>${esc(it.titre)}</b>${it.date ? `<span class="when">${esc(it.date)}</span>` : ''}</span>${it.accroche ? `<span class="hook">${esc(it.accroche)}</span>` : ''}</span>`;
+    const arch = document.createElement('button'); arch.type = 'button'; arch.className = 'arch';
+    arch.title = `Archiver « ${it.titre} »`; arch.textContent = '🗄';
+    arch.addEventListener('click', (e) => { e.stopPropagation(); archiveSujet(it); });
+    row.appendChild(arch);
+    row.addEventListener('click', () => switchSujet(it));
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchSujet(it); } });
+    box.appendChild(row);
+  }
+  sujBody.innerHTML = ''; sujBody.appendChild(box);
+}
+
+async function consolidateThenReset() {
+  // Consolider seulement s'il y a une vraie conversation (les bulles ⚡ ne
+  // comptent pas : la parenthèse éphémère n'a rien à consigner).
+  if (chat.querySelector('.bub:not(.eph)')) {
+    await sendMessage('Avant de tourner la page : consolide dans memory/ ce qui doit survivre de cette conversation (fiches, todo, index concernés), puis confirme en une ligne.', false);
+  }
+  await fetch('/api/reset', { method: 'POST', headers: headers(false) });
+  chat.innerHTML = ''; queue.length = 0; renderQueued();
+  ctxBtn.hidden = true;
+}
+
+async function switchSujet(it) {
+  if (busy) return;
+  closeSujets();
+  setEph(false);
+  await consolidateThenReset();
+  submitText(`Reprenons le sujet « ${it.titre} » (memory/${it.path}). Relis la fiche et fais-moi un point de reprise bref : où on en est, prochaine étape.`);
+}
+
+// L'archivage est un GESTE D'AGENT (skill archivage : distiller, ranger,
+// index, commit) — le front ne déplace jamais le fichier lui-même. Tour
+// normal dans la conversation courante, pas de reset.
+function archiveSujet(it) {
+  if (busy) return;
+  if (!confirm(`Archiver « ${it.titre} » ? Alfred distille ce qui doit survivre, puis range le sujet dans l'archive.`)) return;
+  closeSujets();
+  setEph(false);
+  submitText(`Archive le sujet « ${it.titre} » (memory/${it.path}) : distille ce qui doit survivre (todo, domaines), déplace la fiche dans sujets/archive/ et mets à jour les index.`);
+}
+
+$('sujets-fresh').addEventListener('click', async () => {
+  if (busy) return;
+  closeSujets();
+  await consolidateThenReset();
 });
 
 /* ── Bouclier (actions sensibles) ────────────────────────────────── */
@@ -1254,8 +1381,15 @@ function openVFiche(id) {
 }
 
 /* ── Tunnel VS Code ──────────────────────────────────────────────── */
+/* ── Réglages ⚙ (thème, tunnel VS Code) ──────────────────────────── */
+const setModal = $('settings-modal');
+$('gear').addEventListener('click', () => { setModal.hidden = false; });
+$('settings-close').addEventListener('click', () => { setModal.hidden = true; });
+setModal.addEventListener('click', (e) => { if (e.target === setModal) setModal.hidden = true; });
+$('set-theme').addEventListener('click', toggleTheme);
+
 const tunnelModal = $('tunnel-modal'), tunnelBody = $('tunnel-body');
-$('vsc').addEventListener('click', () => { tunnelModal.hidden = false; refreshTunnel(); });
+$('vsc').addEventListener('click', () => { setModal.hidden = true; tunnelModal.hidden = false; refreshTunnel(); });
 $('tunnel-close').addEventListener('click', () => { tunnelModal.hidden = true; });
 $('tunnel-refresh').addEventListener('click', refreshTunnel);
 tunnelModal.addEventListener('click', (e) => { if (e.target === tunnelModal) tunnelModal.hidden = true; });
@@ -1266,6 +1400,7 @@ async function refreshTunnel() {
   try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (!r.ok) throw new Error(r.status); t = await r.json(); }
   catch (e) { tunnelBody.innerHTML = '<div class="row">État indisponible (' + esc(String(e)) + ').</div>'; return; }
   $('vsc').classList.toggle('pending', !!t.pending);
+  $('gear').classList.toggle('pending', !!t.pending);
   tunnelBody.innerHTML = '';
   if (!t.available) { tunnelBody.innerHTML = '<div class="row">Pas de journal de tunnel (image claude-pod ≥ 0.2.0 requise).</div>'; return; }
   if (t.pending && t.code) {
@@ -1279,7 +1414,7 @@ async function refreshTunnel() {
   }
   if (t.openUrl) { const a = document.createElement('a'); a.className = 'golink sub'; a.href = t.openUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Ouvrir dans vscode.dev →'; tunnelBody.appendChild(a); }
 }
-async function pollTunnel() { try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (r.ok) { const t = await r.json(); $('vsc').classList.toggle('pending', !!t.pending); } } catch {} }
+async function pollTunnel() { try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (r.ok) { const t = await r.json(); $('vsc').classList.toggle('pending', !!t.pending); $('gear').classList.toggle('pending', !!t.pending); } } catch {} }
 setInterval(pollTunnel, 120000);
 
 /* ── Boot ────────────────────────────────────────────────────────── */
@@ -1289,6 +1424,7 @@ window.addEventListener('hashchange', renderRoute);
   renderRoute();
   syncConfirm();
   pollTunnel();
+  refreshSession();
   // Restaure la conversation visible depuis le transcript serveur.
   try {
     const r = await fetch('/api/history', { headers: headers(false) });

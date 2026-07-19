@@ -43,6 +43,11 @@ SESSION_SECRET = os.environ.get("GW_SESSION_SECRET") or secrets.token_hex(32)
 # unattended. The pod's isolation (dedicated container, mounted volumes)
 # is the actual boundary.
 PERMISSION_MODE = os.environ.get("GW_PERMISSION_MODE", "bypassPermissions")
+# Idle sessions are not resumed past this age (seconds; 0 disables). The
+# durable state lives in memory/ (D5) — the transcript is disposable, and
+# resuming a days-old conversation makes every small turn pay the whole
+# accumulated context (the prompt cache TTL is ~5 min, so it is cold anyway).
+SESSION_TTL = int(os.environ.get("GW_SESSION_TTL", str(4 * 3600)))
 # Models offered in the PWA dropdown, as "Label:model" pairs. CLI aliases
 # (opus, sonnet, haiku) always resolve to the latest model of the family,
 # so the list stays current without a rebuild. "Auto" (no model sent) is
@@ -122,14 +127,28 @@ def _session_file() -> Path:
 
 def _load_session_id() -> str | None:
     try:
-        return json.loads(_session_file().read_text())["session_id"]
+        f = _session_file()
+        data = json.loads(f.read_text())
+        session_id = data["session_id"]
+        # Ancien format sans last_used : le mtime du pointeur fait foi.
+        last_used = float(data.get("last_used") or f.stat().st_mtime)
     except (OSError, KeyError, ValueError):
         return None
+    if SESSION_TTL and time.time() - last_used > SESSION_TTL:
+        return None  # session périmée : on repart vierge, memory/ porte l'état
+    return session_id
 
 
 def _save_session_id(session_id: str) -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    _session_file().write_text(json.dumps({"session_id": session_id}))
+    _session_file().write_text(
+        json.dumps({"session_id": session_id, "last_used": time.time()})
+    )
+
+
+def _transcript_file(session_id: str) -> Path:
+    slug = re.sub(r"[^A-Za-z0-9]", "-", WORKSPACE)
+    return Path.home() / ".claude" / "projects" / slug / f"{session_id}.jsonl"
 
 
 def _sse(event: str, data: dict) -> str:
@@ -184,8 +203,7 @@ async def history(limit: int = 300):
     session_id = _load_session_id()
     if not session_id:
         return {"messages": []}
-    slug = re.sub(r"[^A-Za-z0-9]", "-", WORKSPACE)
-    f = Path.home() / ".claude" / "projects" / slug / f"{session_id}.jsonl"
+    f = _transcript_file(session_id)
     if not f.is_file():
         return {"messages": []}
     out = []
@@ -219,6 +237,37 @@ async def history(limit: int = 300):
             continue
         out.append({"role": obj["type"], "text": text, "ts": obj.get("timestamp")})
     return {"messages": out[-limit:]}
+
+
+@app.get("/api/session")
+async def session_info():
+    """Poids de la session courante, pour le compteur de la PWA. Le chiffre
+    utile est le CONTEXTE du dernier appel API (input + cache) : c'est ce que
+    chaque nouveau message repaiera — pas un cumul du tour, que le harnais
+    gonfle d'un appel par étape d'outil."""
+    session_id = _load_session_id()
+    if not session_id:
+        return {"active": False}
+    f = _transcript_file(session_id)
+    last_usage = None
+    if f.is_file():
+        for line in f.read_text(errors="replace").splitlines():
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                continue
+            if obj.get("type") != "assistant":
+                continue
+            u = (obj.get("message") or {}).get("usage")
+            if u:
+                last_usage = u
+    context = None
+    if last_usage:
+        context = sum(
+            int(last_usage.get(k) or 0)
+            for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+        )
+    return {"active": True, "context_tokens": context, "ttl": SESSION_TTL}
 
 
 # Workbooks: per-project JSON emitted by the agent under the memory dir
@@ -525,6 +574,14 @@ async def chat(request: Request):
     model = (body.get("model") or "").strip() or None
     if model and model not in MODEL_CHOICES:
         raise HTTPException(status_code=400, detail="unknown model")
+    # Mode éphémère : parenthèse jetable à côté de la conversation principale
+    # (« le RER A est perturbé ? »). Pas de resume du pointeur, pas de sauvegarde
+    # — le tour ne paie pas l'historique accumulé et ne l'engraisse pas. Le
+    # front peut chaîner une suite en repassant le session_id reçu dans `done`.
+    ephemeral = bool(body.get("ephemeral"))
+    eph_resume = (body.get("ephemeral_session") or "").strip() or None
+    if eph_resume and not re.fullmatch(r"[A-Za-z0-9-]{8,64}", eph_resume):
+        raise HTTPException(status_code=400, detail="bad ephemeral_session")
     if _query_lock.locked():
         raise HTTPException(status_code=409, detail="agent busy, retry later")
 
@@ -538,11 +595,19 @@ async def chat(request: Request):
     # temps → 409, que le front fait patienter).
     out: asyncio.Queue[str | None] = asyncio.Queue()
 
+    prompt = message
+    if ephemeral:
+        prompt = (
+            "[Mode éphémère : question ponctuelle, hors conversation courante. "
+            "Réponds directement, sans rien consigner dans memory/ sauf demande "
+            "explicite.]\n\n" + message
+        )
+
     async def run_turn() -> None:
         async with _query_lock:
             options = ClaudeAgentOptions(
                 cwd=WORKSPACE,
-                resume=_load_session_id(),
+                resume=eph_resume if ephemeral else _load_session_id(),
                 permission_mode=PERMISSION_MODE,
                 model=model,
                 # Behave like Claude Code: full system prompt + the
@@ -551,7 +616,7 @@ async def chat(request: Request):
                 setting_sources=["project"],
             )
             try:
-                async for msg in query(prompt=message, options=options):
+                async for msg in query(prompt=prompt, options=options):
                     if isinstance(msg, AssistantMessage):
                         for block in msg.content:
                             # « No response requested. » est un artefact du
@@ -564,13 +629,15 @@ async def chat(request: Request):
                             ):
                                 await out.put(_sse("text", {"text": block.text}))
                     elif isinstance(msg, ResultMessage):
-                        _save_session_id(msg.session_id)
+                        if not ephemeral:  # la parenthèse ⚡ ne touche pas le pointeur
+                            _save_session_id(msg.session_id)
                         await out.put(
                             _sse(
                                 "done",
                                 {
                                     "session_id": msg.session_id,
                                     "duration_ms": msg.duration_ms,
+                                    "ephemeral": ephemeral,
                                 },
                             )
                         )

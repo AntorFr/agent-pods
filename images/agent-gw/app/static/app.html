@@ -16,17 +16,20 @@
     <aside class="chat">
       <header class="brand">
         <button class="crestbtn" id="home" title="Accueil" type="button"><span class="crest"><svg viewBox="0 0 100 100" fill="currentColor"><path d="M50 53 L27 39 v27 z M50 53 L73 39 v27 z"/><circle cx="50" cy="53" r="7"/></svg></span></button>
-        <button class="namebtn" id="home2" type="button"><b>Alfred</b><span class="tag" style="display:block">à votre service</span></button>
+        <button class="namebtn" id="home2" type="button"><b>Alfred</b></button>
         <span class="spacer"></span>
         <select id="model" title="Modèle"></select>
+        <span class="ctxpill" id="ctx" hidden title="Poids du contexte de la conversation"></span>
         <span id="rail-status" title="Alfred est au repos"></span>
-        <button class="ib" id="vsc" title="Tunnel VS Code" type="button">⧉</button>
-        <button class="ib" id="reset" title="Nouvelle session" type="button">↺</button>
+        <button class="ib" id="sujets" title="Sujets — reprendre un fil" type="button">▤</button>
+        <button class="ib" id="reset" title="Nouvelle session (sans consolidation)" type="button">↺</button>
+        <button class="ib" id="gear" title="Réglages" type="button">⚙</button>
       </header>
       <div class="stream" id="chat"></div>
       <div id="queued"></div>
       <form class="compose" id="composer">
         <button class="shield" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
+        <button class="shield" id="eph" type="button" title="Mode éphémère — question ponctuelle, hors conversation, rien n’est retenu">⚡</button>
         <textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea>
         <button class="snd" id="send" type="submit" title="Envoyer">↑</button>
       </form>
@@ -42,6 +45,31 @@
       </div>
       <div class="scroll"><div class="view" id="view"></div></div>
     </main>
+  </div>
+
+  <div class="modal" id="settings-modal" hidden>
+    <div class="card">
+      <h2>Réglages</h2>
+      <div class="setlist">
+        <button id="set-theme" type="button">◐ Thème clair / sombre</button>
+        <button id="vsc" type="button">⧉ Tunnel VS Code</button>
+      </div>
+      <div class="actions">
+        <button id="settings-close" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="sujets-modal" hidden>
+    <div class="card">
+      <h2>Reprendre un sujet</h2>
+      <div class="row">Alfred consolide la conversation en cours dans la mémoire, repart sur une session vierge et relit la fiche du sujet choisi.</div>
+      <div id="sujets-body"><div class="row">chargement…</div></div>
+      <div class="actions">
+        <button id="sujets-fresh" type="button">🧹 Consolider &amp; repartir à neuf</button>
+        <button id="sujets-close" type="button">Fermer</button>
+      </div>
+    </div>
   </div>
 
   <div class="modal" id="tunnel-modal" hidden>
