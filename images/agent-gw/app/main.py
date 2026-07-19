@@ -213,6 +213,10 @@ async def history(limit: int = 300):
         # skip tool-only turns and harness-injected wrappers (<system-reminder>…)
         if not text or text.startswith("<"):
             continue
+        # Artefact du harnais après un tour interrompu (mobile qui coupe la
+        # connexion) — pas une parole de l'agent, jamais rejoué.
+        if text == "No response requested.":
+            continue
         out.append({"role": obj["type"], "text": text, "ts": obj.get("timestamp")})
     return {"messages": out[-limit:]}
 
@@ -524,7 +528,17 @@ async def chat(request: Request):
     if _query_lock.locked():
         raise HTTPException(status_code=409, detail="agent busy, retry later")
 
-    async def stream():
+    # Le tour tourne dans une tâche de fond DÉCOUPLÉE de la réponse HTTP : sur
+    # mobile, verrouiller l'écran tue la connexion SSE, et un générateur annulé
+    # avortait le tour en plein vol — transcript laissé « ouvert », réponse
+    # perdue, et à la reprise le harnais injectait « Continue from where you
+    # left off. » auquel le modèle répond « No response requested. » (la bulle
+    # parasite). Ici la tâche va au bout quoi qu'il arrive au client ; le
+    # verrou reste tenu jusqu'à la fin du tour (un nouveau message pendant ce
+    # temps → 409, que le front fait patienter).
+    out: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def run_turn() -> None:
         async with _query_lock:
             options = ClaudeAgentOptions(
                 cwd=WORKSPACE,
@@ -540,19 +554,41 @@ async def chat(request: Request):
                 async for msg in query(prompt=message, options=options):
                     if isinstance(msg, AssistantMessage):
                         for block in msg.content:
-                            if isinstance(block, TextBlock) and block.text:
-                                yield _sse("text", {"text": block.text})
+                            # « No response requested. » est un artefact du
+                            # harnais (réparation de tour interrompu), pas une
+                            # parole d'Alfred — jamais montré.
+                            if (
+                                isinstance(block, TextBlock)
+                                and block.text
+                                and block.text.strip() != "No response requested."
+                            ):
+                                await out.put(_sse("text", {"text": block.text}))
                     elif isinstance(msg, ResultMessage):
                         _save_session_id(msg.session_id)
-                        yield _sse(
-                            "done",
-                            {
-                                "session_id": msg.session_id,
-                                "duration_ms": msg.duration_ms,
-                            },
+                        await out.put(
+                            _sse(
+                                "done",
+                                {
+                                    "session_id": msg.session_id,
+                                    "duration_ms": msg.duration_ms,
+                                },
+                            )
                         )
             except Exception as exc:  # surfaced to the client, not swallowed
-                yield _sse("error", {"message": str(exc)})
+                await out.put(_sse("error", {"message": str(exc)}))
+            finally:
+                await out.put(None)
+
+    asyncio.create_task(run_turn())
+
+    async def stream():
+        # Simple lecteur de la file ; si le client décroche, ce générateur meurt
+        # mais run_turn continue seule jusqu'au bout du tour.
+        while True:
+            item = await out.get()
+            if item is None:
+                break
+            yield item
 
     return StreamingResponse(
         stream(),
