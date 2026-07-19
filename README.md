@@ -11,6 +11,7 @@ from the workspace you mount, not from the image.
 |---|---|
 | [`claude-pod`](images/claude-pod/) | Agent body: VS Code tunnel (outbound-only) + Claude Code CLI + git/ripgrep. No inbound port. |
 | [`agent-gw`](images/agent-gw/) | Mobile chat gateway: FastAPI + PWA frontend, driving the Claude Agent SDK with one persisted session per channel. |
+| [`alfred-voice`](images/alfred-voice/) | Voice satellite server: drives ESPHome `voice_assistant` devices over the native API (in HA's place), Wyoming STT/TTS, wake-word routing to the agent gateway (async ack + announce) or Home Assistant. |
 
 Published to GHCR: `ghcr.io/antorfr/<image>`.
 

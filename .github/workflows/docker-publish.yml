@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [claude-pod, agent-gw]
+        image: [claude-pod, agent-gw, alfred-voice]
     steps:
       # On a tag push, build only the image the tag belongs to
       - name: Skip images not matching this tag
