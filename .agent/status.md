@@ -12,11 +12,13 @@ des clés de l'env après bascule vérifiée). ⚠️ Le pod tourne en agent-gw 
 éphémère ⚡, Réglages ⚙) est taguée mais jamais déployée → déployer 0.20.0 l'embarque.
 Avant : alfred-voice 0.1.0 déployé ; module Voyages livré (spec `VOYAGES.md`).
 
+**Bascule rosetta FAITE (2026-07-20)** : pod alfred en agent-gw 0.20.0 + claude-pod
+0.4.0, identité `agent-alfred` via coffre (`oidc/agent-alfred`, externalSecrets
+data + groups.tunnel), `.mcp.json` → rosetta-bridge (repo + /workspace du pod),
+bridge vérifié in situ dans le conteneur tunnel (initialize → serverInfo maps).
+
 **Prochaines étapes :**
-- [ ] **Bascule rosetta** : bump alfred-helm.yml (agent-gw 0.20.0 + claude-pod 0.4.0,
-      env AGENT_CLIENT_ID/SECRET sur gateway + tunnel) + `.mcp.json` → rosetta-bridge
-      — redémarrage du pod alfred à coordonner (embarque l'UX 0.19.0)
-- [ ] Après bascule vérifiée : agent-gw 0.21.0 sans `mcp_servers/`, retirer
+- [ ] Après quelques jours de bascule sans accroc : agent-gw 0.21.0 sans `mcp_servers/`, retirer
       GOOGLE_MAPS/SNCF/IDFM de `externalSecrets.data` d'alfred-helm.yml
 - [ ] **Rosetta / Google** : scoper le MCP Google en SOUS-AGENT `correspondance`
       (`AgentDefinition.mcpServers`) pour sortir ~6-9k du socle des tours ordinaires —
