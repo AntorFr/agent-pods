@@ -487,18 +487,17 @@ function labelMemLinks(root) {
     a.textContent = (fm && fm.titre) || prettify(full.split('/').pop());
   });
 }
+// Compteur de la tuile d'accueil : dérivé des fiches type:tache (même source que la vue todo).
 async function todoStats() {
   try {
-    const r = await fetch('/api/memory/raw/' + (memInfo?.todo || 'todo/taches.md'), { headers: headers(false) });
-    if (!r.ok) return null;
-    const md = await r.text();
+    await loadIndex();
+    if (!memIndex) return null;
     const today = new Date().toISOString().slice(0, 10);
-    let total = 0, late = 0, active = false;
-    for (const line of md.split('\n')) {
-      if (/^##\s+Fait/i.test(line)) { active = false; continue; }
-      if (/^##\s/.test(line)) { active = true; continue; }
-      const t = active && line.match(/^- \[ \]\s+(.*)/);
-      if (t) { total++; const d = t[1].match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})/); if (d && d[1] < today) late++; }
+    let total = 0, late = 0;
+    for (const [, fm] of memIndex) {
+      if (fm.type !== 'tache' || (fm.done != null && fm.done !== '' && fm.done !== false && fm.done !== 'false')) continue;
+      total++;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(fm.due || '') && fm.due < today) late++;
     }
     return { total, late };
   } catch { return null; }
@@ -570,6 +569,7 @@ function renderRoute() {
   if (route === 'voyages' || route === 'dom/voyages') return renderVoyagesHub();
   if (route.startsWith('voyage/')) return renderVoyage(decodeURIComponent(route.slice(7)));
   if (route.startsWith('dom/')) return renderDomain(route.slice(4));
+  if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
   if (route === 'todo') return renderTodo();
   if (route === 'atelier') return renderAtelierHub();
   if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));
@@ -862,76 +862,142 @@ async function renderFiche(path) {
   page.innerHTML = ''; page.appendChild(wrap);
 }
 
-/* ── App Todo (port du parseur de l'ancienne UI) ─────────────────── */
-function mdInline(text) {
-  const src = text.replace(/\[\[([^\]]+)\]\]/g, (_, t) => `[${t.trim()}](/mem/${t.trim()})`);
-  return DOMPurify.sanitize(marked.parseInline(src));
-}
-function taskHTML(it, today) {
-  let text = it.text;
-  const due = text.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})([^)]*)\)/);
-  text = text.replace(/—?\s*\(échéance:[^)]*\)/, '').replace(/\*\(ajouté[^)]*\)\*/, '').trim();
-  const clean = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\[|\]\]/g, '');
-  const chips = [];
-  if (due) {
-    const d = due[1], late = d < today;
-    const lbl = d === today ? "aujourd'hui" : d;
-    chips.push(`<span class="chip ${late ? 'late' : 'due'}">${late ? '⚠ ' : ''}${esc(lbl)}${esc((due[2] || '').replace(/^,\s*/, ' · '))}</span>`);
+/* ── App Todo — base unique (type:tache) + listes curées (type:liste) + vues dynamiques ──
+ * Non-duplication (D27) : la base = les fiches type:tache ; une liste curée ne porte que
+ * des refs (ids), jamais le texte d'une tâche ; les vues dynamiques sont CALCULÉES ici, rien
+ * n'est stocké. Un geste (cocher, retirer/ajouter, créer/supprimer une liste) n'écrit JAMAIS
+ * la mémoire : il compose un message à Alfred, seul scribe. Source : /api/memory/index. */
+const TODO_TODAY = () => new Date().toISOString().slice(0, 10);
+const slugOf = (p) => p.replace(/.*\//, '').replace(/\.md$/i, '');
+const asList = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+const isDone = (v) => v != null && v !== '' && v !== false && v !== 'false';
+const isDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+const estMin = (est) => { if (!est) return null; const h = String(est).match(/(\d+)\s*h/i); if (h) return +h[1] * 60; const m = String(est).match(/(\d+)\s*min/i); return m ? +m[1] : null; };
+// Un geste : jamais d'écriture directe — on pré-remplit le composer pour Alfred.
+function ask(text) { input.value = text; input.focus(); input.dispatchEvent(new Event('input')); }
+
+// Construit le modèle todo depuis le dérivé frontmatter. Rechargé FRAIS à chaque entrée :
+// un geste précédent a pu faire éditer la mémoire par Alfred.
+async function todoModel() {
+  memIndex = null; await loadIndex();
+  const BASE = {}, CURATED = [], TITLE = {};
+  for (const [path, fm] of (memIndex || new Map())) {
+    const id = slugOf(path);
+    if (!(id in TITLE)) TITLE[id] = fm.titre || prettify(id);
+    if (fm.type === 'tache') {
+      BASE[id] = {
+        id, path, t: fm.titre || prettify(id),
+        due: fm.due || null, est: fm.est || null, pri: fm.pri || null,
+        dep: fm.dep || null, blk: fm.blk || null, project: fm.projet || null,
+        sub: asList(fm.sub), done: isDone(fm.done),
+        dom: fm.domaine || (Array.isArray(fm.tags) && fm.tags[0]) || null,
+      };
+    } else if (fm.type === 'liste') {
+      CURATED.push({ id, path, stat: true, name: fm.titre || prettify(id), ico: fm.ico || '▤',
+        color: fm.color || '--todo', desc: fm.desc || '', refs: asList(fm.refs) });
+    }
   }
-  return `<div class="task${it.done ? ' done' : ''}"><button class="cbox${it.done ? ' on' : ''}" data-mark="${esc(clean)}">✓</button><div class="bd"><div class="tt">${mdInline(text)}</div>${chips.length ? `<div class="meta">${chips.join('')}</div>` : ''}</div></div>`;
+  const isSub = (id) => Object.values(BASE).some((x) => x.sub.includes(id));
+  const allIds = () => Object.keys(BASE).filter((id) => !isSub(id));
+  const today = TODO_TODAY();
+  const DYN = [
+    { id: 'base', stat: false, name: 'Toute la base', ico: '▦', color: '--search', desc: 'La source unique', q: allIds },
+    { id: 'retard', stat: false, name: 'En retard', ico: '⚠️', color: '--crit', desc: 'Échéance dépassée', q: () => allIds().filter((id) => isDate(BASE[id].due) && BASE[id].due < today && !BASE[id].done) },
+    { id: 'rapides', stat: false, name: 'Rapides', ico: '◷', color: '--good', desc: 'Moins de 30 min', q: () => allIds().filter((id) => { const m = estMin(BASE[id].est); return m != null && m <= 30 && !BASE[id].done; }) },
+    { id: 'bloquees', stat: false, name: 'Bloquées', ico: '⏸', color: '--warn', desc: 'En attente', q: () => allIds().filter((id) => BASE[id].blk && !BASE[id].done) },
+  ];
+  const LISTS = {};
+  for (const L of [...CURATED, ...DYN]) LISTS[L.id] = L;
+  const listOf = (id) => CURATED.filter((L) => L.refs.includes(id));
+  return { BASE, CURATED, DYN, LISTS, TITLE, isSub, allIds, listOf };
 }
+
+function chipsOf(x) {
+  const c = [];
+  if (isDate(x.due)) { const late = x.due < TODO_TODAY(); c.push(`<span class="chip ${late ? 'late' : 'due'}">${late ? '⚠ en retard · ' : ''}${esc(x.due)}</span>`); }
+  else if (x.due) c.push(`<span class="chip due">${esc(x.due)}</span>`);
+  if (x.dep) c.push(`<span class="chip dep">↳ ${esc(x.dep)}</span>`);
+  if (x.blk) c.push(`<span class="chip blk">⏸ ${esc(x.blk)}</span>`);
+  if (x.est) c.push(`<span class="chip">◷ ${esc(x.est)}</span>`);
+  return c;
+}
+// mem: montre les pastilles « dans quelles listes » (renvoi inverse) + le projet — la
+// non-duplication rendue visible. list: active le ✕ (retirer de CETTE liste curée).
+function taskHTML(M, id, { sub = false, dom = false, mem = false, list = null } = {}) {
+  const x = M.BASE[id]; if (!x) return '';
+  const ex = [];
+  if (dom && x.dom) ex.push(`<span class="chip dom">${esc(x.dom)}</span>`);
+  if (mem) {
+    const f = M.listOf(id);
+    if (f.length) ex.push(`<span class="inlists"><span class="dot"></span>${f.map((L) => esc(L.name)).join(' · ')}</span>`);
+    if (x.project) ex.push(`<span class="chip dom">▷ ${esc(M.TITLE[x.project] || x.project)}</span>`);
+  }
+  const meta = [...chipsOf(x), ...ex];
+  return `<div class="task${sub ? ' sub' : ''}${x.done ? ' done' : ''}"><span class="pri ${x.pri || ''}"></span>`
+    + `<button class="cbox ${x.done ? 'on' : ''}" data-id="${esc(id)}" title="Marquer faite">✓</button>`
+    + `<div class="bd"><div class="tt">${esc(x.t)}</div>${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}</div>`
+    + (list ? `<button class="rmv" data-rm="${esc(id)}" title="Retirer de la liste">✕</button>` : '') + '</div>';
+}
+
+// Landing : la galerie de listes (curées + dynamiques).
 async function renderTodo() {
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Todo', hash: '#/todo' }]);
   page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
-  if (!memInfo) await loadTree();
-  const todoPath = memInfo?.todo;
-  if (!todoPath) { page.innerHTML = '<div class="wrap"><div class="empty">Pas de fichier todo.</div></div>'; return; }
-  let md;
-  try { const r = await fetch('/api/memory/raw/' + todoPath, { headers: headers(false) }); md = await r.text(); }
-  catch { page.innerHTML = '<div class="wrap"><div class="empty">Todo indisponible.</div></div>'; return; }
-  const sections = []; let cur = null, item = null;
-  for (const line of md.split('\n')) {
-    const h = line.match(/^##\s+(.*)/);
-    if (h) { cur = { title: h[1], items: [] }; sections.push(cur); item = null; continue; }
-    if (!cur) continue;
-    const t = line.match(/^- \[([ xX])\]\s+(.*)/);
-    if (t) { item = { done: t[1] !== ' ', text: t[2] }; cur.items.push(item); continue; }
-    if (item && /^\s+\S/.test(line) && !/^\s*[-*#>]/.test(line)) item.text += ' ' + line.trim(); else item = null;
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const all = sections.flatMap((s) => s.items);
-  const dueOf = (t) => { const m = t.match(/\(échéance:\s*(\d{4}-\d{2}-\d{2})/); return m ? m[1] : null; };
-  // Format réel du contrat todo (voir en-tête de todo/taches.md) : (durée: ~Xh) / (durée: X min).
-  const estOf = (t) => { const m = t.match(/\(durée\s*:?\s*~?\s*(\d+)\s*min/i); if (m) return +m[1]; const h = t.match(/\(durée\s*:?\s*~?\s*(\d+)\s*h\b/i); return h ? +h[1] * 60 : null; };
-  const late = all.filter((i) => !i.done && dueOf(i.text) && dueOf(i.text) < today);
-  const rapides = all.filter((i) => !i.done && estOf(i.text) != null && estOf(i.text) <= 30);
-  let view = null;
+  const M = await todoModel();
+  const card = (L) => {
+    const ids = (L.stat ? L.refs.filter((i) => M.BASE[i]) : L.q());
+    const open = ids.filter((i) => !M.BASE[i].done).length;
+    const pct = ids.length ? Math.round(100 * (ids.length - open) / ids.length) : 0;
+    return `<a class="lcard" href="#/todo/${encodeURIComponent(L.id)}" style="--lc:var(${L.color})">`
+      + (L.stat ? `<button class="del" data-del="${esc(L.id)}" title="Supprimer">🗑</button>` : '')
+      + `<span class="lico">${L.ico}</span><div><div class="ln">${esc(L.name)}</div><div class="ld">${esc(L.desc)}</div></div>`
+      + (L.stat ? `<div class="bar"><i style="width:${pct}%"></i></div>` : '')
+      + `<div class="lfoot"><span class="cnt">${open} <span class="z">à faire</span></span><span class="kind ${L.stat ? '' : 'dyn'}">${L.stat ? '● curée' : '⚙ dynamique'}</span></div></a>`;
+  };
+  page.innerHTML = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--todo)">${IC.todo}</div><div><h1>Todo</h1><div class="lede">Une base unique. Chaque liste n'en est qu'une sélection ou une requête.</div></div></div>
+    <div class="grouplabel">Vos listes <span class="hint">— curées, par référence</span></div>
+    <div class="cards">${M.CURATED.map(card).join('')}<button class="lcard newcard" id="newlist"><span class="plus">＋</span>Nouvelle liste</button></div>
+    <div class="grouplabel">Vues dynamiques <span class="hint">— requêtes, non supprimables</span></div>
+    <div class="cards">${M.DYN.map(card).join('')}</div></div>`;
+  page.querySelector('.wrap').addEventListener('click', (e) => {
+    const d = e.target.closest('[data-del]');
+    if (d) { e.preventDefault(); ask(`Supprime la liste todo « ${M.LISTS[d.dataset.del]?.name || d.dataset.del} » (garde les tâches dans la base).`); return; }
+    if (e.target.closest('#newlist')) ask('Crée une nouvelle liste todo « … » avec ces tâches : ');
+  });
+}
 
-  const dynv = (id, ico, name, arr, c) => `<button class="dynv${view === id ? ' on' : ''}" data-v="${id}" style="--c:var(--${c})"><span class="dico">${ico}</span><span><span class="dn">${name}</span><span class="dc">${arr.length} tâche${arr.length > 1 ? 's' : ''}</span></span></button>`;
-  const body = () => {
-    if (view === 'late' || view === 'rapides') {
-      const arr = view === 'late' ? late : rapides;
-      return arr.length ? arr.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left">Aucune tâche dans cette vue.</div>';
-    }
-    return sections.map((sec) => {
-      const open = sec.items.filter((i) => !i.done).length;
-      return `<div class="grp"><h3>${esc(sec.title.replace(/\(.*\)/, '').trim())} <span class="c">${sec.items.length ? open : ''}</span></h3>`
-        + (sec.items.length ? sec.items.map((it) => taskHTML(it, today)).join('') : '<div class="empty" style="text-align:left;padding:4px 0">rien</div>') + '</div>';
+// Détail d'une liste : ses tâches, avec chips, sous-tâches, et (curée) le ✕ pour l'en retirer.
+async function renderList(id) {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Todo', hash: '#/todo' }, { label: '…', hash: '#/todo/' + encodeURIComponent(id) }]);
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+  const M = await todoModel();
+  const L = M.LISTS[id];
+  if (!L) { location.hash = '#/todo'; return; }
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Todo', hash: '#/todo' }, { label: L.name, hash: '#/todo/' + encodeURIComponent(id) }]);
+  const ids = L.stat ? L.refs.filter((i) => M.BASE[i]) : L.q();
+  const open = ids.filter((i) => !M.BASE[i].done).length;
+  const withSubs = (tid, opts) => taskHTML(M, tid, opts) + M.BASE[tid].sub.filter((s) => M.BASE[s]).map((s) => taskHTML(M, s, { sub: true })).join('');
+  let h = `<div class="wrap narrow"><div class="chead"><div class="aico" style="--dc:var(${L.color})">${L.ico}</div><div><h1>${esc(L.name)}</h1><div class="lede">${open} à faire · ${L.stat ? 'liste curée (références)' : 'vue dynamique (requête)'}</div></div>${L.stat ? '<div style="flex:1"></div><button class="delbtn" id="dellist">🗑 Supprimer</button>' : ''}</div>`;
+  h += `<div class="refnote">${L.stat ? '⛓ Références vers la base — cocher met à jour partout.' : '⚙︎ Filtre calculé sur la base — se met à jour tout seul.'}</div>`;
+  if (id === 'base') {
+    const doms = [...new Set(M.allIds().map((i) => M.BASE[i].dom).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    const groups = doms.length ? [...doms, null] : [null];
+    h += groups.map((dom) => {
+      const g = M.allIds().filter((i) => (M.BASE[i].dom || null) === dom);
+      if (!g.length) return '';
+      const openG = g.filter((i) => !M.BASE[i].done).length;
+      return `<div class="grp"><h3>${esc(dom || 'Sans domaine')}<span class="c">${openG}</span></h3>` + g.map((t) => withSubs(t, { mem: true })).join('') + '</div>';
     }).join('');
-  };
-  const render = () => {
-    page.innerHTML = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--todo)">${IC.todo}</div><div><h1>Todo</h1><div class="lede">Vos tâches — cocher demande à Alfred de la marquer faite.</div></div></div>
-      <div class="dynviews">${dynv('late', '⚠', 'En retard', late, 'crit')}${dynv('rapides', '◷', 'Rapides', rapides, 'good')}${view ? '<button class="dynv" data-v="all"><span class="dico" style="--c:var(--search)">▦</span><span><span class="dn">Toutes</span><span class="dc">retour</span></span></button>' : ''}</div>
-      <div>${body()}</div></div>`;
-    labelMemLinks(page);
-    page.querySelectorAll('.dynv').forEach((b) => b.addEventListener('click', () => { view = b.dataset.v === 'all' ? null : (view === b.dataset.v ? null : b.dataset.v); render(); }));
-    page.querySelector('.wrap').addEventListener('click', (e) => {
-      const cb = e.target.closest('.cbox[data-mark]'); if (!cb || cb.classList.contains('on')) return;
-      input.value = 'Marque cette tâche comme faite : « ' + cb.dataset.mark + ' »';
-      input.focus(); input.dispatchEvent(new Event('input'));
-    });
-  };
-  render();
+  } else {
+    h += ids.map((t) => withSubs(t, L.stat ? { list: id } : { dom: true, mem: true })).join('') || '<div class="empty">Rien ici.</div>';
+  }
+  page.innerHTML = h + '</div>';
+  labelMemLinks(page);
+  page.querySelector('.wrap').addEventListener('click', (e) => {
+    const cb = e.target.closest('.cbox'); if (cb) { const x = M.BASE[cb.dataset.id]; if (x && !x.done) ask(`Marque la tâche « ${x.t} » comme faite.`); return; }
+    const rm = e.target.closest('[data-rm]'); if (rm) { const x = M.BASE[rm.dataset.rm]; ask(`Retire « ${x.t} » de la liste « ${L.name} ».`); return; }
+    if (e.target.closest('#dellist')) ask(`Supprime la liste todo « ${L.name} » (garde les tâches dans la base).`);
+  });
 }
 
 /* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */

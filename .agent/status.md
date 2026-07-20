@@ -2,7 +2,18 @@
 
 > MàJ : 2026-07-20
 
-**État :** **pièces jointes du chat livrées côté code (agent-gw, non taguée)** : bouton 📎
+**État :** **vue Todo réécrite côté code (agent-gw, non taguée)** :
+`renderTodo`/`todoStats`/`renderList` consomment `/api/memory/index` — fini le parseur de cases
+à cocher de `taches.md` (qui avait vidé l'écran après la migration des todos au format fiche).
+Base unique `type: tache`, **listes curées `type: liste` (refs)** + vues dynamiques calculées
+(retard / rapides / bloquées / base), sous-tâches `sub:`, non-duplication rendue visible
+(pastilles « dans quelles listes »). Gestes (cocher, retirer, créer/supprimer une liste) =
+messages à Alfred, **jamais d'écriture** (frontière workbook/voyages). Contrat `type: liste`
+côté cerveau (**D27**, repo Alfred). Bundle + statics à jour, tests moteur verts, modèle vérifié
+sur données réelles. **À faire : tag → image → déploiement** (embarque aussi les pièces jointes
+ci-dessous).
+
+**État (pièces jointes) :** **livrées côté code (agent-gw, non taguée)** : bouton 📎
 (+ appareil photo) + glisser-déposer + coller ; `POST /api/upload` pose les fichiers dans
 `GW_STATE_DIR/inbox/` (hors repo mémoire, purge TTL), `/api/chat` les résout (garde
 anti-traversée) et préfixe le prompt d'une note anti-injection (D17) — Alfred les lit via
@@ -46,4 +57,4 @@ l'access token). Avenant skill correspondance = côté cerveau.
 - [ ] Test d'intégration sur un Voice PE (désactiver son entité `assist_satellite`
       dans HA d'abord) ; ajuster VAD/timeouts ; voix « alfred » à ajouter dans
       nestor-voice
-- [ ] Côté cerveau (repo Alfred) : décision D27 (canal vocal — D26 est pris par les voyages) + registre vocal
+- [ ] Côté cerveau (repo Alfred) : décision **D28** (canal vocal — D26 voyages, D27 pris par le modèle todo) + registre vocal
