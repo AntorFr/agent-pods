@@ -24,6 +24,13 @@ Avant : alfred-voice 0.1.0 déployé ; module Voyages livré (spec `VOYAGES.md`)
 data + groups.tunnel), `.mcp.json` → rosetta-bridge (repo + /workspace du pod),
 bridge vérifié in situ dans le conteneur tunnel (initialize → serverInfo maps).
 
+**DÉPLOYÉ (2026-07-20)** : Authelia client alfred enrichi (offline_access,
+audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
+`.mcp.json` google → rosetta-bridge (repo + pod). E2E EN ATTENTE : re-login PWA
+(semer le refresh token) puis test Gmail — si « aucun compte enrôlé pour
+<uuid> » : ajouter une claims_policy Authelia (preferred_username dans
+l'access token). Avenant skill correspondance = côté cerveau.
+
 **Prochaines étapes :**
 - [ ] **Pièces jointes** : taguer `agent-gw-v0.21.0` (CI build l'image) puis bumper `image.tag`
       dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD déploie. Tester en prod : 📎 sur mobile,
