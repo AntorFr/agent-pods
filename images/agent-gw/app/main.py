@@ -730,7 +730,9 @@ async def chat(request: Request):
                 resume=eph_resume if ephemeral else _load_session_id(),
                 permission_mode=PERMISSION_MODE,
                 model=model,
-                env=turn_env or None,
+                # Toujours un dict (vide inclus) : le SDK exige un mapping,
+                # env=None casse le spawn (« 'NoneType' object is not a mapping »).
+                env=turn_env,
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt={"type": "preset", "preset": "claude_code"},
