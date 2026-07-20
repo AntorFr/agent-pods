@@ -1465,6 +1465,9 @@ $('gear').addEventListener('click', () => { setModal.hidden = false; });
 $('settings-close').addEventListener('click', () => { setModal.hidden = true; });
 setModal.addEventListener('click', (e) => { if (e.target === setModal) setModal.hidden = true; });
 $('set-theme').addEventListener('click', toggleTheme);
+// Déconnexion : purge la session gateway et rejoue le flux OIDC au retour —
+// c'est ce re-login qui ressème le refresh token (rebond rosetta).
+$('set-logout').addEventListener('click', () => { window.location.href = '/auth/logout'; });
 
 const tunnelModal = $('tunnel-modal'), tunnelBody = $('tunnel-body');
 $('vsc').addEventListener('click', () => { setModal.hidden = true; tunnelModal.hidden = false; refreshTunnel(); });
