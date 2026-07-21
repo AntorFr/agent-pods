@@ -43,6 +43,12 @@ INBOX_DIR = STATE_DIR / "inbox"
 INBOX_TTL = int(os.environ.get("GW_INBOX_TTL", str(24 * 3600)))  # seconds; 0 disables sweep
 MAX_UPLOAD_BYTES = int(os.environ.get("GW_MAX_UPLOAD_MB", "25")) * 1024 * 1024
 MAX_UPLOAD_FILES = int(os.environ.get("GW_MAX_UPLOAD_FILES", "8"))
+# Buffer de lecture du stdout stream-json du SDK. L'outil Read inline une image
+# jointe en base64 dans UN seul message ; le défaut du SDK (1 Mo) déborde sur la
+# moindre vraie photo (« JSON message exceeded maximum buffer size of 1048576
+# bytes »). On le dimensionne sur le plus gros upload accepté, gonflé par le
+# base64 (~4/3) plus l'enveloppe JSON. GW_MAX_BUFFER_MB force une valeur explicite.
+MAX_BUFFER_BYTES = int(os.environ.get("GW_MAX_BUFFER_MB", "0")) * 1024 * 1024 or MAX_UPLOAD_BYTES * 2
 # Fallback bearer token, only used when OIDC is not configured (dev mode).
 AUTH_TOKEN = os.environ.get("GW_AUTH_TOKEN", "")
 # Signs the session cookie. Pin it in deployment values (DR-via-git policy);
@@ -533,6 +539,7 @@ async def _run_alfred(prompt: str, resume: str | None = None) -> tuple[str, str 
         permission_mode=PERMISSION_MODE,
         system_prompt={"type": "preset", "preset": "claude_code"},
         setting_sources=["project"],
+        max_buffer_size=MAX_BUFFER_BYTES,
     )
     parts: list[str] = []
     session_id = resume
@@ -737,6 +744,7 @@ async def chat(request: Request):
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt={"type": "preset", "preset": "claude_code"},
                 setting_sources=["project"],
+                max_buffer_size=MAX_BUFFER_BYTES,
             )
             try:
                 async for msg in query(prompt=prompt, options=options):
