@@ -20,13 +20,13 @@ anti-traversée) et préfixe le prompt d'une note anti-injection (D17) — Alfre
 son outil `Read`. Front rebuildé (bundle + statics à jour). **À faire : tag `agent-gw-v0.21.0`
 → image → bump du manifeste k8s.** Voir plus bas.
 
-**Fix buffer image jointe (2026-07-21, non tagué)** : lire une vraie photo via `Read`
-faisait « JSON message exceeded maximum buffer size of 1048576 bytes » — le SDK inline
-l'image en base64 dans UN message stream-json, et son buffer stdout par défaut est 1 Mo.
-`ClaudeAgentOptions(max_buffer_size=…)` posé sur les **deux** appels `query`, dimensionné
-sur `MAX_UPLOAD_BYTES × 2` (override `GW_MAX_BUFFER_MB`) ; plancher SDK relevé à `>=0.2.124`
-(version où le champ est vérifié). **Sans ce fix, les pièces jointes image plantent** → doit
-partir dans le même tag que les PJ.
+**Fix buffer image jointe — DÉPLOYÉ (2026-07-21, agent-gw 0.22.1)** : lire une vraie
+photo via `Read` faisait « JSON message exceeded maximum buffer size of 1048576 bytes » —
+le SDK inline l'image en base64 dans UN message stream-json, et son buffer stdout par
+défaut est 1 Mo. `ClaudeAgentOptions(max_buffer_size=…)` posé sur les **deux** appels
+`query`, dimensionné sur `MAX_UPLOAD_BYTES × 2` (override `GW_MAX_BUFFER_MB`) ; plancher
+SDK relevé à `>=0.2.124` (version où le champ est vérifié). Tag `agent-gw-v0.22.1` →
+image GHCR OK → `alfred-helm.yml` bumpé 0.22.0 → 0.22.1 → pod alfred 3/3 Running vérifié.
 
 **État (précédent) :** **rosetta-bridge livré dans les deux images** (claude-pod 0.4.0, agent-gw
 0.20.0) : relais stdio→HTTP vers le hub `rosetta.mcp.berard.me` (repo rosetta-mcp, EN
