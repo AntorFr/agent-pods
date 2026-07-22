@@ -13,9 +13,11 @@
 # helper git est configuré à part (côté pod : token vcs/github-alfred du coffre).
 # memory-sync est volontairement agnostique du mode d'auth.
 #
+# Modèle checkout/checkin (cadence validée) : on NE synchronise PAS à chaque écriture.
 # Usage :
-#   memory-sync pull                              # synchro avant d'éditer (recommandé)
-#   memory-sync commit "<message>" <fichier>...   # add + commit + rebase + push (retry)
+#   memory-sync pull                              # OUVERTURE de context : mémoire fraîche (pull-rebase)
+#   memory-sync commit "<message>" <fichier>...   # PENDANT la session : commit LOCAL seul (zéro réseau)
+#   memory-sync sync                              # FRONTIÈRE / à la demande : pull-rebase + push
 #   memory-sync resolve                           # reprend après résolution d'un conflit
 #
 # Variables : MEMORY_REPO (défaut: $PWD), MEMORY_BRANCH (défaut: main).
@@ -76,6 +78,9 @@ case "${1:-}" in
       exit 0
     fi
     git_q commit -m "$msg"
+    # PAS de push ici : la synchro se fait à la frontière via `memory-sync sync`.
+    ;;
+  sync)
     sync_push
     ;;
   resolve)
@@ -83,7 +88,7 @@ case "${1:-}" in
     sync_push
     ;;
   *)
-    echo "usage: memory-sync commit \"<message>\" <fichier>... | resolve | pull" >&2
+    echo "usage: memory-sync pull | commit \"<message>\" <fichier>... | sync | resolve" >&2
     exit 2
     ;;
 esac
