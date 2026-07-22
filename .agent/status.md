@@ -1,6 +1,24 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-21
+> MàJ : 2026-07-23
+
+**UI mobile — 3 retouches livrées côté code (agent-gw, non taguée)** :
+1. **Composer replié** : les 3 actions (🛡 ⚡ 📎) passent sous un « + » en mobile
+   (popover `.moretray` ; desktop inchangé via `display:contents`), pastille sur le
+   « + » quand bouclier ou éphémère est armé. Fichiers : `app.html`, `launcher.css`,
+   `launcher/main.js` (bloc Feature 1).
+2. **Zoom bridé** : viewport `maximum-scale=1, user-scalable=no` (honoré par iOS en
+   PWA standalone) + `touch-action:manipulation` (coupe le double-tap-zoom) + textarea
+   `16px` en mobile (coupe le zoom au focus iOS). La coque était déjà verrouillée
+   (100dvh, seule `.stream` scrolle) → « je perds header/barre » venait du zoom de
+   page, pas du layout.
+3. **Swipe deux-écrans** : `#shell` devient une piste 200vw ; swipe horizontal (suivi
+   du doigt + calage à 28 %) bascule chat ⇆ apps, poignées de bord (`.edge`) en
+   affordance/repli. Mobile seul (`max-width:820px`, aligné JS/CSS) ; desktop garde le
+   rail redimensionnable. `renderRoute` n'auto-ferme plus l'écran apps sur route vide
+   (l'accueil-mosaïque EST l'écran apps ; le chat est à un swipe).
+   Bundle + statics rebuildés (esbuild), tests moteur verts, `node --check` OK.
+   **À faire : tag → image → bump manifeste k8s pour déployer + test sur téléphone.**
 
 **État :** **vue Todo réécrite côté code (agent-gw, non taguée)** :
 `renderTodo`/`todoStats`/`renderList` consomment `/api/memory/index` — fini le parseur de cases
@@ -51,6 +69,9 @@ audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
 l'access token). Avenant skill correspondance = côté cerveau.
 
 **Prochaines étapes :**
+- [ ] **UI mobile (3 retouches)** : taguer une nouvelle `agent-gw-vX.Y.Z` → image CI →
+      bumper `image.tag` dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD. Tester sur
+      téléphone : le « + » (+ pastille), l'absence de zoom involontaire, le swipe chat⇆apps.
 - [ ] **Pièces jointes** : taguer `agent-gw-v0.21.0` (CI build l'image) puis bumper `image.tag`
       dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD déploie. Tester en prod : 📎 sur mobile,
       drop + coller sur desktop, un envoi fichiers-seuls, un PDF lu par Alfred.

@@ -5,6 +5,7 @@
 import './launcher.css';
 
 const $ = (id) => document.getElementById(id);
+const mqMobile = window.matchMedia('(max-width: 820px)'); // seuil deux-écrans, aligné sur launcher.css
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // Statut de frontmatter -> classe de pastille (.stat). Tolérant, défaut = accent.
 const sc = (s) => ({
@@ -295,6 +296,7 @@ function setEph(v) {
   if (!v) ephSession = null; // la parenthèse se referme
   ephBtn.classList.toggle('on', v);
   input.placeholder = v ? 'Question éphémère — rien ne sera retenu…' : PLACEHOLDER;
+  updateMoreFlag();
 }
 ephBtn.addEventListener('click', () => setEph(!ephOn));
 
@@ -390,8 +392,8 @@ const shield = $('shield');
 let confTimer = null, confPoll = null;
 function paintConfirm(remaining) {
   clearInterval(confTimer);
-  if (remaining <= 0) { shield.classList.remove('armed'); shield.textContent = '🛡'; clearInterval(confPoll); confPoll = null; return; }
-  shield.classList.add('armed');
+  if (remaining <= 0) { shield.classList.remove('armed'); shield.textContent = '🛡'; updateMoreFlag(); clearInterval(confPoll); confPoll = null; return; }
+  shield.classList.add('armed'); updateMoreFlag();
   let left = remaining; shield.textContent = left;
   confTimer = setInterval(() => { left -= 1; if (left <= 0) paintConfirm(0); else shield.textContent = left; }, 1000);
   if (!confPoll) confPoll = setInterval(syncConfirm, 4000);
@@ -402,6 +404,73 @@ async function syncConfirm() {
 shield.addEventListener('click', async () => {
   try { const res = await fetch('/api/confirm', { method: 'POST', headers: headers(false) }); if (res.status === 401) { onUnauthorized(); return; } const s = await res.json(); paintConfirm(s.remaining || 0); } catch {}
 });
+
+/* ── Feature 1 : repli mobile des actions (🛡 ⚡ 📎) sous « + » ────── */
+// Les trois boutons restent en place (leurs listeners par id sont intacts) ; en
+// mobile le CSS les cache et les rouvre en popover quand .compose est .more-open.
+// La pastille du « + » signale qu'un mode non-défaut est armé (bouclier ou éphémère).
+const moreBtn = $('more'), composerEl = $('composer'), moretrayEl = $('moretray');
+function closeMore() { composerEl.classList.remove('more-open'); moreBtn.setAttribute('aria-expanded', 'false'); }
+function updateMoreFlag() { moreBtn.classList.toggle('flag', ephOn || shield.classList.contains('armed')); }
+moreBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = !composerEl.classList.contains('more-open');
+  composerEl.classList.toggle('more-open', open);
+  moreBtn.setAttribute('aria-expanded', String(open));
+});
+moretrayEl.addEventListener('click', closeMore); // choisir une action referme le popover
+document.addEventListener('click', (e) => {
+  if (!composerEl.classList.contains('more-open')) return;
+  if (e.target.closest('#more') || e.target.closest('#moretray')) return;
+  closeMore();
+});
+updateMoreFlag();
+
+/* ── Feature 3 : swipe mobile deux-écrans (chat ⇆ apps) ──────────── */
+// La piste translateX vit en CSS (#shell 200vw, canvas-open = écran apps). Ici on
+// suit le doigt sur les gestes franchement horizontaux, puis on cale sur un écran.
+const shellEl = $('shell');
+function showPane(apps) { document.body.classList.toggle('canvas-open', apps); }
+$('toapps').addEventListener('click', () => showPane(true));
+$('tochat').addEventListener('click', () => showPane(false));
+let sw = null; // geste en cours : { x0, y0, base, dir, x }
+const SWIPE_GUARD = 'textarea, input, select, .cutwrap, .vcard, .traycard, #more, #moretray';
+shellEl.addEventListener('touchstart', (e) => {
+  if (!mqMobile.matches || e.touches.length !== 1 || e.target.closest(SWIPE_GUARD)) { sw = null; return; }
+  const t = e.touches[0];
+  sw = { x0: t.clientX, y0: t.clientY, base: document.body.classList.contains('canvas-open') ? -window.innerWidth : 0, dir: 0, x: 0 };
+}, { passive: true });
+shellEl.addEventListener('touchmove', (e) => {
+  if (!sw) return;
+  const t = e.touches[0];
+  const dx = t.clientX - sw.x0, dy = t.clientY - sw.y0;
+  if (sw.dir === 0) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    sw.dir = Math.abs(dx) > Math.abs(dy) * 1.3 ? 1 : -1; // 1 = horizontal (on prend), -1 = vertical (on lâche le scroll)
+    if (sw.dir === 1) shellEl.classList.add('swiping');
+  }
+  if (sw.dir !== 1) return;
+  e.preventDefault(); // geste horizontal tenu : pas de scroll parasite
+  sw.x = Math.max(-window.innerWidth, Math.min(0, sw.base + dx));
+  shellEl.style.transform = `translateX(${sw.x}px)`;
+}, { passive: false });
+function endSwipe() {
+  if (!sw) return;
+  const horizontal = sw.dir === 1, x = sw.x, base = sw.base;
+  sw = null;
+  if (!horizontal) return;
+  shellEl.classList.remove('swiping'); // réactive la transition pour l'anim de calage
+  const w = window.innerWidth;
+  // Bascule si on a franchi 28 % depuis l'écran de départ (sinon retour à l'écran d'origine).
+  const apps = base === 0 ? (-x) > w * 0.28 : (-x) > w * 0.72;
+  const target = apps ? -w : 0;
+  requestAnimationFrame(() => { shellEl.style.transform = `translateX(${target}px)`; });
+  showPane(apps);
+  // Calé : on rend la main au CSS (translateX(-50%)) pour survivre aux rotations/resize.
+  setTimeout(() => { if (shellEl.style.transform === `translateX(${target}px)`) shellEl.style.transform = ''; }, 320);
+}
+shellEl.addEventListener('touchend', endSwipe);
+shellEl.addEventListener('touchcancel', endSwipe);
 
 /* ── Rail redimensionnable ───────────────────────────────────────── */
 const shell = $('shell'), gutter = $('gutter');
@@ -561,7 +630,9 @@ $('back').addEventListener('click', () => { if (CR.length > 1) location.hash = C
 const page = $('view');
 function renderRoute() {
   const route = currentRoute();
-  if (window.innerWidth < 900) document.body.classList.toggle('canvas-open', route !== '');
+  // Mobile deux-écrans : naviguer vers une app révèle l'écran apps ; la route vide
+  // (accueil = mosaïque) ne force PAS le retour au chat — c'est le swipe/poignée qui décide.
+  if (mqMobile.matches && route !== '') document.body.classList.add('canvas-open');
   if (!route) return renderHome();
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
   // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
