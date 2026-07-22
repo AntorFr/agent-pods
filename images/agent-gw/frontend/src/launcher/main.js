@@ -1115,7 +1115,7 @@ function plaqueSVG(pl, refL) {
   const SW = L * S, SH = H * S;
   // La COLONNE (bande) est l'objet : refente = géométrie, tronçonnage = poses + done (par colonne).
   const bands = new Map();
-  for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bands.set(b.id, { ...b, poses: [], done: false });
+  for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bands.set(b.id, { ...b, sens: st.sens || 'court', poses: [], done: false });
   for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
     const band = bands.get(st.entree); if (!band) continue;
     band.done = wbDone(st.id);
@@ -1129,17 +1129,18 @@ function plaqueSVG(pl, refL) {
     const done = band.done;
     // à débiter = sarcelle vif ; débité = gris estompé + ✓ (contraste par la clarté, pas la teinte).
     const cc = done ? 'var(--ink-faint)' : 'var(--shop)';
-    const y0 = Math.min(...band.poses.map((r) => r.y)), y1 = Math.max(...band.poses.map((r) => r.y + r.h));
-    const bx = band.x * S, byo = y0 * S, bw = band.largeur * S, bh = (y1 - y0) * S;
-    const cid = pl.plaque + band.id.split('-').pop(), len = Math.round(band.longueur || (y1 - y0));  // id unique : P1C1
+    // Géométrie de la colonne selon le SENS de sa refente (défaut « court », rétrocompatible) :
+    //   court → largeur en x, longueur en y (tronçons empilés) ; long → longueur en x, largeur en y.
+    // Les POSES sont déjà en coordonnées absolues justes (Alfred les pose) : sens-agnostiques.
+    const long = band.sens === 'long';
+    const bx = band.x * S, byo = band.y * S;
+    const bw = (long ? band.longueur : band.largeur) * S;
+    const bh = (long ? band.largeur : band.longueur) * S;
+    const cid = pl.plaque + band.id.split('-').pop(), len = Math.round(band.longueur || 0);  // id unique : P1C1
     g += `<g class="colc" data-band="${esc(band.id)}">`;
     // le conteneur = LA colonne (contour fort, cliquable)
     g += `<rect class="colbox" x="${bx}" y="${byo}" width="${bw}" height="${bh}" rx="3" fill="${cc}" fill-opacity="${done ? .07 : .09}" stroke="${cc}" stroke-width="2.5"/>`;
-    // cote de LARGEUR en tête (là où l'œil l'attend) : empattements aux coins hauts + valeur
-    const wy = Math.max(d * S - 3, 9);
-    g += `<line x1="${bx + 1}" y1="${wy + 3}" x2="${bx + 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/><line x1="${bx + bw - 1}" y1="${wy + 3}" x2="${bx + bw - 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/>`;
-    g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
-    // tronçons (pièces) — subordonnés : bloc + nom CLIQUABLE + cote
+    // tronçons (pièces) — subordonnés : bloc + nom CLIQUABLE + cote (positions absolues)
     for (const r of band.poses) {
       const pc = wb.byEtq.get(r.et) || {};
       const px = r.x * S, py = r.y * S, pw = r.w * S, ph = r.h * S;
@@ -1150,12 +1151,27 @@ function plaqueSVG(pl, refL) {
       g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--mono)" font-size="13" font-weight="700">✓</text>`;
     }
-    // COTE de longueur, façon plan : ligne verticale à FLÈCHES, écartée du bord, teinte NEUTRE
-    // (pas de vert sur vert) + valeur rotée cerclée d'un liseré blanc pour trancher sur les pièces.
-    const dx = bx + 17, my = byo + bh / 2, a = 4;
-    g += `<line x1="${dx}" y1="${byo + 1}" x2="${dx}" y2="${byo + bh - 1}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-    g += `<path d="M${dx} ${byo} l${-a} ${a} M${dx} ${byo} l${a} ${a} M${dx} ${byo + bh} l${-a} ${-a} M${dx} ${byo + bh} l${a} ${-a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
-    g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+    // Cotes façon plan — l'axe suit le SENS : id + LARGEUR sur l'arête courte, LONGUEUR (flèches) sur l'axe long.
+    const a = 4;
+    if (long) {
+      // largeur = arête gauche (verticale) ; longueur = arête haute (horizontale, flèches)
+      const lx = Math.max(bx - 5, 9);
+      g += `<line x1="${lx - 3}" y1="${byo + 1}" x2="${lx + 3}" y2="${byo + 1}" stroke="${cc}" stroke-width="1.5"/><line x1="${lx - 3}" y1="${byo + bh - 1}" x2="${lx + 3}" y2="${byo + bh - 1}" stroke="${cc}" stroke-width="1.5"/>`;
+      g += `<text x="${lx}" y="${byo + bh / 2}" transform="rotate(-90 ${lx} ${byo + bh / 2})" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
+      const dy = byo + 15, mx = bx + bw / 2;
+      g += `<line x1="${bx + 1}" y1="${dy}" x2="${bx + bw - 1}" y2="${dy}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+      g += `<path d="M${bx} ${dy} l${a} ${-a} M${bx} ${dy} l${a} ${a} M${bx + bw} ${dy} l${-a} ${-a} M${bx + bw} ${dy} l${-a} ${a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
+      g += `<text x="${mx}" y="${dy - 4}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+    } else {
+      // court : id + largeur en tête (arête haute) ; longueur en flèches verticales
+      const wy = Math.max(byo - 4, 9);
+      g += `<line x1="${bx + 1}" y1="${wy + 3}" x2="${bx + 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/><line x1="${bx + bw - 1}" y1="${wy + 3}" x2="${bx + bw - 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/>`;
+      g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
+      const dx = bx + 17, my = byo + bh / 2;
+      g += `<line x1="${dx}" y1="${byo + 1}" x2="${dx}" y2="${byo + bh - 1}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+      g += `<path d="M${dx} ${byo} l${-a} ${a} M${dx} ${byo} l${a} ${a} M${dx} ${byo + bh} l${-a} ${-a} M${dx} ${byo + bh} l${a} ${-a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
+      g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+    }
     g += `</g>`;
   }
   const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
