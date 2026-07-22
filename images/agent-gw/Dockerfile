@@ -52,6 +52,9 @@ COPY mcp_servers ./mcp_servers
 # rosetta-bridge : relais stdio->HTTP vers le hub rosetta (refresh de token
 # client_credentials intégré, stdlib seule). Copie identique dans claude-pod.
 COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
+# memory-sync : écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
+# conflit remonté jamais deviné). Configure son helper git depuis $GITHUB_TOKEN.
+COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
 # Bundled content engine + launcher shell (built once, never at runtime).
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css ./app/static/
 

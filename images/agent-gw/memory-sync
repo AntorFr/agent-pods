@@ -1,0 +1,89 @@
+#!/bin/sh
+# memory-sync — écriture mémoire MULTI-AUTEUR sûre (Alfred-pod + machine de dev).
+#
+# Pourquoi : la mémoire d'Alfred est co-éditée en permanence — Alfred-en-prod écrit
+# du contenu pendant qu'on développe (code + contenu de test + instructions). La
+# convention « un fait = un fichier » fait que ces écritures concurrentes touchent
+# presque toujours des fichiers DIFFÉRENTS → git les fusionne tout seul (rebase).
+# Ce wrapper encapsule la boucle pull-rebase / commit / push-retry pour qu'aucun
+# agent ne freestyle du git, et REMONTE (jamais ne devine) le conflit rare où deux
+# auteurs touchent le MÊME fichier.
+#
+# L'authentification (push/pull sur origin) est EXTERNE à ce script : un credential
+# helper git est configuré à part (côté pod : token vcs/github-alfred du coffre).
+# memory-sync est volontairement agnostique du mode d'auth.
+#
+# Usage :
+#   memory-sync pull                              # synchro avant d'éditer (recommandé)
+#   memory-sync commit "<message>" <fichier>...   # add + commit + rebase + push (retry)
+#   memory-sync resolve                           # reprend après résolution d'un conflit
+#
+# Variables : MEMORY_REPO (défaut: $PWD), MEMORY_BRANCH (défaut: main).
+set -eu
+
+REPO="${MEMORY_REPO:-$PWD}"
+BRANCH="${MEMORY_BRANCH:-main}"
+cd "$REPO"
+
+git_q() { git -c core.pager=cat "$@"; }
+
+# Configure (idempotent) l'auth GitHub à partir de l'env GITHUB_TOKEN, sans jamais
+# écrire le token sur disque : le helper l'expose à la demande, expansé au moment où
+# git l'appelle. Absent (machine de dev, credential via keychain) → on ne touche à rien.
+ensure_auth() {
+  [ -n "${GITHUB_TOKEN:-}" ] || return 0
+  git config --global credential.helper \
+    '!f() { if [ "$1" = get ]; then printf "username=x-access-token\npassword=%s\n" "$GITHUB_TOKEN"; fi; }; f'
+}
+
+# Rejoue notre/nos commit(s) locaux sur la pointe distante, puis pousse.
+# Le cas disjoint (99 %) se fusionne seul ; on retente si une course nous a doublés.
+sync_push() {
+  ensure_auth
+  n=0
+  while [ "$n" -lt 5 ]; do
+    if git_q pull --rebase --autostash origin "$BRANCH"; then
+      if git_q push origin "$BRANCH"; then
+        echo "memory-sync: poussé sur origin/$BRANCH."
+        return 0
+      fi
+      # push rejeté (quelqu'un a poussé entre notre pull et notre push) → on reboucle.
+      n=$((n + 1))
+      continue
+    fi
+    # rebase en conflit : NE PAS deviner. On s'arrête, on remonte les fichiers fautifs.
+    echo "memory-sync: CONFLIT — deux auteurs sur le(s) même(s) fichier(s) :" >&2
+    git_q diff --name-only --diff-filter=U >&2
+    echo "→ garde les DEUX faits, résous à la main, 'git add <fichier>', puis: memory-sync resolve" >&2
+    return 3
+  done
+  echo "memory-sync: échec après 5 tentatives (course persistante sur origin), réessaie." >&2
+  return 4
+}
+
+case "${1:-}" in
+  pull)
+    ensure_auth
+    git_q pull --rebase --autostash origin "$BRANCH"
+    ;;
+  commit)
+    msg="${2:?memory-sync: message de commit requis}"
+    shift 2
+    [ "$#" -ge 1 ] || { echo "memory-sync: au moins un fichier requis" >&2; exit 2; }
+    git_q add -- "$@"
+    if git_q diff --cached --quiet; then
+      echo "memory-sync: rien à committer (déjà à jour)."
+      exit 0
+    fi
+    git_q commit -m "$msg"
+    sync_push
+    ;;
+  resolve)
+    git_q rebase --continue
+    sync_push
+    ;;
+  *)
+    echo "usage: memory-sync commit \"<message>\" <fichier>... | resolve | pull" >&2
+    exit 2
+    ;;
+esac
