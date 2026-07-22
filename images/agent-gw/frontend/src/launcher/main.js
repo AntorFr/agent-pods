@@ -1003,8 +1003,8 @@ async function renderList(id) {
 /* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */
 let wb = null;       // {path, data, state, byEtq}
 let wbTab = 'debit';
-const wbDone = (etq) => !!(wb.state.fait || {})[etq];
-const pieceDims = (p) => `${p.longueur}×${p.largeur}×${p.ep}`;
+const wbDone = (id) => !!(wb.state.fait || {})[id];   // id = identifiant d'ÉTAPE (modèle A)
+const pieceDims = (p) => `${p.longueur}×${p.largeur}`;
 
 // Conteneurs créés une fois : modale pièce + mode atelier plein écran.
 const pieceModal = document.createElement('div');
@@ -1028,9 +1028,10 @@ async function renderAtelierHub() {
   if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div></div>'; return; }
   html += '<div class="grouplabel">Workbooks</div><div class="cards">';
   for (const w of list) {
-    const pct = w.pieces ? Math.round(100 * w.done / w.pieces) : 0;
+    const tot = w.total || w.pieces || 0;
+    const pct = tot ? Math.round(100 * w.done / tot) : 0;
     const last = w.lastActivity ? new Date(w.lastActivity).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'jamais';
-    html += `<a class="card" href="#/atelier/${encodeURIComponent(w.path)}"><div class="ct">${esc(w.titre)}</div><div class="cmeta">${w.done}/${w.pieces} pièces · ${esc(last)}</div><div class="bar"><i style="width:${pct}%"></i></div></a>`;
+    html += `<a class="card" href="#/atelier/${encodeURIComponent(w.path)}"><div class="ct">${esc(w.titre)}</div><div class="cmeta">${w.done}/${tot} étapes · ${w.pieces} pièces · ${esc(last)}</div><div class="bar"><i style="width:${pct}%"></i></div></a>`;
   }
   page.innerHTML = html + '</div></div>';
 }
@@ -1048,145 +1049,404 @@ async function renderWorkbook(path) {
     data = await rd.json(); state = await rs.json();
   } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
   wb = { path, data, state, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
+  buildWbIndex();
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: data.titre || data.projet || 'Workbook', hash: '#/atelier/' + encodeURIComponent(path) }]);
   renderWb();
 }
 
-async function tick(etq, done) {
-  try { const r = await fetch('/api/workbook/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ wb: wb.path, etiquette: etq, done }) }); if (r.ok) wb.state = await r.json(); } catch {}
+async function tick(id, done) {   // id = étape ; POST direct au serveur, jamais le LLM
+  try { const r = await fetch('/api/workbook/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ wb: wb.path, key: id, done }) }); if (r.ok) wb.state = await r.json(); } catch {}
   renderWb();
   if (!atelierFull.hidden) renderShop();
 }
 
+// Index dérivés du modèle A : matériaux, étapes à plat (ordonnées), pièce → son étape.
+function buildWbIndex() {
+  const d = wb.data;
+  wb.matById = new Map((d.materiaux || []).map((m) => [m.id, m]));
+  wb.steps = [];
+  wb.pieceStep = new Map();
+  for (const pl of d.debit || []) {
+    for (const st of pl.etapes || []) {
+      wb.steps.push({ ...st, plaque: pl.plaque, materiau: pl.materiau });
+      if (st.type === 'tronconnage') for (const pose of st.pieces || [])
+        wb.pieceStep.set(pose.etiquette, { plaque: pl.plaque, materiau: pl.materiau, stepId: st.id });
+    }
+  }
+}
 function renderWb() {
   const d = wb.data;
-  const total = (d.pieces || []).length;
-  const done = Object.keys(wb.state.fait || {}).filter((e) => wb.byEtq.has(e)).length;
+  const total = (wb.steps || []).length;
+  const done = (wb.steps || []).filter((s) => wbDone(s.id)).length;
   const pct = total ? Math.round(100 * done / total) : 0;
-  const tabs = [['debit', 'Débit'], ['prepas', 'Prépas'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']];
+  const tabs = [['debit', 'Plaques'], ['tronconnage', 'Tronçons'], ['rainure', 'Rainures'], ['lamello', 'Lamello'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']];
   page.innerHTML = `<div class="wrap" style="--dc:var(--shop)">
-    <div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} débité</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
+    <div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} étapes</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
     <div class="prog"><i style="width:${pct}%"></i></div>
     <div class="wbtabs">${tabs.map(([id, l]) => `<button class="wbtab${wbTab === id ? ' on' : ''}" data-w="${id}">${l}</button>`).join('')}</div>
     <div id="wbbody"></div></div>`;
   const body = $('wbbody');
   if (wbTab === 'debit') renderDebit(body);
-  else if (wbTab === 'prepas') renderPrepas(body);
+  else if (wbTab === 'tronconnage') renderTronconnage(body);
+  else if (wbTab === 'rainure') renderRainurage(body);
+  else if (wbTab === 'lamello') renderLamello(body);
   else if (wbTab === 'assemblage') renderAsm(body);
   else renderSuivi(body);
   page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = t.dataset.w; renderWb(); }));
   $('shopmode').addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
 }
 
-// Plan de débit SVG à l'échelle (blueprint). Le workbook.json (émis par la skill
-// menuiserie) ne fournit PAS les positions physiques : `colonnes` = groupes de RÉGLAGE
-// de scie, la plaque brute vient de meta.plaque (ex. « 2800 × 2070 mm »). On dessine
-// donc un nesting en bandes (shelf) : pièces à l'échelle réelle (longueur × largeur),
-// posées de gauche à droite, retour à la ligne au bord de plaque — approximation
-// honnête d'un calepinage, pas une promesse de placement exact.
-function cutSVG(pan) {
-  const pm = String(wb.data.meta?.plaque || '').match(/(\d+)\s*[×x]\s*(\d+)/);
-  const W = pm ? +pm[1] : 2800, H = pm ? +pm[2] : 2070;
-  const kerf = wb.data.meta?.kerf || 4;
-  const S = 0.30, pad = 40, top = 46, gap = Math.max(kerf, 12);
-  const SW = W * S;
-  // Pré-calcul du placement (unités mm), pour connaître la hauteur consommée.
-  const placed = [];
-  let x = gap, y = gap, rowH = 0;
-  for (const c of pan.colonnes || []) {
-    for (const etq of c.pieces || []) {
-      const p = wb.byEtq.get(etq) || {};
-      const w = p.longueur || 0, h = p.largeur || 0;
-      if (x + w > W - gap && x > gap) { x = gap; y += rowH + gap; rowH = 0; }
-      placed.push({ etq, x, y, w, h, reglage: c.reglageFS || '' });
-      x += w + gap; rowH = Math.max(rowH, h);
+// Vue Débit (modèle A) — la plaque est le tronc. Chaque plaque de `debit[]` est dessinée
+// à l'échelle RÉELLE (materiau.plaque) et à une échelle COMMUNE (plaque la plus large du
+// projet) : une plaque plus petite se dessine plus petite. On trace la plaque BRUTE
+// (pointillé, bords abîmés), la zone UTILE (trait plein, après dérasage), puis chaque pièce
+// à sa position ABSOLUE fournie par Alfred. La surface non couverte EST la chute. Le front
+// ne calcule aucun nesting : il pose ce qu'Alfred a posé.
+function poseRect(pose) {                     // empreinte (mm) d'une pose depuis le catalogue
+  const p = wb.byEtq.get(pose.etiquette) || {};
+  const w = pose.rot ? p.longueur : p.largeur;
+  const h = pose.rot ? p.largeur : p.longueur;
+  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0 };
+}
+function plaqueSVG(pl, refL) {
+  const mat = wb.matById.get(pl.materiau) || {};
+  const L = mat.plaque?.l || 2800, H = mat.plaque?.h || 2070, d = mat.derasage || 0;
+  const S = 0.30, pad = 40, top = 46;
+  const SW = L * S, SH = H * S;
+  // La COLONNE (bande) est l'objet : refente = géométrie, tronçonnage = poses + done (par colonne).
+  const bands = new Map();
+  for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bands.set(b.id, { ...b, poses: [], done: false });
+  for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
+    const band = bands.get(st.entree); if (!band) continue;
+    band.done = wbDone(st.id);
+    for (const pose of st.pieces || []) band.poses.push(poseRect(pose));
+  }
+  const vw = (refL || L) * S + pad * 2, vh = SH + top + pad;
+  let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  if (d > 0) g += `<rect x="${d * S}" y="${d * S}" width="${(L - 2 * d) * S}" height="${(H - 2 * d) * S}" rx="2" fill="none" stroke="var(--ink)" stroke-width="1.5"/>`;
+  for (const band of bands.values()) {
+    if (!band.poses.length) continue;
+    const done = band.done;
+    // à débiter = sarcelle vif ; débité = gris estompé + ✓ (contraste par la clarté, pas la teinte).
+    const cc = done ? 'var(--ink-faint)' : 'var(--shop)';
+    const y0 = Math.min(...band.poses.map((r) => r.y)), y1 = Math.max(...band.poses.map((r) => r.y + r.h));
+    const bx = band.x * S, byo = y0 * S, bw = band.largeur * S, bh = (y1 - y0) * S;
+    const cid = pl.plaque + band.id.split('-').pop(), len = Math.round(band.longueur || (y1 - y0));  // id unique : P1C1
+    g += `<g class="colc" data-band="${esc(band.id)}">`;
+    // le conteneur = LA colonne (contour fort, cliquable)
+    g += `<rect class="colbox" x="${bx}" y="${byo}" width="${bw}" height="${bh}" rx="3" fill="${cc}" fill-opacity="${done ? .07 : .09}" stroke="${cc}" stroke-width="2.5"/>`;
+    // cote de LARGEUR en tête (là où l'œil l'attend) : empattements aux coins hauts + valeur
+    const wy = Math.max(d * S - 3, 9);
+    g += `<line x1="${bx + 1}" y1="${wy + 3}" x2="${bx + 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/><line x1="${bx + bw - 1}" y1="${wy + 3}" x2="${bx + bw - 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/>`;
+    g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
+    // tronçons (pièces) — subordonnés : bloc + nom CLIQUABLE + cote
+    for (const r of band.poses) {
+      const pc = wb.byEtq.get(r.et) || {};
+      const px = r.x * S, py = r.y * S, pw = r.w * S, ph = r.h * S;
+      const short = r.et.replace(/^[^-]+-/, '');
+      const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
+      g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${cc}" stroke-width="1" stroke-opacity=".45"/>`;
+      g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
+      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
+      if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--mono)" font-size="13" font-weight="700">✓</text>`;
     }
+    // COTE de longueur, façon plan : ligne verticale à FLÈCHES, écartée du bord, teinte NEUTRE
+    // (pas de vert sur vert) + valeur rotée cerclée d'un liseré blanc pour trancher sur les pièces.
+    const dx = bx + 17, my = byo + bh / 2, a = 4;
+    g += `<line x1="${dx}" y1="${byo + 1}" x2="${dx}" y2="${byo + bh - 1}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+    g += `<path d="M${dx} ${byo} l${-a} ${a} M${dx} ${byo} l${a} ${a} M${dx} ${byo + bh} l${-a} ${-a} M${dx} ${byo + bh} l${a} ${-a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
+    g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+    g += `</g>`;
   }
-  // Cadre = zone réellement occupée (la disposition est indicative : si le métrage
-  // dépasse une plaque physique, on ne ment pas en tronquant — on enveloppe tout).
-  const usedH = Math.max(y + rowH + gap, H * 0.25);
-  const SH = usedH * S;
-  const vw = SW + pad * 2, vh = SH + top + pad;
-  let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"/>`;
-  for (const pc of placed) {
-    const d = wbDone(pc.etq);
-    const col = d ? 'var(--good)' : 'var(--shop)';
-    const px = pc.x * S, py = pc.y * S, pw = pc.w * S, ph = pc.h * S;
-    const short = pc.etq.replace(/^[^-]+-/, '');
-    const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.75)));
-    g += `<g class="cut" data-et="${esc(pc.etq)}"><rect class="pcc" x="${px}" y="${py}" width="${pw}" height="${ph}" rx="3" fill="${col}" fill-opacity="${d ? .26 : .28}" stroke="${col}" stroke-width="2"/><text x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text><text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${pc.w}×${pc.h}</text></g>`;
-  }
-  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">plaque ${W} mm — disposition indicative, groupée par réglage</text>${g}</g></svg>`;
+  const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
+  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
 }
 function renderDebit(body) {
-  const pans = wb.data.calepinage || [];
-  if (!pans.length) { body.innerHTML = '<div class="empty">Pas de calepinage.</div>'; return; }
-  body.innerHTML = pans.map((pan) => `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>PANNEAU ${esc(pan.panneau || '')}</b><span>${esc(pan.dims || '')}</span></div><div class="cutwrap">${cutSVG(pan)}</div></div></div>`).join('')
-    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.5"></i>à débiter</span><span><i class="sw" style="background:var(--good);opacity:.5"></i>débité</span></div><div class="detail" id="det"></div>`;
-  body.querySelectorAll('.cut').forEach((g) => g.addEventListener('click', () => {
-    const etq = g.dataset.et; const p = wb.byEtq.get(etq) || {};
-    const det = $('det'); det.className = 'detail on';
-    det.innerHTML = `<h4>${esc(etq)}</h4><div class="dk"><span><b>Cotes</b> ${esc(pieceDims(p))} mm</span><span><b>Réglage</b> ${esc(p.reglageFS || '—')}</span></div>`;
-  }));
+  const plaques = wb.data.debit || [];
+  if (!plaques.length) { body.innerHTML = '<div class="empty">Pas de plan de débit.</div>'; return; }
+  const refL = Math.max(...plaques.map((pl) => (wb.matById.get(pl.materiau)?.plaque?.l) || 2800));
+  body.innerHTML = plaques.map((pl) => {
+    const mat = wb.matById.get(pl.materiau) || {};
+    const n = (pl.etapes || []).reduce((s, st) => s + (st.type === 'tronconnage' ? (st.pieces || []).length : 0), 0);
+    return `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>PLAQUE ${esc(pl.plaque || '')}</b><span>${esc(mat.label || pl.materiau || '')} · ${n} pièces</span></div><div class="cutwrap">${plaqueSVG(pl, refL)}</div></div></div>`;
+  }).join('')
+    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span style="color:var(--ink-faint)">clic colonne → détail/débiter · clic sur le nom → la pièce</span></div>`;
+  body.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('click', () => showColonne(gEl.dataset.band)));
+  body.querySelectorAll('.pname').forEach((t) => t.addEventListener('click', (e) => { e.stopPropagation(); showPiece(t.dataset.et); }));
+}
+// Vue TRONÇONS (2ᵉ station) : la plaque refendue, on raisonne PAR COLONNE. On regroupe les
+// colonnes identiques (même largeur + mêmes longueurs de tronçons) → une bande horizontale
+// cotée par type, avec la longueur de chaque tronçon ET la position de coupe cumulée (butée),
+// et une pastille cochable par colonne (= son tronçonnage fait).
+function renderTronconnage(body) {
+  const troncon = wb.data.meta?.tronconnage || 10;
+  const groups = new Map();
+  for (const pl of wb.data.debit || []) {
+    const bandW = {};
+    for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bandW[b.id] = b.largeur;
+    for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
+      const largeur = bandW[st.entree] || 0;
+      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '' }; });
+      const sig = largeur + '|' + troncs.map((t) => t.longueur).join('-');
+      if (!groups.has(sig)) groups.set(sig, { largeur, troncs, colonnes: [] });
+      groups.get(sig).colonnes.push({ id: pl.plaque + st.entree.split('-').pop(), stepId: st.id, done: wbDone(st.id), etqs: troncs.map((t) => t.et) });
+    }
+  }
+  if (!groups.size) { body.innerHTML = '<div class="empty">Pas de colonnes.</div>'; return; }
+  const S2 = 0.33, pad = 24;
+  const sorted = [...groups.values()].sort((a, b) => b.largeur - a.largeur);
+  const tot = (g) => g.troncs.reduce((s, t) => s + t.longueur, 0) + Math.max(0, g.troncs.length - 1) * troncon;
+  const W = Math.max(...sorted.map(tot)) * S2 + pad * 2;   // viewBox COMMUN → échelle identique d'une bande à l'autre
+  let html = `<div class="lede" style="margin-bottom:12px">Plaques refendues → tronçonnage. Chaque type de colonne (identiques regroupées ×N), ses tronçons cotés, et la position de coupe cumulée (butée) — <b>à la même échelle</b> d'une bande à l'autre. Cocher une colonne = tronçonnée.</div>`;
+  for (const g of sorted) {
+    const total = tot(g);
+    const bh = Math.round(g.largeur * S2), top = 12, Hc = bh + top + 28;   // hauteur = largeur RÉELLE (même échelle) → ratio fidèle ; +place pour les cotes sous la bande
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Hc}"><g transform="translate(${pad},${top})">`;
+    svg += `<rect x="0" y="0" width="${total * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".07" stroke="var(--shop)" stroke-width="2"/>`;
+    // largeur cotée sur le flanc (façon plan : largeur en Y, longueur en X)
+    // COTE largeur sur le flanc — style cote : ligne + empattements + valeur (unité incluse)
+    const fx = -7;
+    svg += `<line x1="${fx}" y1="0" x2="${fx}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="0" x2="${fx + 3}" y2="0" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="${bh}" x2="${fx + 3}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+    svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${g.largeur} mm</text>`;
+    let x = 0;
+    for (let i = 0; i < g.troncs.length; i++) {
+      const t = g.troncs[i], w = t.longueur * S2, short = t.et.replace(/^[^-]+-/, '');
+      const nf = Math.max(9, Math.min(12, w / (short.length * 0.62)));
+      svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
+      // NOM de la pièce seul au centre (cliquable)
+      svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
+      // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse
+      const cy = bh + 15;
+      svg += `<line x1="${x + 2}" y1="${cy}" x2="${x + w - 2}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + 2}" y1="${cy - 3}" x2="${x + 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + w - 2}" y1="${cy - 3}" x2="${x + w - 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${t.longueur} mm</text>`;
+      x += w;
+      if (i < g.troncs.length - 1) x += troncon * S2;
+    }
+    svg += `</g></svg>`;
+    const chips = g.colonnes.map((c) => `<button class="colchip${c.done ? ' done' : ''}" data-tick="${esc(c.stepId)}" title="${esc(c.etqs.join(', '))}">${c.done ? '✓ ' : ''}${esc(c.id)}</button>`).join('');
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>Guide ${g.largeur} mm</b><span>${g.troncs.length} tronçon${g.troncs.length > 1 ? 's' : ''} · ×${g.colonnes.length} colonne${g.colonnes.length > 1 ? 's' : ''}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
+  body.querySelectorAll('.pname[data-et]').forEach((t) => t.addEventListener('click', () => showPiece(t.dataset.et)));
+}
+// Vue RAINURAGE (station) : pièces rainurées regroupées par réglage, schéma coté de la
+// rainure (section + position), pastille cochable par pièce (clé synthétique rainure-<étq>).
+function renderRainurage(body) {
+  const groups = new Map();
+  for (const p of wb.data.pieces || []) for (const pr of p.preparations || []) if (pr.type === 'rainure') {
+    const sig = (pr.pos || '') + '|' + (pr.cotes || '');
+    if (!groups.has(sig)) groups.set(sig, { pos: pr.pos || '', cotes: pr.cotes || '', pieces: [] });
+    groups.get(sig).pieces.push(p);
+  }
+  if (!groups.size) { body.innerHTML = '<div class="empty">Aucune rainure.</div>'; return; }
+  const S2 = 0.33, padL = 42, padR = 14, padT = 16;   // MÊME format que les autres vues (dessus, échelle commune)
+  const W = Math.max(...[...groups.values()].map((g) => g.pieces[0].longueur || 1)) * S2 + padL + padR;
+  let html = `<div class="lede" style="margin-bottom:12px">Vue de dessus du panneau, <b>à l'échelle</b> : la rainure (<span style="color:var(--proj)">▬</span> bande) court le long, à 10 mm du bord <b>arrière</b> — minuscule sur la largeur (620−10−8). Traversante d'un bout, arrêt de l'autre · profondeur en cote écrite (invisible de dessus). Cocher = rainurée.</div>`;
+  for (const g of groups.values()) {
+    const p0 = g.pieces[0], len = p0.longueur, larg = p0.largeur;
+    const gw = +((g.cotes.match(/largeur\s*(\d+)/) || [])[1]) || 8, gd = +((g.cotes.match(/prof\.?\s*~?\s*(\d+)/) || [])[1]) || 9, off = +((g.pos.match(/(\d+)\s*mm/) || [])[1]) || 10;
+    const bh = larg * S2, botC = 22, gTop = bh - (off + gw) * S2;   // rainure à `off` du bord ARRIÈRE (bas)
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
+    svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
+    svg += `<rect x="0" y="${gTop}" width="${len * S2 - off * S2}" height="${Math.max(gw * S2, 2)}" fill="var(--proj)" fill-opacity=".6" stroke="var(--proj)" stroke-width="1"/>`;
+    svg += `<line x1="-9" y1="${bh}" x2="-9" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${bh}" x2="-6" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${gTop + gw * S2}" x2="-6" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><text x="-14" y="${(bh + gTop + gw * S2) / 2 + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${off}</text>`;
+    svg += `<text x="-14" y="9" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">avant</text><text x="-14" y="${bh - 1}" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">arr.</text>`;
+    svg += `<text x="0" y="${bh + 15}" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">panneau ${len}×${larg} · rainure largeur ${gw} · profondeur ${gd} mm · traversante ◀ arrêt ▶ ${off}</text>`;
+    svg += `</g></svg>`;
+    const chips = g.pieces.map((p) => `<button class="colchip${wbDone('rainure-' + p.etiquette) ? ' done' : ''}" data-tick="rainure-${esc(p.etiquette)}">${wbDone('rainure-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>Rainure — largeur ${gw} · prof. ${gd} mm</b><span>${g.pieces.length} pièces · ex. ${esc(p0.role)} ${len}×${larg}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
+}
+// Vue LAMELLO (station Zeta P2) : pièces regroupées par implantation, schéma des positions
+// le long de la pièce (côtés : niveaux depuis le bas ; horizontaux : abouts), à l'échelle.
+// Vue LAMELLO — plan d'archi À L'ÉCHELLE (échelle unique S px/mm). Chaque connecteur = une
+// fente localisée (● Tenso, ◆ biscuit), cotée : hauteur depuis le BAS, travers depuis l'AVANT.
+// Côtés dessinés verticaux (hauteurs qui montent) ; horizontaux couchés (abouts aux bouts).
+function renderLamello(body) {
+  const groups = new Map();
+  for (const p of wb.data.pieces || []) for (const pr of p.preparations || []) if (pr.type === 'lamello') {
+    const sig = JSON.stringify({ n: pr.niveaux, a: pr.abouts, c: pr.connecteurs, L: p.longueur, l: p.largeur, rep: p.role === 'CÔTÉ' ? p.repere : 0 });
+    if (!groups.has(sig)) groups.set(sig, { p0: p, pr, pieces: [] });
+    groups.get(sig).pieces.push(p);
+  }
+  if (!groups.size) { body.innerHTML = '<div class="empty">Aucun lamello.</div>'; return; }
+  // MÊME format que Plaques/Tronçons : pièce HORIZONTALE, échelle commune S2, remplit la largeur.
+  const S2 = 0.33, padL = 50, padR = 14, padT = 24;   // padL large : les cotes de travers décalées ne doivent pas être coupées
+  const W = Math.max(...[...groups.values()].map((g) => g.p0.longueur || 1)) * S2 + padL + padR;
+  const mk = (x, y, t) => t === 'biscuit'
+    ? `<path d="M${x} ${y - 4.5} L${x + 4.5} ${y} L${x} ${y + 4.5} L${x - 4.5} ${y} Z" fill="var(--warn)" stroke="var(--warn)" stroke-width="1"/>`
+    : `<circle cx="${x}" cy="${y}" r="3.6" fill="var(--shop)" fill-opacity=".45" stroke="var(--shop)" stroke-width="1.4"/>`;
+  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>à l'échelle</b> (même format que Plaques/Tronçons). Connecteur coté : longueur depuis la <b>gauche (bas)</b>, travers depuis le <b>haut (avant)</b>. <span style="color:var(--shop)">●</span> Tenso · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond. <i>Positions Tenso proposées — à valider.</i></div>`;
+  for (const g of groups.values()) {
+    const { p0, pr } = g, len = p0.longueur, larg = p0.largeur;
+    const bh = larg * S2, botC = 30;
+    const xs = pr.niveaux ? pr.niveaux.map((n) => n.h) : pr.abouts;
+    const conns = [];
+    if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs) conns.push({ x: n.h * S2, y: c.w * S2, t: c.t });
+    else for (const a of pr.abouts) for (const c of pr.connecteurs) conns.push({ x: a * S2, y: c.w * S2, t: c.t });
+    const ws = [...new Set((pr.niveaux ? pr.niveaux.flatMap((n) => n.connecteurs) : pr.connecteurs).map((c) => c.w))].sort((a, b) => a - b);
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
+    svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
+    // RAINURE de fond sur la MÊME pièce, si présente : bande près du bord ARRIÈRE (bas), à l'échelle,
+    // traversante à gauche, arrêt à droite. (Les tablettes n'ont pas de rainure.)
+    const rain = (p0.preparations || []).find((x) => x.type === 'rainure');
+    if (rain) {
+      const roff = +((String(rain.pos).match(/(\d+)\s*mm/) || [])[1]) || 10;
+      const rwd = +((String(rain.cotes).match(/largeur\s*(\d+)/) || [])[1]) || 8;
+      const gy = bh - (roff + rwd) * S2;
+      svg += `<rect x="0" y="${gy}" width="${len * S2 - roff * S2}" height="${Math.max(rwd * S2, 2)}" fill="var(--proj)" fill-opacity=".6" stroke="var(--proj)" stroke-width="1"/>`;
+    }
+    // cote TRAVERS (w) à gauche, depuis l'avant (haut) — labels décalés si valeurs proches
+    svg += `<line x1="-9" y1="0" x2="-9" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    ws.forEach((wv, i) => { const y = wv * S2, lx = i % 2 ? -24 : -13; svg += `<line x1="-12" y1="${y}" x2="-6" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${wv}</text>`; });
+    svg += `<text x="-6" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">avant↓</text>`;
+    // cote LONGUEUR (h / abouts) en bas, depuis la gauche (bas)
+    svg += `<line x1="0" y1="${bh + 7}" x2="${len * S2}" y2="${bh + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    for (const xv of xs) { const x = xv * S2; svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${xv}</text>`; }
+    for (const c of conns) svg += mk(c.x, c.y, c.t);
+    svg += `</g></svg>`;
+    const chips = g.pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role)} · ${len} × ${larg} mm</b><span>${pr.niveaux ? pr.niveaux.length + ' niveaux' : '2 abouts'} · ×${g.pieces.length}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
 }
 function renderPrepas(body) {
   const rows = (wb.data.pieces || []).filter((p) => (p.preparations || []).length);
   body.innerHTML = rows.length ? rows.map((p) => `<div class="prep-card"><h4 data-piece="${esc(p.etiquette)}">${esc(p.etiquette)} · ${esc(pieceDims(p))}</h4><ul>${p.preparations.map((pr) => `<li><b>${esc(pr.type)}</b> — ${esc(pr.cotes || '')} ${pr.pos ? '· ' + esc(pr.pos) : ''}</li>`).join('')}</ul></div>`).join('') : '<div class="empty">Aucune préparation.</div>';
   body.querySelectorAll('[data-piece]').forEach((h) => h.addEventListener('click', () => showPiece(h.dataset.piece)));
 }
+// Vue ASSEMBLAGE — élévation du caisson À L'ÉCHELLE : niveaux (tablettes) cotés en hauteur
+// depuis le bas + connecteurs, à côté de la séquence de montage. Done par module.
 function renderAsm(body) {
   const mods = wb.data.assemblage || [];
-  body.innerHTML = mods.length ? mods.map((m) => `<div class="asm-card" id="asm-${esc(m.module)}"><h4 style="cursor:default">${esc(m.titre || m.module)}</h4><ol>${(m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`).join('') : '<div class="empty">Pas de séquence d’assemblage.</div>';
-}
-function suiviGroups() {
-  const groups = new Map();
-  for (const p of wb.data.pieces || []) { const k = p.reglageFS || '—'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
-  return groups;
+  if (!mods.length) { body.innerHTML = '<div class="empty">Pas de séquence d’assemblage.</div>'; return; }
+  const S2 = 0.33, padL = 34, padR = 16, padT = 20, botC = 20;   // MÊME format que Plaques/Tronçons
+  const coteOf = (mod) => (wb.data.pieces || []).find((p) => p.role === 'CÔTÉ' && p.module === mod) || { longueur: 1920, largeur: 620 };
+  const W = Math.max(...mods.map((m) => coteOf(m.module).longueur || 1)) * S2 + padL + padR;
+  const abbr = (s) => String(s || '').replace(/Tenso/g, 'T').replace(/biscuit/g, 'B').replace(/\s*\+\s*/g, '+').replace(/\s+/g, '').trim();
+  let html = `<div class="lede" style="margin-bottom:12px">Élévation du côté <b>à l'échelle</b> (même format) : chaque niveau coté en hauteur depuis la gauche/bas, avec ses connecteurs — à côté de la séquence de montage. Cocher = monté.</div>`;
+  for (const m of mods) {
+    const c = coteOf(m.module), len = c.longueur, larg = c.largeur, bh = larg * S2;
+    const niv = (m.niveaux || []).slice().sort((a, b) => a.h - b.h);
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
+    svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".05" stroke="var(--shop)" stroke-width="1.5"/>`;
+    svg += `<line x1="0" y1="${bh + 7}" x2="${len * S2}" y2="${bh + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    for (const n of niv) {
+      const x = n.h * S2;
+      svg += `<line x1="${x}" y1="0" x2="${x}" y2="${bh}" stroke="var(--shop)" stroke-width="2"/>`;
+      svg += `<text x="${x}" y="-4" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8">${esc(abbr(n.connecteurs))}</text>`;
+      svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 18}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${n.h}</text>`;
+    }
+    svg += `</g></svg>`;
+    const seq = (m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('');
+    const dk = 'asm-' + m.module;
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(m.titre || m.module)}</b><span>fond ${esc(m.fond || '')}</span></div><div class="cutwrap">${svg}</div><ol style="margin:10px 0 0;padding-left:20px;font-size:12.5px;line-height:1.5">${seq}</ol><div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${dk}">${wbDone(dk) ? '✓ ' : ''}Meuble ${esc(m.module)} monté</button></div></div></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
 }
 function renderSuivi(body) {
   let html = '';
-  for (const [reg, pieces] of suiviGroups()) {
-    const open = pieces.filter((p) => !wbDone(p.etiquette)).length;
-    html += `<div class="sgrp"><div class="sh">${esc(reg)} · ${open ? open + ' restantes' : '✓ terminé'}</div>`;
-    for (const p of pieces) {
-      html += `<div class="srow${wbDone(p.etiquette) ? ' done' : ''}"><button class="cbox" data-tick="${esc(p.etiquette)}">${wbDone(p.etiquette) ? '✓' : ''}</button><span class="lbl" data-piece="${esc(p.etiquette)}">${esc(p.etiquette)}</span><span class="dim">${esc(pieceDims(p))}${p.panneau ? ' · ' + esc(p.panneau) : ''}</span></div>`;
+  for (const pl of wb.data.debit || []) {
+    const steps = pl.etapes || [];
+    const open = steps.filter((s) => !wbDone(s.id)).length;
+    html += `<div class="sgrp"><div class="sh">Plaque ${esc(pl.plaque)} · ${open ? open + ' étape' + (open > 1 ? 's' : '') + ' restante' + (open > 1 ? 's' : '') : '✓ terminé'}</div>`;
+    for (const st of steps) {
+      html += `<div class="srow${wbDone(st.id) ? ' done' : ''}"><button class="cbox" data-tick="${esc(st.id)}">${wbDone(st.id) ? '✓' : ''}</button><span class="lbl">${esc(st.titre || st.id)}</span><span class="dim">${esc(st.type)}</span></div>`;
     }
     html += '</div>';
   }
-  body.innerHTML = html || '<div class="empty">Aucune pièce.</div>';
+  body.innerHTML = html || '<div class="empty">Aucune étape.</div>';
   body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
-  body.querySelectorAll('.srow [data-piece]').forEach((s) => s.addEventListener('click', () => showPiece(s.dataset.piece)));
+}
+// Résout une bande (colonne) : sa géométrie (refente) + son étape de tronçonnage.
+function findBand(bandId) {
+  for (const pl of wb.data.debit || []) {
+    let band = null, troncStep = null;
+    for (const st of pl.etapes || []) {
+      if (st.type === 'refente') for (const b of st.bandes || []) if (b.id === bandId) band = b;
+      if (st.type === 'tronconnage' && st.entree === bandId) troncStep = st;
+    }
+    if (band) return { plaque: pl.plaque, mat: wb.matById.get(pl.materiau) || {}, band, troncStep };
+  }
+  return null;
+}
+// Pop-up COLONNE : l'objet réel du débit — longueur, refente, tronçons (liens), débiter d'un bloc.
+function showColonne(bandId) {
+  const f = findBand(bandId); if (!f) return;
+  const { plaque, mat, band, troncStep } = f;
+  const stepId = troncStep && troncStep.id;
+  const on = stepId ? wbDone(stepId) : false;
+  const troncs = ((troncStep && troncStep.pieces) || []).map((pose) => { const p = wb.byEtq.get(pose.etiquette) || {}; return { et: pose.etiquette, longueur: p.longueur }; });
+  const body = pieceModal.querySelector('#piece-body');
+  body.innerHTML = `<h2>Colonne ${esc(plaque + bandId.split('-').pop())}</h2>
+    <div class="prow"><b>Plaque</b><span>${esc(plaque)}</span></div>
+    <div class="prow"><b>Refente</b><span>largeur ${esc(String(band.largeur))} · longueur ${esc(String(Math.round(band.longueur || 0)))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
+    <div class="prow"><b>Matière</b><span>${esc(mat.label || '')}</span></div>
+    <div class="prow"><b>Tronçons (${troncs.length})</b><span>${troncs.map((t) => `<button class="lnk" data-piece="${esc(t.et)}" style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit">${esc(t.et.replace(/^[^-]+-/, ''))}</button> <span style="color:var(--ink-faint)">${t.longueur}</span>`).join('<br>')}</span></div>`;
+  const actions = document.createElement('div'); actions.className = 'actions';
+  if (stepId) {
+    const btn = document.createElement('button');
+    btn.textContent = on ? 'Colonne à refaire' : `Débiter la colonne (${troncs.length}) ✓`;
+    btn.addEventListener('click', () => { pieceModal.hidden = true; tick(stepId, !on); });
+    actions.append(btn);
+  }
+  const close = document.createElement('button'); close.textContent = 'Fermer';
+  close.addEventListener('click', () => { pieceModal.hidden = true; });
+  actions.append(close); body.appendChild(actions);
+  body.querySelectorAll('.lnk[data-piece]').forEach((b) => b.addEventListener('click', () => showPiece(b.dataset.piece)));
+  pieceModal.hidden = false;
 }
 function showPiece(etq) {
   const p = wb.byEtq.get(etq); if (!p) return;
+  const loc = wb.pieceStep.get(etq) || {};
+  const mat = wb.matById.get(loc.materiau) || {};
+  const stepId = loc.stepId;
+  const step = (wb.steps || []).find((s) => s.id === stepId);
+  const sibs = step ? (step.pieces || []).map((pp) => pp.etiquette.replace(/^[^-]+-/, '')) : [];
   const body = pieceModal.querySelector('#piece-body');
   body.innerHTML = `<h2>${esc(etq)}</h2>
-    <div class="prow"><b>Dimensions</b><span>${esc(pieceDims(p))} mm — ${esc(p.reglageFS || '')}</span></div>
-    <div class="prow"><b>Débit</b><span>panneau ${esc(p.panneau || '?')}, colonne ${esc(String(p.colonne ?? '?'))}</span></div>
+    <div class="prow"><b>Dimensions</b><span>${esc(pieceDims(p))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
+    <div class="prow"><b>Matière</b><span>${esc(mat.label || loc.materiau || '—')}</span></div>
+    <div class="prow"><b>Colonne</b><span>${esc(step?.entree || '?')} · plaque ${esc(loc.plaque || '?')}</span></div>
+    ${sibs.length > 1 ? `<div class="prow"><b>Tronçons</b><span>${sibs.map(esc).join(' · ')}</span></div>` : ''}
     ${(p.preparations || []).length ? `<div class="prow"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
     ${p.placeAssemblage ? `<div class="prow"><b>Assemblage</b><span>${esc(p.placeAssemblage)}</span></div>` : ''}`;
   const actions = document.createElement('div'); actions.className = 'actions';
-  const tickBtn = document.createElement('button'); tickBtn.textContent = wbDone(etq) ? 'Décocher' : 'Marquer faite ✓';
-  tickBtn.addEventListener('click', () => { pieceModal.hidden = true; tick(etq, !wbDone(etq)); });
+  if (stepId) {
+    const on = wbDone(stepId);
+    const tickBtn = document.createElement('button');
+    tickBtn.textContent = on ? 'Colonne à refaire' : `Débiter la colonne (${sibs.length} pièce${sibs.length > 1 ? 's' : ''}) ✓`;
+    tickBtn.addEventListener('click', () => { pieceModal.hidden = true; tick(stepId, !on); });
+    actions.append(tickBtn);
+  }
   const close = document.createElement('button'); close.textContent = 'Fermer';
   close.addEventListener('click', () => { pieceModal.hidden = true; });
-  actions.append(tickBtn, close); body.appendChild(actions);
+  actions.append(close); body.appendChild(actions);
   pieceModal.hidden = false;
 }
 function renderShop() {
   const bodyEl = atelierFull.querySelector('#atelier-body');
-  const ordered = [];
-  for (const [, pieces] of suiviGroups()) ordered.push(...pieces);
-  const total = ordered.length;
-  const remaining = ordered.filter((p) => !wbDone(p.etiquette));
-  if (!remaining.length) { bodyEl.innerHTML = `<div class="etq">Terminé 🎉</div><div class="dims">${total} pièces débitées</div>`; return; }
+  const steps = wb.steps || [];
+  const total = steps.length;
+  const remaining = steps.filter((s) => !wbDone(s.id));
+  if (!remaining.length) { bodyEl.innerHTML = `<div class="etq">Terminé 🎉</div><div class="dims">${total} étapes faites</div>`; return; }
   const cur = remaining[0];
   const doneCount = total - remaining.length;
-  bodyEl.innerHTML = `<div class="reg">${esc(cur.reglageFS || '')}</div><div class="etq">${esc(cur.etiquette)}</div>
-    <div class="dims">${esc(pieceDims(cur))} mm</div><div class="extra">${esc((cur.preparations || []).map((pr) => pr.type).join(' · ') || '')}</div>`;
+  const detail = cur.type === 'tronconnage'
+    ? (cur.pieces || []).map((p) => p.etiquette.replace(/^[^-]+-/, '')).join(' · ')
+    : cur.type === 'refente'
+      ? 'bandes ' + (cur.bandes || []).map((b) => b.largeur).join(' · ') + ' mm'
+      : '';
+  bodyEl.innerHTML = `<div class="reg">Plaque ${esc(cur.plaque)} · ${esc(cur.type)}</div><div class="etq">${esc(cur.titre || cur.id)}</div>
+    <div class="dims">${esc(detail)}</div>`;
   const btn = document.createElement('button'); btn.className = 'done-btn'; btn.textContent = 'FAIT ✓';
-  btn.addEventListener('click', () => tick(cur.etiquette, true)); bodyEl.appendChild(btn);
-  bodyEl.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(100 * doneCount / total)}%"></div></div><div class="pcount">${doneCount}/${total} — réglage : ${esc(String(cur.reglageFS || '—'))}</div>`);
+  btn.addEventListener('click', () => tick(cur.id, true)); bodyEl.appendChild(btn);
+  bodyEl.insertAdjacentHTML('beforeend', `<div class="progress"><div style="width:${Math.round(100 * doneCount / total)}%"></div></div><div class="pcount">${doneCount}/${total} étapes</div>`);
 }
 
 /* ── App Voyages : timeline par jour + tray de suggestions ───────────

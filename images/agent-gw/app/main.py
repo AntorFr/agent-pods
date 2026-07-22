@@ -324,6 +324,8 @@ async def workbook_list():
                     "projet": data.get("projet"),
                     "titre": data.get("titre") or data.get("projet") or p.parent.name,
                     "pieces": len(data.get("pieces", [])),
+                    "total": sum(len(pl.get("etapes", [])) for pl in data.get("debit", []))
+                    or len(data.get("pieces", [])),
                     "done": len(fait),
                     "lastActivity": max(fait.values(), default=None),
                 }
@@ -339,18 +341,19 @@ async def workbook_state(wb: str):
 
 @app.post("/api/workbook/state")
 async def workbook_tick(request: Request):
-    """One tick = one piece. Server-side merge so two devices never
-    clobber each other's progress with a stale full-state write."""
+    """One tick = one step (modèle A ; `etiquette` gardé en repli pour les workbooks v1).
+    Server-side merge so two devices never clobber each other's progress with a stale
+    full-state write."""
     body = await request.json()
     p = _workbook_file(body.get("wb") or "")
-    etiquette = (body.get("etiquette") or "").strip()
-    if not etiquette:
-        raise HTTPException(status_code=400, detail="etiquette required")
+    key = (body.get("key") or body.get("etiquette") or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="key required")
     state = _load_wb_state(p)
     if body.get("done", True):
-        state["fait"][etiquette] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        state["fait"][key] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     else:
-        state["fait"].pop(etiquette, None)
+        state["fait"].pop(key, None)
     p.with_name("workbook-state.json").write_text(
         json.dumps(state, ensure_ascii=False, indent=1)
     )
