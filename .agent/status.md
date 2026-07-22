@@ -15,8 +15,8 @@
 3. **Swipe deux-écrans** : `#shell` devient une piste 200vw ; swipe horizontal (suivi
    du doigt + calage à 28 %) bascule chat ⇆ apps, poignées de bord (`.edge`) en
    affordance/repli. Mobile seul (`max-width:820px`, aligné JS/CSS) ; desktop garde le
-   rail redimensionnable. `renderRoute` n'auto-ferme plus l'écran apps sur route vide
-   (l'accueil-mosaïque EST l'écran apps ; le chat est à un swipe).
+   rail redimensionnable. **Chat = écran par défaut** (route vide ramène au chat ;
+   naviguer vers une app ouvre l'écran apps) ; le swipe/les poignées basculent en plus.
    Bundle + statics rebuildés (esbuild), tests moteur verts, `node --check` OK.
    **À faire : tag → image → bump manifeste k8s pour déployer + test sur téléphone.**
 

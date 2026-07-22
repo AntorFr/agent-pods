@@ -630,9 +630,10 @@ $('back').addEventListener('click', () => { if (CR.length > 1) location.hash = C
 const page = $('view');
 function renderRoute() {
   const route = currentRoute();
-  // Mobile deux-écrans : naviguer vers une app révèle l'écran apps ; la route vide
-  // (accueil = mosaïque) ne force PAS le retour au chat — c'est le swipe/poignée qui décide.
-  if (mqMobile.matches && route !== '') document.body.classList.add('canvas-open');
+  // Mobile deux-écrans : le CHAT est l'écran par défaut. Naviguer vers une app révèle
+  // l'écran apps ; revenir à la racine (route vide) ramène au chat. Le swipe/les
+  // poignées basculent en plus, à la main, entre les deux.
+  if (mqMobile.matches) document.body.classList.toggle('canvas-open', route !== '');
   if (!route) return renderHome();
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
   // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
