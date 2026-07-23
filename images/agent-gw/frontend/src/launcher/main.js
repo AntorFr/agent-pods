@@ -226,7 +226,16 @@ async function sendMessage(text, forceEph, atts) {
     status.classList.remove('busy'); status.title = 'Alfred est au repos';
     busy = false;
     syncConfirm();
-    if (queue.length) { const next = queue.shift(); renderQueued(); sendMessage(next.text, undefined, next.atts); }
+    // Rattrapage groupé : les messages tapés pendant qu'Alfred travaillait sont
+    // fusionnés en UN seul tour (au lieu d'un tour par message) — les textes se
+    // recollent en paragraphes, les pièces jointes se concatènent, dans l'ordre.
+    if (queue.length) {
+      const batch = queue.splice(0);
+      renderQueued();
+      const text = batch.map((q) => q.text).filter(Boolean).join('\n\n');
+      const atts = batch.flatMap((q) => q.atts);
+      sendMessage(text, undefined, atts);
+    }
   }
 }
 $('composer').addEventListener('submit', (e) => {
