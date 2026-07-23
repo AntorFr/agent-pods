@@ -2,13 +2,13 @@
 
 > MàJ : 2026-07-23
 
-**File d'attente — rattrapage groupé (agent-gw, non taguée, 2026-07-23)** : les messages
-tapés pendant qu'Alfred travaille étaient rejoués **un par un** (un tour par message) ;
-désormais ils sont **fusionnés en un seul tour** au prochain passage — textes recollés en
-paragraphes (ordre préservé), pièces jointes concaténées. Modif client-only, un point :
-sortie de file dans `sendMessage` (`queue.shift` → `queue.splice(0)` + merge),
-`frontend/src/launcher/main.js`. Bundle + `app/static/launcher.js` rebuildés (esbuild),
-`node --check` OK. **Tag `agent-gw-v0.29.0` → image CI → bump `alfred-helm.yml` (k8s-home-lab).**
+**File d'attente — rattrapage groupé — DÉPLOYÉ (2026-07-23, agent-gw 0.29.0)** : les
+messages tapés pendant qu'Alfred travaille étaient rejoués **un par un** (un tour par
+message) ; désormais ils sont **fusionnés en un seul tour** au prochain passage — textes
+recollés en paragraphes (ordre préservé), pièces jointes concaténées. Modif client-only, un
+point : sortie de file dans `sendMessage` (`queue.shift` → `queue.splice(0)` + merge),
+`frontend/src/launcher/main.js`. Tag `agent-gw-v0.29.0` → image GHCR multi-arch OK →
+`alfred-helm.yml` bumpé 0.28.0 → 0.29.0 → pod alfred 3/3 Running vérifié.
 
 **UI mobile — 3 retouches livrées côté code (agent-gw, non taguée)** :
 1. **Composer replié** : les 3 actions (🛡 ⚡ 📎) passent sous un « + » en mobile
