@@ -215,12 +215,13 @@ async function sendMessage(text, forceEph, atts) {
         const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] || '{}');
         if (ev === 'text') { add('agent', data.text, eph); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
         else if (ev === 'error') add('error', data.message);
-        else if (ev === 'done') { if (data.ephemeral) ephSession = data.session_id; else refreshSession(); }
+        else if (ev === 'done') { if (data.ephemeral) ephSession = data.session_id; else { refreshSession(); syncHistoryLen(); } }
       }
     }
     if (currentRoute().startsWith('dom/') || currentRoute().startsWith('voyage') || currentRoute() === '') { memIndex = null; wbCache = null; loadTreeThen(renderRoute); } // l'agent a pu écrire
   } catch (e) {
     add('error', String(e));
+    if (!eph) pollResyncHistory();   // le serveur a peut-être fini la réponse malgré la coupure — on la récupère sans reload
   } finally {
     pending.remove();
     status.classList.remove('busy'); status.title = 'Alfred est au repos';
@@ -296,6 +297,36 @@ async function refreshSession() {
     ctxBtn.title = `Poids du contexte : ${n.toLocaleString('fr-FR')} tokens, rejoués à chaque message. Au-delà, changez de sujet (▤) ou repartez à neuf (↺).`;
   } catch {}
 }
+
+// ── Réconciliation du transcript ─────────────────────────────────────
+// Le SDK persiste la réponse même si le stream client casse (coupure réseau mobile) ou si
+// l'onglet passe en arrière-plan. /api/history est la source de vérité ; on la rejoue sans
+// reload. Pendant clientside du « rattrapage groupé » (sortant) : ici on rattrape l'ENTRANT.
+let historyLen = 0;
+function renderHistory(messages) {
+  chat.innerHTML = '';
+  for (const m of messages) add(m.role === 'user' ? 'user' : 'agent', m.text);
+  historyLen = messages.length;
+  chat.scrollTop = chat.scrollHeight;
+}
+async function resyncHistory() {          // re-rend SEULEMENT si le transcript a grandi
+  try {
+    const r = await fetch('/api/history', { headers: headers(false), cache: 'no-store' });
+    if (!r.ok) return false;
+    const { messages } = await r.json();
+    if (messages.length <= historyLen) return false;
+    renderHistory(messages);
+    return true;
+  } catch { return false; }
+}
+async function syncHistoryLen() {         // recale le compteur sans re-render (le stream a déjà affiché)
+  try { const r = await fetch('/api/history', { headers: headers(false), cache: 'no-store' }); if (r.ok) historyLen = (await r.json()).messages.length; } catch {}
+}
+async function pollResyncHistory() {      // après coupure : la réponse peut encore se générer → on sonde
+  for (let i = 0; i < 12; i++) { if (await resyncHistory()) return; await new Promise((r) => setTimeout(r, 2500)); }
+}
+window.addEventListener('online', resyncHistory);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncHistory(); });
 
 /* ── Mode éphémère ⚡ ─────────────────────────────────────────────── */
 const ephBtn = $('eph');
@@ -2029,11 +2060,11 @@ window.addEventListener('hashchange', renderRoute);
   syncConfirm();
   pollTunnel();
   refreshSession();
-  // Restaure la conversation visible depuis le transcript serveur.
+  // Restaure la conversation depuis le transcript serveur (source de vérité).
   try {
     const r = await fetch('/api/history', { headers: headers(false) });
     if (r.status === 401) { onUnauthorized(); return; }
-    if (r.ok) { const { messages } = await r.json(); for (const m of messages) add(m.role === 'user' ? 'user' : 'agent', m.text); }
+    if (r.ok) renderHistory((await r.json()).messages);
   } catch {}
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
