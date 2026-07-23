@@ -1380,11 +1380,25 @@ function renderLamello(body) {
   for (const g of groups.values()) {
     const { p0, pr } = g, len = p0.longueur, larg = p0.largeur;
     const bh = larg * S2, botC = 30;
-    const xs = pr.niveaux ? pr.niveaux.map((n) => n.h) : pr.abouts;
+    // Axes selon le RÔLE (cf. contrat) : la barre a x = longueur (= profondeur d'un horizontal), y = largeur.
+    //  • CÔTÉ       : x = position le long de la HAUTEUR (niveau h, ou about aux bouts) ; y = travers w (avant).
+    //  • HORIZONTAL : x = w (le long de la PROFONDEUR / longueur) ; y = about (en LARGEUR).
+    const isCote = p0.role === 'CÔTÉ';
     const conns = [];
-    if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs) conns.push({ x: n.h * S2, y: c.w * S2, t: c.t });
-    else for (const a of pr.abouts) for (const c of pr.connecteurs) conns.push({ x: a * S2, y: c.w * S2, t: c.t });
-    const ws = [...new Set((pr.niveaux ? pr.niveaux.flatMap((n) => n.connecteurs) : pr.connecteurs).map((c) => c.w))].sort((a, b) => a - b);
+    let botVals, leftVals, leftLbl;
+    if (isCote) {
+      botVals = pr.niveaux ? pr.niveaux.map((n) => n.h) : (pr.abouts || []);
+      const cs = pr.niveaux ? pr.niveaux.flatMap((n) => n.connecteurs) : (pr.connecteurs || []);
+      leftVals = [...new Set(cs.map((c) => c.w))].sort((a, b) => a - b);
+      leftLbl = 'avant↓';
+      if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs) conns.push({ x: n.h * S2, y: c.w * S2, t: c.t });
+      else for (const a of (pr.abouts || [])) for (const c of (pr.connecteurs || [])) conns.push({ x: a * S2, y: c.w * S2, t: c.t });
+    } else {
+      botVals = [...new Set((pr.connecteurs || []).map((c) => c.w))].sort((a, b) => a - b);
+      leftVals = pr.abouts || [];
+      leftLbl = 'largeur↓';
+      for (const a of (pr.abouts || [])) for (const c of (pr.connecteurs || [])) conns.push({ x: c.w * S2, y: a * S2, t: c.t });
+    }
     let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
     // RAINURE de fond sur la MÊME pièce, si présente : bande près du bord ARRIÈRE (bas), à l'échelle,
@@ -1398,11 +1412,11 @@ function renderLamello(body) {
     }
     // cote TRAVERS (w) à gauche, depuis l'avant (haut) — labels décalés si valeurs proches
     svg += `<line x1="-9" y1="0" x2="-9" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    ws.forEach((wv, i) => { const y = wv * S2, lx = i % 2 ? -24 : -13; svg += `<line x1="-12" y1="${y}" x2="-6" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${wv}</text>`; });
-    svg += `<text x="-6" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">avant↓</text>`;
+    leftVals.forEach((wv, i) => { const y = wv * S2, lx = i % 2 ? -24 : -13; svg += `<line x1="-12" y1="${y}" x2="-6" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${wv}</text>`; });
+    svg += `<text x="-6" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">${leftLbl}</text>`;
     // cote LONGUEUR (h / abouts) en bas, depuis la gauche (bas)
     svg += `<line x1="0" y1="${bh + 7}" x2="${len * S2}" y2="${bh + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    for (const xv of xs) { const x = xv * S2; svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${xv}</text>`; }
+    for (const xv of botVals) { const x = xv * S2; svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${xv}</text>`; }
     for (const c of conns) svg += mk(c.x, c.y, c.t);
     svg += `</g></svg>`;
     const chips = g.pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
