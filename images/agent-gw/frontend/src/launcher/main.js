@@ -1409,8 +1409,94 @@ function renderPrepas(body) {
 }
 // Vue ASSEMBLAGE — élévation du caisson À L'ÉCHELLE : niveaux (tablettes) cotés en hauteur
 // depuis le bas + connecteurs, à côté de la séquence de montage. Done par module.
+// ————— Vue ASSEMBLAGE « ouverte » : moteur de rendu de SCÈNE (contrat front-assemblage v0.1).
+// Alfred compose une scène { cadre, noeuds } en mm ; le front calcule UNE échelle px/mm et
+// dessine le vocabulaire fermé (piece/trait/cote/feature/note/repere). Les cotes sont MESURÉES
+// depuis leurs ancres — jamais un pixel, jamais une valeur en dur côté Alfred.
+function sceneSVG(scene) {
+  const cad = scene.cadre || { w: 1000, h: 1000 };
+  const S = Math.min(880 / (cad.w || 1000), 640 / (cad.h || 1000));   // px/mm, échelle unique
+  const M = 48;                                                        // marge px (cotes/notes hors cadre)
+  const idx = {};
+  for (const n of scene.noeuds || []) if (n.type === 'piece' && n.id) idx[n.id] = n;
+  // ancre → point [x,y] en mm : [x,y] absolu, ou { ref, coin|bord, t?, du?, dv? } relatif
+  const anc = (a) => {
+    if (Array.isArray(a)) return [a[0] || 0, a[1] || 0];
+    const p = a && a.ref && idx[a.ref]; if (!p) return [0, 0];
+    let x = p.x, y = p.y;
+    if (a.coin) { if (/droite/.test(a.coin)) x = p.x + p.w; if (/bas/.test(a.coin)) y = p.y + p.h; if (a.coin === 'centre') { x = p.x + p.w / 2; y = p.y + p.h / 2; } }
+    if (a.bord) { const t = a.t == null ? 0.5 : a.t;
+      if (a.bord === 'haut') { x = p.x + p.w * t; y = p.y; }
+      else if (a.bord === 'bas') { x = p.x + p.w * t; y = p.y + p.h; }
+      else if (a.bord === 'gauche') { x = p.x; y = p.y + p.h * t; }
+      else if (a.bord === 'droite') { x = p.x + p.w; y = p.y + p.h * t; } }
+    return [x + (a.du || 0), y + (a.dv || 0)];
+  };
+  const X = (mm) => (mm * S).toFixed(1);
+  let g = '';
+  for (const n of scene.noeuds || []) {
+    if (n.type === 'piece') {
+      const fant = n.fill === 'fantome';
+      const skin = fant ? 'fill="none" stroke-dasharray="5 4"' : 'fill="var(--surface)" fill-opacity=".55"';
+      const ref = n.ref ? ` class="pname" data-et="${esc(n.ref)}" style="cursor:pointer"` : '';
+      g += `<rect${ref} x="${X(n.x)}" y="${X(n.y)}" width="${X(n.w)}" height="${X(n.h)}" rx="2" ${skin} stroke="var(--shop)" stroke-width="1.5"/>`;
+      if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="600">${esc(n.label)}</text>`;
+    } else if (n.type === 'trait') {
+      const pts = (n.pts || []).map((p) => `${X(p[0])},${X(p[1])}`).join(' ');
+      const dash = n.style === 'axe' ? 'stroke-dasharray="9 3 2 3"' : n.style === 'pointille' ? 'stroke-dasharray="3 3"' : '';
+      g += `<polyline points="${pts}" fill="none" stroke="var(--ink-soft)" stroke-width="1.2" ${dash}/>`;
+    } else if (n.type === 'cote') {
+      const a = anc(n.de), b = anc(n.a), off = n.offset == null ? 28 : n.offset;
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      const dist = Math.round(L), nx = -dy / L, ny = dx / L;
+      const a2 = [a[0] + nx * off, a[1] + ny * off], b2 = [b[0] + nx * off, b[1] + ny * off];
+      const mx = (a2[0] + b2[0]) / 2, my = (a2[1] + b2[1]) / 2, ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      g += `<line x1="${X(a[0])}" y1="${X(a[1])}" x2="${X(a2[0])}" y2="${X(a2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
+      g += `<line x1="${X(b[0])}" y1="${X(b[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
+      g += `<line x1="${X(a2[0])}" y1="${X(a2[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink)" stroke-width="1"/>`;
+      g += `<text x="${X(mx)}" y="${X(my)}" transform="rotate(${ang.toFixed(0)} ${X(mx)} ${X(my)})" text-anchor="middle" dy="-3" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3.5">${esc(n.texte || dist + ' mm')}</text>`;
+    } else if (n.type === 'feature') {
+      if (n.forme === 'lamello') {
+        const [x, y] = anc(n.at);
+        g += n.stampe === 'biscuit'
+          ? `<rect x="${(x * S - 4.5).toFixed(1)}" y="${(y * S - 4.5).toFixed(1)}" width="9" height="9" transform="rotate(45 ${X(x)} ${X(y)})" fill="var(--warn)"/>`
+          : `<circle cx="${X(x)}" cy="${X(y)}" r="4.5" fill="var(--shop)"/>`;
+      } else if (n.forme === 'rainure') {
+        const a = anc(n.de), b = anc(n.a);
+        g += `<line x1="${X(a[0])}" y1="${X(a[1])}" x2="${X(b[0])}" y2="${X(b[1])}" stroke="var(--proj)" stroke-opacity=".55" stroke-width="${Math.max(2, (n.largeur || 8) * S).toFixed(1)}" stroke-linecap="round"/>`;
+      } else if (n.forme === 'percage') {
+        const [x, y] = anc(n.at), r = Math.max(2.5, (n.diametre || 5) * S / 2);
+        g += `<circle cx="${X(x)}" cy="${X(y)}" r="${r.toFixed(1)}" fill="none" stroke="var(--ink)" stroke-width="1"/><line x1="${(x * S - r - 2).toFixed(1)}" y1="${X(y)}" x2="${(x * S + r + 2).toFixed(1)}" y2="${X(y)}" stroke="var(--ink)" stroke-width="0.6"/><line x1="${X(x)}" y1="${(y * S - r - 2).toFixed(1)}" x2="${X(x)}" y2="${(y * S + r + 2).toFixed(1)}" stroke="var(--ink)" stroke-width="0.6"/>`;
+      }
+    } else if (n.type === 'note') {
+      const [x, y] = anc(n.at), w = (n.w || 170) * S, t = String(n.texte || '');
+      g += `<rect x="${X(x)}" y="${X(y)}" width="${w.toFixed(0)}" height="22" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+      g += `<text x="${(x * S + 6).toFixed(1)}" y="${(y * S + 15).toFixed(1)}" fill="var(--ink)" font-family="var(--mono)" font-size="10">${esc(t.length > 42 ? t.slice(0, 40) + '…' : t)}</text>`;
+    } else if (n.type === 'repere') {
+      const [x, y] = anc(n.at);
+      if (n.vers) { const [vx, vy] = anc(n.vers); g += `<line x1="${X(x)}" y1="${X(y)}" x2="${X(vx)}" y2="${X(vy)}" stroke="var(--ink-soft)" stroke-width="0.7"/>`; }
+      const ta = x > cad.w * 0.6 ? 'end' : 'start';   // près du bord droit → texte aligné à droite (anti-débordement)
+      g += `<text x="${X(x)}" y="${X(y)}" text-anchor="${ta}" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="600" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(n.texte || '')}</text>`;
+    }
+  }
+  const vw = (cad.w * S + 2 * M).toFixed(0), vh = (cad.h * S + 2 * M).toFixed(0);
+  return `<svg viewBox="0 0 ${vw} ${vh}" style="max-width:100%;height:auto"><g transform="translate(${M},${M})">${g}</g></svg>`;
+}
+function renderScenes(body, scenes) {
+  let html = `<div class="lede" style="margin-bottom:12px">Assemblage — <b>scène à l'échelle</b> (contrat ouvert v0.1). Cotes mesurées depuis la géométrie ; clic pièce → détail ; cocher = monté.</div>`;
+  for (const sc of scenes) {
+    const dk = 'asm-' + (sc.id || sc.titre || 'scene');
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(sc.titre || 'Assemblage')}</b><span>${esc(sc.vue || '')}</span></div><div class="cutwrap">${sceneSVG(sc)}</div><div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${esc(dk)}">${wbDone(dk) ? '✓ ' : ''}Monté</button></div></div></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
+  body.querySelectorAll('.pname[data-et]').forEach((t) => t.addEventListener('click', () => showPiece(t.dataset.et)));
+}
 function renderAsm(body) {
-  const mods = wb.data.assemblage || [];
+  const items = wb.data.assemblage || [];
+  const scenes = items.filter((x) => x && (x.noeuds || x.cadre));   // contrat ouvert v0.1
+  if (scenes.length) return renderScenes(body, scenes);
+  const mods = items;
   if (!mods.length) { body.innerHTML = '<div class="empty">Pas de séquence d’assemblage.</div>'; return; }
   const S2 = 0.33, padL = 34, padR = 16, padT = 20, botC = 20;   // MÊME format que Plaques/Tronçons
   const coteOf = (mod) => (wb.data.pieces || []).find((p) => p.role === 'CÔTÉ' && p.module === mod) || { longueur: 1920, largeur: 620 };
