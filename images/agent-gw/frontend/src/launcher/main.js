@@ -1493,7 +1493,8 @@ function sceneSVG(scene) {
       const fant = n.fill === 'fantome';
       const skin = fant ? 'fill="none" stroke-dasharray="5 4"' : 'fill="var(--surface)" fill-opacity=".55"';
       const ref = n.ref ? ` class="pname" data-et="${esc(n.ref)}" style="cursor:pointer"` : '';
-      g += `<rect${ref} x="${X(n.x)}" y="${X(n.y)}" width="${X(n.w)}" height="${X(n.h)}" rx="2" ${skin} stroke="var(--shop)" stroke-width="1.5"/>`;
+      const nid = n.id ? ` data-nid="${esc(n.id)}"` : '';   // cible du surlignage séquence (v0.2)
+      g += `<rect${ref}${nid} x="${X(n.x)}" y="${X(n.y)}" width="${X(n.w)}" height="${X(n.h)}" rx="2" ${skin} stroke="var(--shop)" stroke-width="1.5"/>`;
       if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="600">${esc(n.label)}</text>`;
     } else if (n.type === 'trait') {
       const pts = (n.pts || []).map((p) => `${X(p[0])},${X(p[1])}`).join(' ');
@@ -1536,15 +1537,58 @@ function sceneSVG(scene) {
   const vw = (cad.w * S + 2 * M).toFixed(0), vh = (cad.h * S + 2 * M).toFixed(0);
   return `<svg viewBox="0 0 ${vw} ${vh}" style="max-width:100%;height:auto"><g transform="translate(${M},${M})">${g}</g></svg>`;
 }
+// Glyphes des gestes de montage (vocabulaire fermé v0.2) — inconnu ⇒ puce neutre.
+const ASMG = { poser: '▽', coller: '≋', assembler: '⋈', visser: '✱', serrer: '⊏⊐', verifier: '⊾' };
+// Surligne les pièces `ids` dans la scène `scope` (DOM direct — pas de re-render).
+function asmHi(scope, ids) {
+  const set = new Set(ids);
+  scope.querySelectorAll('[data-nid]').forEach((r) => {
+    const on = set.has(r.getAttribute('data-nid'));
+    r.setAttribute('stroke', on ? 'var(--proj)' : 'var(--shop)');
+    r.setAttribute('stroke-width', on ? '3' : '1.5');
+    if (r.getAttribute('fill') !== 'none') r.setAttribute('fill-opacity', on ? '.85' : '.55');
+  });
+}
 function renderScenes(body, scenes) {
-  let html = `<div class="lede" style="margin-bottom:12px">Assemblage — <b>scène à l'échelle</b> (contrat ouvert v0.1). Cotes mesurées depuis la géométrie ; clic pièce → détail ; cocher = monté.</div>`;
-  for (const sc of scenes) {
-    const dk = 'asm-' + (sc.id || sc.titre || 'scene');
-    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(sc.titre || 'Assemblage')}</b><span>${esc(sc.vue || '')}</span></div><div class="cutwrap">${sceneSVG(sc)}</div><div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${esc(dk)}">${wbDone(dk) ? '✓ ' : ''}Monté</button></div></div></div>`;
-  }
+  const hasSeq = scenes.some((sc) => Array.isArray(sc.sequence) && sc.sequence.length);
+  let html = `<div class="lede" style="margin-bottom:12px">Assemblage — <b>scène à l'échelle</b> (contrat ouvert v0.2). Cotes mesurées depuis la géométrie ; clic pièce → détail ; ${hasSeq ? 'clic étape → pièces surlignées ; cocher chaque étape.' : 'cocher = monté.'}</div>`;
+  scenes.forEach((sc, si) => {
+    const seq = Array.isArray(sc.sequence) ? sc.sequence : [];
+    let side;
+    if (seq.length) {
+      const dn = seq.filter((s) => wbDone(s.key)).length;
+      const rows = seq.map((s, i) => {
+        const done = wbDone(s.key);
+        const cib = (s.cible || []).join(',');
+        const meta = [s.detail, s.outil].filter(Boolean).map((x) => `<i>${esc(x)}</i>`).join('');
+        return `<div class="asmstep${done ? ' done' : ''}" data-cible="${esc(cib)}">`
+          + `<button class="cbox" data-tick="${esc(s.key)}">${done ? '✓' : ''}</button>`
+          + `<span class="asmno">${i + 1}</span>`
+          + `<span class="asmg" title="${esc(s.geste || '')}">${ASMG[s.geste] || '•'}</span>`
+          + `<span class="asmt"><b>${esc(s.titre || s.key)}</b>${meta}</span></div>`;
+      }).join('');
+      side = `<div class="asmseq"><div class="asmseqh">Montage — ${dn}/${seq.length}</div>${rows}</div>`;
+    } else {
+      const dk = 'asm-' + (sc.id || sc.titre || 'scene');
+      side = `<div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${esc(dk)}">${wbDone(dk) ? '✓ ' : ''}Monté</button></div>`;
+    }
+    html += `<div class="blueprint" data-scene="${si}"><div class="bp-inner"><div class="bp-h"><b>${esc(sc.titre || 'Assemblage')}</b><span>${esc(sc.vue || '')}</span></div><div class="asmgrid"><div class="cutwrap">${sceneSVG(sc)}</div>${side}</div></div></div>`;
+  });
   body.innerHTML = html;
-  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
+  body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); tick(b.dataset.tick, !wbDone(b.dataset.tick)); }));
   body.querySelectorAll('.pname[data-et]').forEach((t) => t.addEventListener('click', () => showPiece(t.dataset.et)));
+  // clic sur une étape → surligne ses pièces cibles dans la scène (l'étape devient active)
+  body.querySelectorAll('.asmstep').forEach((row) => row.addEventListener('click', () => {
+    const bp = row.closest('.blueprint');
+    bp.querySelectorAll('.asmstep.active').forEach((r) => r.classList.remove('active'));
+    row.classList.add('active');
+    asmHi(bp, (row.dataset.cible || '').split(',').filter(Boolean));
+  }));
+  // à l'affichage : surligne la 1re étape non faite de chaque scène (l'étape « en cours »)
+  body.querySelectorAll('.blueprint[data-scene]').forEach((bp) => {
+    const cur = [...bp.querySelectorAll('.asmstep')].find((r) => !r.classList.contains('done'));
+    if (cur) { cur.classList.add('active'); asmHi(bp, (cur.dataset.cible || '').split(',').filter(Boolean)); }
+  });
 }
 function renderAsm(body) {
   const items = wb.data.assemblage || [];
