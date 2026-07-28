@@ -2,7 +2,7 @@
 
 > MàJ : 2026-07-28
 
-**Cocher une tâche = un geste — livré côté code (agent-gw, non taguée)** : la case de la
+**Cocher une tâche = un geste — DÉPLOYÉ (2026-07-28, agent-gw 0.33.0)** : la case de la
 vue todo ne cochait rien, elle **pré-remplissait la zone de saisie** (« Marque la tâche
 « … » comme faite. ») qu'il fallait envoyer soi-même — un aller-retour LLM pour un booléen.
 Désormais `GET|POST /api/todo/state` écrit un overlay `todo/todo-state.json` (hors git,
@@ -14,7 +14,15 @@ son passage suivant, **en gardant la date du geste**. Retirer d'une liste / supp
 liste restent des messages à Alfred (curation = jugement). Cerveau : **D28** (repo Alfred),
 qui renverse partiellement D27. Endpoint testé (TestClient : coche, décoche, merge,
 persistance, 400 sans clé) ; bundle + statics rebuildés, tests moteur verts, `node --check`
-OK. **À faire : tag → image → bump manifeste k8s.**
+OK. Tag `agent-gw-v0.33.0` → image GHCR multi-arch (amd64+arm64) vérifiée au manifest
+registry → `alfred-helm.yml` bumpé 0.32.0 → 0.33.0 → refresh ArgoCD forcé → pod alfred
+3/3 Running, image `agent-gw:0.33.0` confirmée, `/api/todo/state` répond **401** (route
+servie et gardée — un 404 aurait signé une image sans le code). **Reste à valider au
+doigt sur l'écran : la bascule optimiste dans un vrai navigateur.**
+
+⚠️ Les entrées « non taguée » plus bas (UI mobile, pièces jointes) sont **périmées** :
+elles ont été taguées et déployées depuis (0.30.0 → 0.32.0) sans que ce fichier soit
+repassé dessus. À nettoyer au prochain passage.
 
 **File d'attente — rattrapage groupé — DÉPLOYÉ (2026-07-23, agent-gw 0.29.0)** : les
 messages tapés pendant qu'Alfred travaille étaient rejoués **un par un** (un tour par
