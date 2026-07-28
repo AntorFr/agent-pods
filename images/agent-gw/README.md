@@ -24,6 +24,13 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
    écrite par l'agent, les gestes de l'UI vont dans un overlay `*-state.json` frère (hors
    git) ; météo et liaisons des voyages sont dérivées via les API Google (clé
    `GOOGLE_MAPS_API_KEY`, déjà dans l'env du pod pour le MCP maps) et jamais stockées.
+7. **Horloge des tâches planifiées** (`app/planif.py`, `GET /api/planif` — cerveau : D30) —
+   une boucle asyncio lit les fiches `type: planif` de `memory/planif/*.md` et, à l'heure
+   dite, ouvre un tour Alfred ordinaire avec **le corps de la fiche pour prompt**. Session
+   neuve, `GW_CHANNEL=planif` injecté par `ClaudeAgentOptions.env` (le hook du workspace
+   ferme alors TOUTE la surface Google, lectures comprises), pas de rattrapage au-delà de la
+   fenêtre de grâce, journal dans `planif/planif-state.json` (hors git). L'onglet PWA est en
+   **lecture** : créer ou suspendre passe par un message à Alfred, qui édite la fiche.
 
 Le pod porte un **2ᵉ conteneur `tunnel`** (image `claude-pod`) dédié au tunnel VS Code
 vers `/workspace` — accès dev direct, indépendant de la gateway.
@@ -43,6 +50,13 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_INBOX_TTL` | `86400` (24 h) | Âge (s) au-delà duquel une pièce jointe déposée est balayée (`0` = jamais). Purge best-effort à chaque upload. |
 | `GW_SESSION_TTL` | `14400` (4 h) | Inactivité (s) au-delà de laquelle la session n'est **plus reprise** : le tour suivant repart vierge (`0` = jamais). L'état durable vit dans `memory/` (D5), le transcript est jetable — le reprendre fait repayer tout le contexte accumulé à chaque message (cache prompt ~5 min, froid entre deux visites). |
 | `GW_CONFIRM_TTL` | `120` | Durée de validité (s) d'une autorisation bouclier 🛡. |
+| `GW_PLANIF` | `1` | Horloge des tâches planifiées. `0` la coupe (debug, ou pour geler les tours planifiés sans toucher aux fiches). Une seule instance d'`agent-gw` monte le workspace — les conteneurs voisins (`tunnel`, `voice`) ne lancent pas la gateway, donc pas de double horloge. **Le jour où on scale la gateway, ce flag devient obligatoire sur les répliques.** |
+| `GW_PLANIF_DIR` | `planif` | Dossier des fiches `type: planif`, relatif à la mémoire. |
+| `GW_PLANIF_TICK` | `30` | Période (s) du tick. Doit rester `< 60` : la boucle matche la **minute** courante. |
+| `GW_PLANIF_GRACE` | `5` | Fenêtre de rattrapage (min). Couvre un tour long qui tenait le verrou, **pas** une panne : au-delà, l'occurrence est perdue, à dessein (D30). `0` = aucun rattrapage. |
+| `GW_PLANIF_TIMEOUT` | `900` | Durée max (s) d'un tour planifié. Au-delà : annulé et journalisé en échec. |
+| `GW_PLANIF_MIN_PERIOD` | `15` | Plancher de fréquence (min). Un cron plus fin rend la fiche **invalide** (affichée telle quelle) au lieu d'être lissé en silence — le quota d'abonnement n'est pas gratuit. |
+| `GW_PLANIF_TZ` | `Europe/Paris` | Fuseau par défaut si la fiche n'en déclare pas. |
 | `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Hôtes autorisés du transport MCP (anti DNS-rebinding). |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_REDIRECT_URI` / `OIDC_ALLOWED_GROUP` | `""` / `""` / `""` / `admins` | Client OIDC Authelia. Dès qu'`OIDC_ISSUER` est posé, l'auth passe en OIDC (le bearer `GW_AUTH_TOKEN` devient inutilisé). |
 

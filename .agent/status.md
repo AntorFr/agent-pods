@@ -2,6 +2,27 @@
 
 > MàJ : 2026-07-28
 
+**Tâches planifiées — livré côté code (agent-gw, non taguée)** : Alfred n'avait aucun
+déclencheur temporel ; la consolidation des gestes (todo/voyage), le push mémoire du soir
+et la « une » du matin attendaient qu'on lui ouvre une session. Nouveau module
+`app/planif.py` : une boucle asyncio lit `memory/planif/*.md` (fiches `type: planif`, en
+git, écrites par Alfred seul) et ouvre à l'heure dite un tour ordinaire avec **le corps de
+la fiche pour prompt** — session neuve, `_query_lock` partagé, journal dans
+`planif/planif-state.json` (hors git). Cron maison 5 champs : on **matche la minute locale**
+au lieu de calculer une prochaine échéance en UTC — DST correct sans arithmétique de fuseau,
+et « pas de rattrapage » vient gratuitement (fenêtre de grâce 5 min, une occurrence, jamais
+la file). Plancher de fréquence 15 min : un cron plus fin rend la fiche **invalide** au lieu
+d'être lissé en silence. Garde : `GW_CHANNEL=planif` injecté via `ClaudeAgentOptions.env`
+(vérifié sur le pod : le SDK **fusionne** ce dict sur l'env hérité, le token OAuth survit) →
+`google_guard.py` ferme **toute** la surface Google sur ce canal, lectures comprises — pas
+seulement à cause du bouclier inarmable, mais contre le **blanchiment** (mail hostile lu sans
+témoin → résumé dans memory/ → relu comme fiable au tour suivant). Onglet PWA `#/planif` en
+**lecture** (créer/suspendre = message à Alfred). Cerveau : **D30** + **F8** (repo Alfred),
+qui amende la seule ligne « aucun déclencheur temporel » de D8 — le contrat « Alfred n'écrit
+jamais de lui-même » tient : palier 1 = tâches **muettes**. 44 tests verts
+(`test/planif_test.py`), hook testé sur les 3 canaux, `node --check` + bundle + statics OK.
+**À faire : tag → image → bump `alfred-helm.yml`.**
+
 **⚠️ Fausse piste à ne PAS refaire — approbation MCP (2026-07-28).** Une indispo du serveur
 **ghost** s'était déguisée en problème d'approbation des serveurs MCP, d'où une piste
 `claude-flag-settings.json` (`enableAllProjectMcpServers: true` copié dans l'image et passé
@@ -109,6 +130,10 @@ audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
 l'access token). Avenant skill correspondance = côté cerveau.
 
 **Prochaines étapes :**
+- [ ] **Tâches planifiées** : taguer `agent-gw-vX.Y.Z` → image CI → bumper `image.tag` dans
+      `alfred-helm.yml` → ArgoCD. Puis vérifier en prod : `/api/planif` répond (401 = servi
+      et gardé), l'onglet s'affiche, et **une vraie fiche part à l'heure dite** (la première
+      poussée par Alfred sera la consolidation `todo-state.json`).
 - [ ] **UI mobile (3 retouches)** : taguer une nouvelle `agent-gw-vX.Y.Z` → image CI →
       bumper `image.tag` dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD. Tester sur
       téléphone : le « + » (+ pastille), l'absence de zoom involontaire, le swipe chat⇆apps.
@@ -126,6 +151,8 @@ l'access token). Avenant skill correspondance = côté cerveau.
 - [ ] Test d'intégration sur un Voice PE (désactiver son entité `assist_satellite`
       dans HA d'abord) ; ajuster VAD/timeouts ; voix « alfred » à ajouter dans
       nestor-voice
-- [ ] Côté cerveau (repo Alfred) : décision **D29** (canal vocal) + registre vocal.
-      ⚠️ D28 était réservée ici au vocal, mais elle a été prise le 2026-07-28 par l'overlay
-      de gestes todo (décision écrite et committée) → le vocal glisse en D29.
+- [ ] Côté cerveau (repo Alfred) : décision **D31** (canal vocal) + registre vocal.
+      ⚠️ Le numéro a glissé deux fois le 2026-07-28 : D28 = overlay des gestes todo,
+      D29 = brouillon corrigeable / allowlist rosetta, D30 = tâches planifiées. Le vocal
+      prendra le prochain numéro libre — vérifier `DECISIONS.md` avant d'écrire, pas ce
+      fichier.

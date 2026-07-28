@@ -29,7 +29,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, voyages
+from . import auth, planif, voyages
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
@@ -118,12 +118,26 @@ mcp_server = FastMCP(
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     async with mcp_server.session_manager.run():
-        yield
+        # L'horloge des tâches planifiées (D30). Une tâche asyncio, pas un process :
+        # elle réinjecte un message dans le MÊME chemin que la PWA (_run_alfred, donc
+        # _query_lock), elle n'ouvre aucune surface. PLANIF=0 la désactive — le
+        # conteneur tunnel VS Code ne doit pas doubler l'horloge du gateway.
+        task = (
+            asyncio.create_task(planif.loop(_run_alfred))
+            if os.environ.get("GW_PLANIF", "1") not in ("0", "false", "no")
+            else None
+        )
+        try:
+            yield
+        finally:
+            if task:
+                task.cancel()
 
 
 app = FastAPI(title="agent-gw", lifespan=_lifespan)
 app.include_router(auth.router)
 app.include_router(voyages.router)
+app.include_router(planif.router)
 _query_lock = asyncio.Lock()
 
 # Paths reachable without a session (PWA shell plumbing + auth flow itself).
@@ -597,9 +611,16 @@ async def reset():
     return {"status": "reset"}
 
 
-async def _run_alfred(prompt: str, resume: str | None = None) -> tuple[str, str | None]:
+async def _run_alfred(
+    prompt: str, resume: str | None = None, env: dict[str, str] | None = None
+) -> tuple[str, str | None]:
     """One Alfred turn, collected (not streamed): returns (text, session_id).
-    Serialized by _query_lock so MCP tasks and the PWA never run at once."""
+    Serialized by _query_lock so MCP tasks and the PWA never run at once.
+
+    `env` is MERGED over the inherited process env by the SDK (verified in the SDK's
+    subprocess transport), so it can retag the turn's channel without stripping the
+    OAuth token. Scheduled turns use it to pass GW_CHANNEL=planif, which the
+    workspace's PreToolUse hook reads to close the whole Google surface (D30)."""
     options = ClaudeAgentOptions(
         cwd=WORKSPACE,
         resume=resume,
@@ -607,6 +628,7 @@ async def _run_alfred(prompt: str, resume: str | None = None) -> tuple[str, str 
         system_prompt={"type": "preset", "preset": "claude_code"},
         setting_sources=["project"],
         max_buffer_size=MAX_BUFFER_BYTES,
+        env=env or {},
     )
     parts: list[str] = []
     session_id = resume

@@ -551,6 +551,7 @@ const APP_META = {
   administratif: { label: 'Administratif', ico: '🗄️', color: 'search' },
   sujets:   { label: 'Sujets',     ico: '❯', color: 'agenda' },
   voyages:  { label: 'Voyages',    ico: '🌴', color: 'voyage', module: true },
+  planif:   { label: 'Planifications', ico: '⏱', color: 'agenda', module: true },
 };
 const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
 function metaFor(name) {
@@ -705,6 +706,7 @@ function renderRoute() {
   if (route.startsWith('dom/')) return renderDomain(route.slice(4));
   if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
   if (route === 'todo') return renderTodo();
+  if (route === 'planif') return renderPlanif();
   if (route === 'atelier') return renderAtelierHub();
   if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));
   renderHome();
@@ -726,6 +728,7 @@ function renderHome() {
     tileHTML('todo', '#/todo', 'Vos tâches', ''),
     tileHTML('projets', '#/dom/diy/projets', 'Vos chantiers', pc(nProjets, 'projet')),
     tileHTML('atelier', '#/dom/diy', 'Machines · savoir-faire · outils', pc(nAtelier)),
+    tileHTML('planif', '#/planif', 'Ce qu’Alfred fait tout seul', ''),
   ];
   const domTiles = doms.map((d) => {
     const n = countIn(d === 'sujets' ? 'sujets/' : 'domaines/' + d + '/');
@@ -749,6 +752,13 @@ function renderHome() {
     const sub = page.querySelector('.subhi');
     if (sub) sub.textContent = `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${st.total} tâche${st.total > 1 ? 's' : ''} en cours${st.late ? `, dont ${st.late} en retard` : ''}.`;
   });
+  fetch('/api/planif', { headers: headers(false), cache: 'no-store' }).then((r) => r.ok && r.json()).then((d) => {
+    const foot = d && page.querySelector('.tile[href="#/planif"] .foot');
+    if (!foot) return;
+    const on = (d.planifs || []).filter((p) => p.actif && !p.erreur).length;
+    const ko = (d.planifs || []).filter((p) => p.erreur).length;
+    foot.innerHTML = `<span class="pc">${on} active${on > 1 ? 's' : ''}</span>${ko ? `<span class="pc hot">${ko} invalide${ko > 1 ? 's' : ''}</span>` : ''}`;
+  }).catch(() => {});
   voyagesTileInfo().then((v) => {
     const tile = page.querySelector('.tile[href="#/dom/voyages"]');
     if (!v || !tile) return;
@@ -1156,6 +1166,79 @@ async function renderList(id) {
     }
     const rm = e.target.closest('[data-rm]'); if (rm) { const x = M.BASE[rm.dataset.rm]; ask(`Retire « ${x.t} » de la liste « ${L.name} ».`); return; }
     if (e.target.closest('#dellist')) ask(`Supprime la liste todo « ${L.name} » (garde les tâches dans la base).`);
+  });
+}
+
+/* ── Planifications (D30) ─────────────────────────────────────────
+   Onglet en LECTURE. Créer, modifier, suspendre passent par Alfred (ask()) : le
+   corps d'une fiche planif EST le prompt exécuté sans personne devant l'écran, ça
+   se relit avant de tourner. Le cron n'est PAS reparsé ici — `next` vient du serveur,
+   du même parseur que celui qui déclenche, donc l'affichage ne peut pas mentir. */
+const PLANIF_DAYS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+// « 2026-07-29T07:00 » (heure LOCALE de la fiche) formaté sans passer par Date :
+// parser la chaîne la décalerait du fuseau du navigateur, et une heure fausse sur
+// un écran de planification est pire que pas d'heure du tout.
+function planifWhen(stamp) {
+  if (!stamp) return '—';
+  const [d, hm] = stamp.split('T');
+  const today = new Date(); const iso = (x) => x.toISOString().slice(0, 10);
+  const tomorrow = new Date(today.getTime() + 864e5);
+  if (d === iso(today)) return `aujourd’hui ${hm}`;
+  if (d === iso(tomorrow)) return `demain ${hm}`;
+  const [y, m, dd] = d.split('-').map(Number);
+  return `${PLANIF_DAYS[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()] } ${dd}/${m} ${hm}`;
+}
+function planifAgo(iso) {
+  if (!iso) return null;
+  const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 90) return 'à l’instant';
+  if (s < 5400) return `il y a ${Math.round(s / 60)} min`;
+  if (s < 172800) return `il y a ${Math.round(s / 3600)} h`;
+  return `il y a ${Math.round(s / 86400)} j`;
+}
+async function renderPlanif() {
+  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Planifications', hash: '#/planif' }]);
+  page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+  let data = { planifs: [] };
+  try {
+    const r = await fetch('/api/planif', { headers: headers(false), cache: 'no-store' });
+    if (r.ok) data = await r.json();
+  } catch {}
+  const card = (p) => {
+    const last = p.last || null;
+    const foot = last
+      ? `<span class="cnt">${last.ok ? '✓' : '✕'} <span class="z">${esc(planifAgo(last.at) || '')}</span></span>`
+      : '<span class="cnt"><span class="z">jamais exécutée</span></span>';
+    const state = p.erreur
+      ? '<span class="kind" style="color:var(--crit)">⚠ invalide</span>'
+      : (p.actif ? '<span class="kind dyn">● active</span>' : '<span class="kind">⏸ suspendue</span>');
+    const meta = p.erreur
+      ? `<span class="chip late">${esc(p.erreur)}</span>`
+      : `<span class="chip">⏱ ${esc(p.quand)}</span>` + (p.actif ? `<span class="chip due">→ ${esc(planifWhen(p.next))}</span>` : '');
+    return `<a class="lcard" href="#/mem/${esc(p.path)}" style="--lc:var(--${p.erreur ? 'crit' : p.actif ? 'agenda' : 'line'})">`
+      + `<button class="del" data-toggle="${esc(p.id)}" title="${p.actif ? 'Suspendre' : 'Réactiver'}">${p.actif ? '⏸' : '▶'}</button>`
+      + `<span class="lico">⏱</span><div><div class="ln">${esc(p.titre)}</div><div class="ld">${esc(p.tz)}</div></div>`
+      + `<div class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${meta}</div>`
+      + `<div class="lfoot">${foot}${state}</div></a>`;
+  };
+  const list = data.planifs || [];
+  page.innerHTML = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--agenda)">⏱</div><div><h1>Planifications</h1>
+      <div class="lede">Des tâches qu'Alfred exécute à l'heure dite. Elles rangent — elles ne notifient jamais.</div></div></div>
+    <div class="grouplabel">Vos planifications <span class="hint">— une fiche, dont le corps est l'instruction</span></div>
+    <div class="cards">${list.map(card).join('')}<button class="lcard newcard" id="newplanif"><span class="plus">＋</span>Nouvelle planification</button></div>
+    ${list.length ? '' : '<div class="empty">Aucune planification. Demandez-m’en une.</div>'}</div>`;
+  page.querySelector('.wrap').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-toggle]');
+    if (t) {
+      e.preventDefault();
+      const p = list.find((x) => x.id === t.dataset.toggle);
+      ask(`${p.actif ? 'Suspends' : 'Réactive'} la planification « ${p.titre} ».`);
+      return;
+    }
+    if (e.target.closest('#newplanif')) {
+      e.preventDefault();
+      ask('Crée une planification « … » : à … (heure et récurrence), pour … (ce qu’elle doit faire).');
+    }
   });
 }
 
