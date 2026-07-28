@@ -1,6 +1,22 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-28
+> MàJ : 2026-07-29
+
+**Modules configurables `GW_APPS` — livré côté code (agent-gw, non taguée)** : les images
+se disent agent-agnostiques depuis le début, le **lanceur** ne l'était pas — routes et
+tuiles `todo` / `projets` / `atelier` / `planif` / `voyages` câblées en dur sur le monde
+d'Alfred. Un second corps (pod Skippy, cf. `SKIPPY-POD.md`) y aurait affiché des tuiles de
+menuiserie. Désormais `GW_APPS` liste les modules du pod, `/api/version` les publie, le
+lanceur les lit **au boot** (avant le premier rendu, sinon on voit passer les tuiles du
+repli) et masque **la tuile ET la route** — une URL en marque-page ne ressuscite pas un
+module éteint. La mémoire (fiches, domaines) n'est pas un module : socle commun, toujours
+là. Effets de bord voulus : module Voyages éteint → `#/dom/voyages` redevient un domaine
+ordinaire ; module Atelier éteint → `diy` réapparaît dans les domaines au lieu de
+disparaître ; rangée « Transverse » masquée si vide ; les enrichissements de tuiles
+(todoStats, `/api/planif`, voyages) ne partent plus en réseau pour des tuiles absentes.
+Défaut = jeu historique, **Alfred ne bouge pas**. Tests `test/apps_test.py` (défaut, liste
+explicite, rognage, vide, payload `/api/version`), planif toujours vert, bundle + statics
+rebuildés. **À faire : tag → image → déploiement.**
 
 **Tâches planifiées — livré côté code (agent-gw, non taguée)** : Alfred n'avait aucun
 déclencheur temporel ; la consolidation des gestes (todo/voyage), le push mémoire du soir
@@ -133,6 +149,11 @@ audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
 l'access token). Avenant skill correspondance = côté cerveau.
 
 **Prochaines étapes :**
+- [ ] **Pod Skippy** (`SKIPPY-POD.md`) — design validé, `GW_APPS` posé. Prochain jalon
+      **bloquant** : vérifier qu'un push par token de GitHub App déclenche bien les
+      workflows (toute la chaîne `tag → CI → image → bump → ArgoCD` en dépend). Puis
+      addon `github` dans rosetta-mcp, `github_guard.py`, vue `repos`, repo cockpit,
+      `skippy-helm.yml`.
 - [ ] **Tâches planifiées** : taguer `agent-gw-vX.Y.Z` → image CI → bumper `image.tag` dans
       `alfred-helm.yml` → ArgoCD. Puis vérifier en prod : `/api/planif` répond (401 = servi
       et gardé), l'onglet s'affiche, et **une vraie fiche part à l'heure dite** (la première

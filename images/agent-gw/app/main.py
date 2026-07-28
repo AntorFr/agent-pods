@@ -81,6 +81,15 @@ for _pair in MODELS.split(","):
 MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
 # Todo file surfaced as a dedicated view, relative to the memory dir.
 TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
+# App-modules the PWA launcher exposes, comma-separated. The images are
+# agent-agnostic (see README) but the launcher was not: its tiles and routes
+# were hardcoded to one agent's world. A butler pod wants the workbench and the
+# travel planner; a coder pod wants neither, and wants a repo board instead.
+# The front hides BOTH the tile and the route of anything absent from this list.
+# Default = the historical set, so upgrading an existing pod changes nothing.
+APPS = [a.strip() for a in os.environ.get(
+    "GW_APPS", "todo,projets,atelier,planif,voyages",
+).split(",") if a.strip()]
 # Image version, baked at build time by the CI (Dockerfile ARG VERSION). Shown in
 # the PWA settings so one can tell which build is live without reading the k8s
 # manifest. "dev" on a local build.
@@ -408,9 +417,13 @@ def _load_todo_state() -> dict:
 
 @app.get("/api/version")
 async def version():
-    """The running build, for the PWA settings panel. Fetched lazily when the
-    panel opens, so it always reflects the server actually answering."""
-    return {"version": GW_VERSION}
+    """The running build and the app-modules this agent exposes.
+
+    Fetched twice for two different reasons: at boot by the launcher, which gates
+    its tiles and routes on `apps`; and again when the settings panel opens, so
+    the version shown always reflects the server actually answering rather than a
+    cached bundle."""
+    return {"version": GW_VERSION, "apps": APPS}
 
 
 @app.get("/api/todo/state")

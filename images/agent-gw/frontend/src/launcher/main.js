@@ -561,6 +561,25 @@ function metaFor(name) {
   return { label: prettify(name), ico: '◆', color: COLORS[h], module: false };
 }
 
+/* ── Modules activés (GW_APPS) ───────────────────────────────────────
+   Le corps est agent-agnostique, le lanceur ne l'était pas : ses tuiles et ses
+   routes étaient câblées sur le monde d'un seul agent. `apps` vient du serveur
+   (/api/version) et décide, par pod, ce qui existe — la tuile ET la route, pour
+   qu'une URL en marque-page ne ressuscite pas un module éteint.
+   Repli sur le jeu historique si l'appel échoue : un lanceur vide serait pire
+   qu'un lanceur trop garni. */
+const APPS_FALLBACK = ['todo', 'projets', 'atelier', 'planif', 'voyages'];
+let APPS = new Set(APPS_FALLBACK);
+function appOn(id) { return APPS.has(id); }
+async function loadApps() {
+  try {
+    const r = await fetch('/api/version', { headers: headers(false), cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (Array.isArray(d.apps)) APPS = new Set(d.apps);
+  } catch {}
+}
+
 /* ── Mémoire (arbo) ──────────────────────────────────────────────── */
 let memInfo = null; // {root, todo, entries:[{path,dir}]}
 let memIndex = null; // Map path -> frontmatter (dérivé, une requête)
@@ -698,17 +717,27 @@ function renderRoute() {
   // poignées basculent en plus, à la main, entre les deux.
   if (mqMobile.matches) document.body.classList.toggle('canvas-open', route !== '');
   if (!route) return renderHome();
+  // La mémoire (fiches, domaines) est le socle : elle n'est pas un module, tout
+  // agent qui écrit dans memory/ la parcourt. Seuls les modules ci-dessous se
+  // configurent — une route éteinte retombe sur l'accueil, jamais sur un écran mort.
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
   // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
-  // mène au hub (timeline), pas à la collection de fiches.
-  if (route === 'voyages' || route === 'dom/voyages') return renderVoyagesHub();
-  if (route.startsWith('voyage/')) return renderVoyage(decodeURIComponent(route.slice(7)));
+  // mène au hub (timeline), pas à la collection de fiches. Module éteint :
+  // l'interception saute et #/dom/voyages redevient un domaine ordinaire.
+  if (appOn('voyages')) {
+    if (route === 'voyages' || route === 'dom/voyages') return renderVoyagesHub();
+    if (route.startsWith('voyage/')) return renderVoyage(decodeURIComponent(route.slice(7)));
+  }
   if (route.startsWith('dom/')) return renderDomain(route.slice(4));
-  if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
-  if (route === 'todo') return renderTodo();
-  if (route === 'planif') return renderPlanif();
-  if (route === 'atelier') return renderAtelierHub();
-  if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));
+  if (appOn('todo')) {
+    if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
+    if (route === 'todo') return renderTodo();
+  }
+  if (route === 'planif' && appOn('planif')) return renderPlanif();
+  if (appOn('atelier')) {
+    if (route === 'atelier') return renderAtelierHub();
+    if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));
+  }
   renderHome();
 }
 
@@ -718,18 +747,21 @@ function tileHTML(id, route, st, foot) {
 }
 function renderHome() {
   crumbs([{ label: 'Accueil', hash: '#/' }]);
-  const doms = domains().filter((d) => d !== 'atelier' && d !== 'diy');
+  // diy/atelier ne sont écartés des domaines que si le module Atelier les
+  // représente déjà par sa propre tuile ; sinon ils redeviennent des domaines
+  // ordinaires plutôt que de disparaître de l'accueil.
+  const doms = domains().filter((d) => !(appOn('atelier') && (d === 'atelier' || d === 'diy')));
   const total = memInfo ? memInfo.entries.filter((e) => !e.dir && isFiche(e.path)).length : 0;
   const dateStr = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   const nAtelier = countIn('domaines/diy/');
   const pc = (n, w = 'fiche') => `<span class="pc">${n} ${w}${n > 1 ? 's' : ''}</span>`;
   const nProjets = countIn('domaines/diy/projets/');
   const tools = [
-    tileHTML('todo', '#/todo', 'Vos tâches', ''),
-    tileHTML('projets', '#/dom/diy/projets', 'Vos chantiers', pc(nProjets, 'projet')),
-    tileHTML('atelier', '#/dom/diy', 'Machines · savoir-faire · outils', pc(nAtelier)),
-    tileHTML('planif', '#/planif', 'Ce qu’Alfred fait tout seul', ''),
-  ];
+    appOn('todo') && tileHTML('todo', '#/todo', 'Vos tâches', ''),
+    appOn('projets') && tileHTML('projets', '#/dom/diy/projets', 'Vos chantiers', pc(nProjets, 'projet')),
+    appOn('atelier') && tileHTML('atelier', '#/dom/diy', 'Machines · savoir-faire · outils', pc(nAtelier)),
+    appOn('planif') && tileHTML('planif', '#/planif', 'Ce qu’Alfred fait tout seul', ''),
+  ].filter(Boolean);
   const domTiles = doms.map((d) => {
     const n = countIn(d === 'sujets' ? 'sujets/' : 'domaines/' + d + '/');
     return tileHTML(d, '#/dom/' + d, '', pc(n));
@@ -741,25 +773,27 @@ function renderHome() {
     <div class="subhi">${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${total} fiches en mémoire.</div>
     <button class="cmd" id="cmdk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="ph">Demander à Alfred…</span><kbd>⌘K</kbd></button>
     <div id="brief-slot"></div>
-    <div class="rowlabel">Transverse</div><div class="mosaic">${tools.join('')}</div>
+    ${tools.length ? `<div class="rowlabel">Transverse</div><div class="mosaic">${tools.join('')}</div>` : ''}
     <div class="rowlabel">Domaines</div><div class="mosaic">${domTiles.join('')}</div>
   </div>`;
   const cmd = $('cmdk'); if (cmd) cmd.addEventListener('click', () => input.focus());
-  todoStats().then((st) => {
+  // Enrichissements de tuiles : chacun est un appel réseau, on ne le lance pas
+  // pour une tuile qui n'existe pas sur ce pod.
+  if (appOn('todo')) todoStats().then((st) => {
     if (!st) return;
     const foot = page.querySelector('.tile[href="#/todo"] .foot');
     if (foot) foot.innerHTML = `<span class="pc">${st.total} à faire</span>${st.late ? `<span class="pc hot">${st.late} en retard</span>` : ''}`;
     const sub = page.querySelector('.subhi');
     if (sub) sub.textContent = `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${st.total} tâche${st.total > 1 ? 's' : ''} en cours${st.late ? `, dont ${st.late} en retard` : ''}.`;
   });
-  fetch('/api/planif', { headers: headers(false), cache: 'no-store' }).then((r) => r.ok && r.json()).then((d) => {
+  if (appOn('planif')) fetch('/api/planif', { headers: headers(false), cache: 'no-store' }).then((r) => r.ok && r.json()).then((d) => {
     const foot = d && page.querySelector('.tile[href="#/planif"] .foot');
     if (!foot) return;
     const on = (d.planifs || []).filter((p) => p.actif && !p.erreur).length;
     const ko = (d.planifs || []).filter((p) => p.erreur).length;
     foot.innerHTML = `<span class="pc">${on} active${on > 1 ? 's' : ''}</span>${ko ? `<span class="pc hot">${ko} invalide${ko > 1 ? 's' : ''}</span>` : ''}`;
   }).catch(() => {});
-  voyagesTileInfo().then((v) => {
+  if (appOn('voyages')) voyagesTileInfo().then((v) => {
     const tile = page.querySelector('.tile[href="#/dom/voyages"]');
     if (!v || !tile) return;
     if (v.st) tile.querySelector('.st').textContent = v.st;
@@ -2238,7 +2272,9 @@ setInterval(pollTunnel, 120000);
 /* ── Boot ────────────────────────────────────────────────────────── */
 window.addEventListener('hashchange', renderRoute);
 (async function boot() {
-  await loadTree();
+  // Les modules d'abord : renderRoute() décide sur eux, et un premier rendu fait
+  // avec le repli afficherait brièvement des tuiles qui n'existent pas ici.
+  await Promise.all([loadTree(), loadApps()]);
   renderRoute();
   syncConfirm();
   pollTunnel();

@@ -46,6 +46,7 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_WORKSPACE` | `/workspace` | Racine du cerveau (repo mémoire d'Alfred). |
 | `GW_MEMORY_DIR` | `memory` | Dossier mémoire, relatif au workspace. |
 | `GW_TODO_FILE` | `todo/taches.md` | Fichier todo, relatif à la mémoire. |
+| `GW_APPS` | `todo,projets,atelier,planif,voyages` | Modules exposés par le lanceur, séparés par des virgules. L'image est agent-agnostique, le lanceur ne l'était pas : ses tuiles et ses routes étaient câblées sur le monde d'un seul agent. Un pod majordome veut l'atelier et les voyages ; un pod de code n'en veut aucun. Le front masque **la tuile ET la route** de tout module absent (une URL en marque-page ne ressuscite rien). La mémoire (fiches, domaines) n'est pas un module : elle est toujours là. Défaut = jeu historique, donc une montée de version ne change rien à un pod existant. |
 | `GW_STATE_DIR` | `~/.agent-gw` | État **côté serveur** : pointeur de session (`session-<canal>.json`) + corbeille des pièces jointes (`inbox/`). Persistant (hostPath home). |
 | `GW_MAX_UPLOAD_MB` | `25` | Taille max (Mo) d'un fichier joint au chat (par fichier). |
 | `GW_MAX_UPLOAD_FILES` | `8` | Nombre max de fichiers joints à un même message. |

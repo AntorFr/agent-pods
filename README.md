@@ -57,8 +57,10 @@ typing indicator, model picker) and an SSE API:
 - `POST /api/reset` — start a fresh session for the channel
 - `GET /api/models` — models offered in the PWA dropdown
 - `GET /api/version` — the running build (`GW_VERSION`, baked at image build time
-  from the CI's `VERSION` build-arg; `dev` locally). The PWA settings panel fetches
-  it on open, so it names the server actually answering, not a cached bundle.
+  from the CI's `VERSION` build-arg; `dev` locally) plus the app-modules this agent
+  exposes (`GW_APPS`). The launcher reads `apps` at boot to gate its tiles and
+  routes; the PWA settings panel fetches it again on open, so the version names the
+  server actually answering, not a cached bundle.
 - `GET /api/memory/tree` — read-only listing of the agent's memory dir
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
 - `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device
@@ -116,6 +118,7 @@ Environment:
 | `GW_MODELS` | `Fable:claude-fable-5,Opus:opus,Sonnet:sonnet,Haiku:haiku` | `Label:model` pairs for the PWA dropdown. CLI aliases resolve to the latest model of each family. |
 | `GW_MEMORY_DIR` | `memory` | Memory dir shown in the PWA side panel, relative to the workspace |
 | `GW_TODO_FILE` | `todo/taches.md` | Todo file for the dedicated view, relative to the memory dir |
+| `GW_APPS` | `todo,projets,atelier,planif,voyages` | App-modules the launcher exposes. The image is agent-agnostic; the launcher was not. Anything absent loses **both its tile and its route** — a bookmarked URL cannot revive a module this pod does not have. Memory browsing (fiches, domains) is not a module and is always on. The default is the historical set, so upgrading an existing pod changes nothing. |
 | `GW_TUNNEL_LOG` | `~/.vscode-cli/tunnel.out` | Mirrored tunnel output (see claude-pod `TUNNEL_LOG`) |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | *(unset)* | OIDC SSO (e.g. Authelia). All four required to enable; login then goes through the IdP and a 30-day session cookie. |
 | `OIDC_ALLOWED_GROUP` | `admins` | IdP group required to log in |
