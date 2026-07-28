@@ -2,6 +2,16 @@
 
 > MàJ : 2026-07-28
 
+**⚠️ Fausse piste à ne PAS refaire — approbation MCP (2026-07-28).** Une indispo du serveur
+**ghost** s'était déguisée en problème d'approbation des serveurs MCP, d'où une piste
+`claude-flag-settings.json` (`enableAllProjectMcpServers: true` copié dans l'image et passé
+au SDK par `--settings`). **Inutile** : root cause trouvée ailleurs, et mesuré sur le pod en
+0.33.0 — `hasTrustDialogAccepted: false` et `enabledMcpjsonServers: []` dans `~/.claude.json`,
+et pourtant Alfred appelle bel et bien `mcp__google__*` / `mcp__transit__*`. Les MCP du
+`/workspace/.mcp.json` chargent **sans** trust ni pré-approbation. Piste abandonnée, fichier
+et hunk Dockerfile supprimés. → Si les outils MCP disparaissent un jour, suspecter le serveur
+en amont, pas l'approbation.
+
 **Cocher une tâche = un geste — DÉPLOYÉ (2026-07-28, agent-gw 0.33.0)** : la case de la
 vue todo ne cochait rien, elle **pré-remplissait la zone de saisie** (« Marque la tâche
 « … » comme faite. ») qu'il fallait envoyer soi-même — un aller-retour LLM pour un booléen.
