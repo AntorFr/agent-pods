@@ -26,7 +26,9 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
    `GOOGLE_MAPS_API_KEY`, déjà dans l'env du pod pour le MCP maps) et jamais stockées.
 7. **Horloge des tâches planifiées** (`app/planif.py`, `GET /api/planif` — cerveau : D30) —
    une boucle asyncio lit les fiches `type: planif` de `memory/planif/*.md` et, à l'heure
-   dite, ouvre un tour Alfred ordinaire avec **le corps de la fiche pour prompt**. Session
+   dite, ouvre un tour Alfred ordinaire avec **le corps de la fiche pour prompt** (précédé
+   d'un court cadre de provenance, sur le patron d'`ask_alfred` : sans lui l'agent ne peut
+   pas savoir qu'il est dans un tour planifié — le corps, lui, passe mot pour mot). Session
    neuve, `GW_CHANNEL=planif` injecté par `ClaudeAgentOptions.env` (le hook du workspace
    ferme alors TOUTE la surface Google, lectures comprises), pas de rattrapage au-delà de la
    fenêtre de grâce, journal dans `planif/planif-state.json` (hors git). L'onglet PWA est en

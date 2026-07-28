@@ -288,13 +288,29 @@ def due_minute(item: dict, now: datetime, last_minute: str | None) -> str | None
     return None
 
 
+# Cadre de provenance, sur le patron d'`ask_alfred`. Sans lui, l'agent ne peut pas SAVOIR
+# qu'il est dans un tour planifié : la discipline du CLAUDE.md lui dit comment s'y
+# comporter (muet, idempotent, sans Google), encore faut-il qu'il sache y être. Le corps
+# de la fiche reste en dessous, mot pour mot — le cadre dit d'où vient le message, il ne
+# réécrit pas l'instruction.
+FRAME = (
+    "[Tour planifié « {titre} » — déclenché par l'horloge à {heure}, pas par Monsieur. "
+    "PERSONNE ne lit cette réponse : fais le travail, écris dans memory/, commit, et "
+    "n'écris de compte rendu à personne. S'il n'y a rien à faire, ne fais rien. La surface "
+    "Google est fermée sur ce canal (cf. D30).]\n\n{corps}"
+)
+
+
 async def _fire(item: dict, minute: str, runner) -> None:
     """Un tour planifié. Jamais d'exception vers la boucle : elle doit survivre à tout."""
     started = datetime.now().astimezone()
     entry = {"at": started.isoformat(timespec="seconds"), "minute": minute}
+    prompt = FRAME.format(
+        titre=item["titre"], heure=minute.replace("T", " à "), corps=item["prompt"]
+    )
     try:
         reply, _sid = await asyncio.wait_for(
-            runner(item["prompt"], env={"GW_CHANNEL": "planif"}), timeout=TIMEOUT
+            runner(prompt, env={"GW_CHANNEL": "planif"}), timeout=TIMEOUT
         )
         entry["ok"] = True
         entry["resume"] = (reply or "").strip()[:400]
