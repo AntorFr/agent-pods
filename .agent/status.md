@@ -17,11 +17,14 @@ d'être lissé en silence. Garde : `GW_CHANNEL=planif` injecté via `ClaudeAgent
 `google_guard.py` ferme **toute** la surface Google sur ce canal, lectures comprises — pas
 seulement à cause du bouclier inarmable, mais contre le **blanchiment** (mail hostile lu sans
 témoin → résumé dans memory/ → relu comme fiable au tour suivant). Onglet PWA `#/planif` en
-**lecture** (créer/suspendre = message à Alfred). Cerveau : **D30** + **F8** (repo Alfred),
-qui amende la seule ligne « aucun déclencheur temporel » de D8 — le contrat « Alfred n'écrit
-jamais de lui-même » tient : palier 1 = tâches **muettes**. 44 tests verts
-(`test/planif_test.py`), hook testé sur les 3 canaux, `node --check` + bundle + statics OK.
-**À faire : tag → image → bump `alfred-helm.yml`.**
+**lecture** (créer/suspendre = message à Alfred). Le prompt porte un **cadre de provenance**
+(patron `ask_alfred`) : sans lui l'agent ne peut pas *savoir* qu'il est dans un tour planifié
+— la discipline lui dit comment s'y comporter, pas qu'il y est ; le corps de la fiche passe
+mot pour mot en dessous. Cerveau : **D30** + **F8** (repo Alfred), qui amende la seule ligne
+« aucun déclencheur temporel » de D8 — le contrat « Alfred n'écrit jamais de lui-même »
+tient : palier 1 = tâches **muettes**. 47 tests verts (`test/planif_test.py`), hook testé sur
+les 3 canaux, `node --check` + bundle + statics OK. ⚠️ **0.34.0 est publiée mais périmée**
+(taguée avant le cadre de provenance) : déployer **0.34.1**, jamais 0.34.0.
 
 **⚠️ Fausse piste à ne PAS refaire — approbation MCP (2026-07-28).** Une indispo du serveur
 **ghost** s'était déguisée en problème d'approbation des serveurs MCP, d'où une piste
