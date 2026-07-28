@@ -1,6 +1,20 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-23
+> MàJ : 2026-07-28
+
+**Cocher une tâche = un geste — livré côté code (agent-gw, non taguée)** : la case de la
+vue todo ne cochait rien, elle **pré-remplissait la zone de saisie** (« Marque la tâche
+« … » comme faite. ») qu'il fallait envoyer soi-même — un aller-retour LLM pour un booléen.
+Désormais `GET|POST /api/todo/state` écrit un overlay `todo/todo-state.json` (hors git,
+comme workbook/voyage), le front le superpose à `/api/memory/index` (l'overlay gagne) et le
+clic est **optimiste** : bascule immédiate, POST direct, révocation si le réseau tombe.
+Décochage géré (l'overlay porte 3 états : date ISO / `false` / absent, la fiche pouvant
+déjà dire `done:` depuis une consolidation). Alfred consolide le `done:` dans les fiches à
+son passage suivant, **en gardant la date du geste**. Retirer d'une liste / supprimer une
+liste restent des messages à Alfred (curation = jugement). Cerveau : **D28** (repo Alfred),
+qui renverse partiellement D27. Endpoint testé (TestClient : coche, décoche, merge,
+persistance, 400 sans clé) ; bundle + statics rebuildés, tests moteur verts, `node --check`
+OK. **À faire : tag → image → bump manifeste k8s.**
 
 **File d'attente — rattrapage groupé — DÉPLOYÉ (2026-07-23, agent-gw 0.29.0)** : les
 messages tapés pendant qu'Alfred travaille étaient rejoués **un par un** (un tour par
@@ -94,4 +108,6 @@ l'access token). Avenant skill correspondance = côté cerveau.
 - [ ] Test d'intégration sur un Voice PE (désactiver son entité `assist_satellite`
       dans HA d'abord) ; ajuster VAD/timeouts ; voix « alfred » à ajouter dans
       nestor-voice
-- [ ] Côté cerveau (repo Alfred) : décision **D28** (canal vocal — D26 voyages, D27 pris par le modèle todo) + registre vocal
+- [ ] Côté cerveau (repo Alfred) : décision **D29** (canal vocal) + registre vocal.
+      ⚠️ D28 était réservée ici au vocal, mais elle a été prise le 2026-07-28 par l'overlay
+      de gestes todo (décision écrite et committée) → le vocal glisse en D29.

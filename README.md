@@ -65,8 +65,17 @@ typing indicator, model picker) and an SSE API:
 - `GET /api/workbook/list`, `GET|POST /api/workbook/state` — project workbooks:
   the agent emits `…/assets/workbook.json` files under its memory dir (pieces,
   cutting layout, assembly), the PWA renders them (4 linked views + fullscreen
-  shop mode) and stores progress ticks in the sibling `workbook-state.json` —
-  the only file the gateway ever writes into the memory tree (path-locked).
+  shop mode) and stores progress ticks in the sibling `workbook-state.json`.
+- `GET|POST /api/todo/state` — todo tick overlay: ticking a task in the PWA is a
+  gesture, not a memory edit, so it lands in `todo/todo-state.json` instead of
+  the task's fiche. The front stacks it over `/api/memory/index` (overlay wins
+  until the agent consolidates it into the fiche's `done:`, keeping the
+  gesture's date). Three states per task id: ISO date (done), `false` (undone),
+  absent (the fiche wins). Server-side merge, one tick per call.
+
+The `*-state.json` overlays (`workbook-`, `voyage-`, `todo-`) are the **only**
+files the gateway ever writes into the memory tree — path-locked, and git-ignored
+on the agent's side. Every other memory write goes through the agent.
 - `POST /mcp` — MCP server (streamable HTTP) exposing Alfred to **other agents**.
   One tool, `ask_alfred(request, task_id?, agent?)`: hands a natural-language
   task to Alfred, who files it with his own discipline; returns `{reply,

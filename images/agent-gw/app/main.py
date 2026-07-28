@@ -360,6 +360,59 @@ async def workbook_tick(request: Request):
     return state
 
 
+# Todo: a task is a `type: tache` fiche in the memory dir — the source, in git.
+# Ticking one is a GESTURE, not a memory edit: it lands in a single overlay
+# todo/todo-state.json (out of git, like workbook-state.json above), which the
+# front stacks over the index. Alfred consolidates it into the fiches' `done:` at
+# his next pass — keeping the GESTURE's date, not the consolidation's — then
+# purges what he consolidated. cf. Alfred DECISIONS.md D28.
+#
+# Unlike the workbooks, the source here carries a done state of its own, so the
+# overlay needs three states, not two: an ISO date (done), an explicit False
+# (undone — the fiche may already say done from an earlier consolidation), and
+# absent (no gesture pending, the fiche wins).
+
+TODO_STATE_FILE = os.environ.get("GW_TODO_STATE", "todo/todo-state.json")
+
+
+def _todo_state_path() -> Path:
+    return _memory_root() / TODO_STATE_FILE
+
+
+def _load_todo_state() -> dict:
+    try:
+        state = json.loads(_todo_state_path().read_text())
+    except (OSError, ValueError):
+        state = {}
+    state.setdefault("fait", {})
+    return state
+
+
+@app.get("/api/todo/state")
+async def todo_state():
+    return _load_todo_state()
+
+
+@app.post("/api/todo/state")
+async def todo_tick(request: Request):
+    """One tick = one task id (the fiche's slug). Server-side merge so two devices
+    never clobber each other with a stale full-state write."""
+    body = await request.json()
+    key = (body.get("key") or "").strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="key required")
+    state = _load_todo_state()
+    state["fait"][key] = (
+        datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if body.get("done", True)
+        else False
+    )
+    p = _todo_state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, ensure_ascii=False, indent=1))
+    return state
+
+
 # One-shot confirmation for sensitive tool actions on the headless channel.
 # Armed from the PWA (session-authenticated), consumed by the agent's
 # PreToolUse hook via localhost. Lives in process memory on purpose: the

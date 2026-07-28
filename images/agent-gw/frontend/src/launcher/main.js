@@ -572,6 +572,28 @@ async function loadIndex() {
   memIndex = new Map();
   try { const r = await fetch('/api/memory/index', { headers: headers(false) }); if (r.ok) { const { items } = await r.json(); for (const it of items) memIndex.set(it.path, it.fm || {}); } } catch {}
 }
+// Overlay des gestes todo (D28) : cocher est un POST direct, jamais une phrase au LLM.
+// Prioritaire sur le `done:` de la fiche tant qu'Alfred n'a pas consolidé — sans quoi la
+// case se décocherait au rafraîchissement suivant. Valeur : date ISO (faite), false
+// (décochée explicitement), absente (aucun geste en attente → la fiche fait foi).
+let todoOverlay = {};
+async function loadTodoState() {
+  try { const r = await fetch('/api/todo/state', { headers: headers(false), cache: 'no-store' }); todoOverlay = (await r.json()).fait || {}; } catch { todoOverlay = {}; }
+  return todoOverlay;
+}
+// Le done: effectif d'une tâche — l'overlay d'abord, la fiche ensuite.
+const doneOf = (id, fm) => isDone(id in todoOverlay ? todoOverlay[id] : fm.done);
+// Le geste lui-même. Optimiste : l'appelant a déjà basculé l'affichage, on ne
+// recharge rien ; en cas d'échec on rend la main avec false pour qu'il révoque.
+async function tickTask(id, done) {
+  try {
+    const r = await fetch('/api/todo/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ key: id, done }) });
+    if (!r.ok) return false;
+    todoOverlay = (await r.json()).fait || {};
+    return true;
+  } catch { return false; }
+}
+
 let wbCache = null;
 async function loadWorkbooks() {
   if (wbCache) return wbCache;
@@ -599,12 +621,12 @@ function labelMemLinks(root) {
 // Compteur de la tuile d'accueil : dérivé des fiches type:tache (même source que la vue todo).
 async function todoStats() {
   try {
-    await loadIndex();
+    await Promise.all([loadIndex(), loadTodoState()]);
     if (!memIndex) return null;
     const today = new Date().toISOString().slice(0, 10);
     let total = 0, late = 0;
-    for (const [, fm] of memIndex) {
-      if (fm.type !== 'tache' || (fm.done != null && fm.done !== '' && fm.done !== false && fm.done !== 'false')) continue;
+    for (const [path, fm] of memIndex) {
+      if (fm.type !== 'tache' || doneOf(slugOf(path), fm)) continue;
       total++;
       if (/^\d{4}-\d{2}-\d{2}$/.test(fm.due || '') && fm.due < today) late++;
     }
@@ -991,7 +1013,7 @@ function ask(text) { input.value = text; input.focus(); input.dispatchEvent(new 
 // Construit le modèle todo depuis le dérivé frontmatter. Rechargé FRAIS à chaque entrée :
 // un geste précédent a pu faire éditer la mémoire par Alfred.
 async function todoModel() {
-  memIndex = null; await loadIndex();
+  memIndex = null; await Promise.all([loadIndex(), loadTodoState()]);
   const BASE = {}, CURATED = [], TITLE = {};
   for (const [path, fm] of (memIndex || new Map())) {
     const id = slugOf(path);
@@ -1001,7 +1023,7 @@ async function todoModel() {
         id, path, t: fm.titre || prettify(id),
         due: fm.due || null, est: fm.est || null, pri: fm.pri || null,
         dep: fm.dep || null, blk: fm.blk || null, project: fm.projet || null,
-        sub: asList(fm.sub), done: isDone(fm.done),
+        sub: asList(fm.sub), done: doneOf(id, fm),
         dom: fm.domaine || (Array.isArray(fm.tags) && fm.tags[0]) || null,
       };
     } else if (fm.type === 'liste') {
@@ -1046,7 +1068,7 @@ function taskHTML(M, id, { sub = false, dom = false, mem = false, list = null } 
   }
   const meta = [...chipsOf(x), ...ex];
   return `<div class="task${sub ? ' sub' : ''}${x.done ? ' done' : ''}"><span class="pri ${x.pri || ''}"></span>`
-    + `<button class="cbox ${x.done ? 'on' : ''}" data-id="${esc(id)}" title="Marquer faite">✓</button>`
+    + `<button class="cbox ${x.done ? 'on' : ''}" data-id="${esc(id)}" title="${x.done ? 'Marquer à faire' : 'Marquer faite'}">✓</button>`
     + `<div class="bd"><div class="tt">${esc(x.t)}</div>${meta.length ? `<div class="meta">${meta.join('')}</div>` : ''}</div>`
     + (list ? `<button class="rmv" data-rm="${esc(id)}" title="Retirer de la liste">✕</button>` : '') + '</div>';
 }
@@ -1105,8 +1127,33 @@ async function renderList(id) {
   }
   page.innerHTML = h + '</div>';
   labelMemLinks(page);
-  page.querySelector('.wrap').addEventListener('click', (e) => {
-    const cb = e.target.closest('.cbox'); if (cb) { const x = M.BASE[cb.dataset.id]; if (x && !x.done) ask(`Marque la tâche « ${x.t} » comme faite.`); return; }
+  // Recalcule les compteurs affichés depuis M.BASE, qu'un geste vient de muter.
+  const recount = () => {
+    const lede = page.querySelector('.chead .lede');
+    if (lede) lede.textContent = lede.textContent.replace(/^\d+ à faire/, `${ids.filter((i) => !M.BASE[i].done).length} à faire`);
+    page.querySelectorAll('.grp').forEach((g) => {
+      const c = g.querySelector('h3 .c');
+      if (c) c.textContent = [...g.querySelectorAll('.task:not(.sub)')].filter((t) => !t.classList.contains('done')).length;
+    });
+  };
+  const paint = (cb, done) => {
+    cb.classList.toggle('on', done);
+    cb.closest('.task').classList.toggle('done', done);
+    cb.title = done ? 'Marquer à faire' : 'Marquer faite';
+    recount();
+  };
+  page.querySelector('.wrap').addEventListener('click', async (e) => {
+    // Cocher est un GESTE (D28) : POST direct, affichage optimiste, zéro tour de LLM.
+    // Retirer d'une liste / la supprimer touchent au `refs:` — ça reste du jugement,
+    // donc un message à Alfred (D27).
+    const cb = e.target.closest('.cbox');
+    if (cb) {
+      const x = M.BASE[cb.dataset.id]; if (!x) return;
+      const done = !x.done;
+      x.done = done; paint(cb, done);
+      if (!(await tickTask(x.id, done))) { x.done = !done; paint(cb, !done); }  // échec : on révoque
+      return;
+    }
     const rm = e.target.closest('[data-rm]'); if (rm) { const x = M.BASE[rm.dataset.rm]; ask(`Retire « ${x.t} » de la liste « ${L.name} ».`); return; }
     if (e.target.closest('#dellist')) ask(`Supprime la liste todo « ${L.name} » (garde les tâches dans la base).`);
   });
