@@ -175,9 +175,9 @@ audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
 l'access token). Avenant skill correspondance = côté cerveau.
 
 **Prochaines étapes :**
-- [ ] **Pod Skippy** (`SKIPPY-POD.md`) — design validé, `GW_APPS` posé. Prochain jalon
-      **bloquant** : vérifier qu'un push par token de GitHub App déclenche bien les
-      workflows (toute la chaîne `tag → CI → image → bump → ArgoCD` en dépend). Puis
+- [ ] **Pod Skippy** (`SKIPPY-POD.md`) — design validé, `GW_APPS` posé, question CI
+      tranchée (un token d'App déclenche bien les workflows → `actions_run` retiré de
+      la surface). Prochain geste, **côté navigateur** : créer la GitHub App. Puis
       addon `github` dans rosetta-mcp, `github_guard.py`, vue `repos`, repo cockpit,
       `skippy-helm.yml`.
 - [ ] **Tâches planifiées** : reste à voir de ses yeux l'onglet `#/planif` dans un vrai

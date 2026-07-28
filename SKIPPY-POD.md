@@ -79,7 +79,14 @@ publié = un bouclier. Deux ou trois armements par session, pas vingt.
 |---|---|
 | `repo_commit(repo, branch, message, files[{path, content \| null}])` | créer / modifier / supprimer, atomique. `content: null` = suppression : pas d'outil `delete_file` séparé à débloquer un jour |
 | `repo_tag(repo, tag, sha)` | pose la ref — la release |
-| `actions_run(repo, workflow, ref)` | dispatch — **à n'écrire que si** le test CI ci-dessous montre qu'un push d'App ne déclenche pas les workflows |
+
+`actions_run` (dispatch de workflow) était prévu comme roue de secours si un push
+d'App ne déclenchait pas la CI. **Inutile** : la restriction « ne relance pas de
+workflow » vise uniquement le `GITHUB_TOKEN` d'Actions (garde-fou anti-récursion),
+pas les tokens d'App — la doc recommande explicitement un installation access token
+pour *contourner* cette limite. Et notre token est *user-to-server* : le push est
+attribué à l'utilisateur, comme un push depuis le Mac. Donc pas d'outil de dispatch :
+une capacité de moins à garder. Relancer un build raté se fait depuis l'UI GitHub.
 
 ### Jamais écrits — c'est ça, la garantie
 
@@ -102,10 +109,14 @@ Copie de `google_guard.py` : allowlist stricte, fail-closed, sémantique par can
 
 ## Reste à faire
 
-- [ ] **Test bloquant** : un push par un token de GitHub App déclenche-t-il les
-      workflows ? La restriction connue vise le `GITHUB_TOKEN` d'Actions, pas les
-      tokens user-to-server — donc *a priori* oui, mais toute la chaîne
-      `tag → CI → image → bump → ArgoCD` en dépend. À trancher avant de coder.
+- [x] **Question bloquante — tranchée sur la doc (2026-07-29).** Un push par token
+      d'App déclenche bien les workflows : la restriction ne vise que le
+      `GITHUB_TOKEN` d'Actions. La chaîne `tag → CI → image → bump → ArgoCD` tient,
+      et `actions_run` disparaît de la surface. Confirmation empirique gratuite au
+      premier `repo_commit` réel — inutile de monter une App juste pour l'éprouver.
+- [ ] **Créer la GitHub App** (geste navigateur) : permissions `contents: write`,
+      `metadata: read`, `actions: read`, **`workflows: write`** ; jetons utilisateur
+      expirants activés (refresh token) ; installée sur tous les repos.
 - [ ] Addon `github` dans `rosetta-mcp` (le gros morceau)
 - [ ] `github_guard.py` + son `settings.json`
 - [x] `GW_APPS` dans agent-gw — **fait, non tagué.** Les modules du lanceur sont
