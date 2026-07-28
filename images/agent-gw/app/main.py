@@ -81,6 +81,10 @@ for _pair in MODELS.split(","):
 MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
 # Todo file surfaced as a dedicated view, relative to the memory dir.
 TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
+# Image version, baked at build time by the CI (Dockerfile ARG VERSION). Shown in
+# the PWA settings so one can tell which build is live without reading the k8s
+# manifest. "dev" on a local build.
+GW_VERSION = os.environ.get("GW_VERSION", "dev")
 # Output of the sibling tunnel container (claude-pod tees it into the shared
 # home) — lets the PWA surface the GitHub device-code prompt on reconnect.
 TUNNEL_LOG = os.environ.get("GW_TUNNEL_LOG", str(Path.home() / ".vscode-cli" / "tunnel.out"))
@@ -386,6 +390,13 @@ def _load_todo_state() -> dict:
         state = {}
     state.setdefault("fait", {})
     return state
+
+
+@app.get("/api/version")
+async def version():
+    """The running build, for the PWA settings panel. Fetched lazily when the
+    panel opens, so it always reflects the server actually answering."""
+    return {"version": GW_VERSION}
 
 
 @app.get("/api/todo/state")

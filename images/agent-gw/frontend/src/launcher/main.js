@@ -2106,7 +2106,16 @@ function openVFiche(id) {
 /* ── Tunnel VS Code ──────────────────────────────────────────────── */
 /* ── Réglages ⚙ (thème, tunnel VS Code) ──────────────────────────── */
 const setModal = $('settings-modal');
-$('gear').addEventListener('click', () => { setModal.hidden = false; });
+// Version : lue à l'ouverture du panneau (pas au chargement de la page) — elle
+// reflète ainsi le serveur qui répond VRAIMENT, pas un bundle mis en cache.
+async function showVersion() {
+  const el = $('set-version');
+  try {
+    const r = await fetch('/api/version', { headers: headers(false), cache: 'no-store' });
+    el.textContent = 'agent-gw ' + ((await r.json()).version || '?');
+  } catch { el.textContent = 'agent-gw — version indisponible'; }
+}
+$('gear').addEventListener('click', () => { setModal.hidden = false; showVersion(); });
 $('settings-close').addEventListener('click', () => { setModal.hidden = true; });
 setModal.addEventListener('click', (e) => { if (e.target === setModal) setModal.hidden = true; });
 $('set-theme').addEventListener('click', toggleTheme);

@@ -221,6 +221,7 @@ h2.sec{ font:600 18px/1.3 var(--serif); margin:24px 0 10px; }
 /* Menu Réglages ⚙ : entrées empilées (thème, tunnel VS Code…). */
 .setlist{ display:flex; flex-direction:column; gap:6px; }
 .setlist button{ text-align:left; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--surface2); color:var(--ink); font-size:13.5px; }
+.setver{ margin-top:14px; text-align:center; font:11.5px var(--mono); color:var(--ink-faint); user-select:text; }
 .setlist button:hover{ border-color:var(--accent); }
 .setlist button.pending{ border-color:var(--warn); color:var(--warn); }
 /* Menu Sujets : lignes cliquables (titre, dernière activité, accroche) + 🗄. */

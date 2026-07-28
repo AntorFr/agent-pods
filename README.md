@@ -56,6 +56,9 @@ typing indicator, model picker) and an SSE API:
 - `POST /api/chat` — send a message (`{message, model?}`), stream the agent's reply (SSE)
 - `POST /api/reset` — start a fresh session for the channel
 - `GET /api/models` — models offered in the PWA dropdown
+- `GET /api/version` — the running build (`GW_VERSION`, baked at image build time
+  from the CI's `VERSION` build-arg; `dev` locally). The PWA settings panel fetches
+  it on open, so it names the server actually answering, not a cached bundle.
 - `GET /api/memory/tree` — read-only listing of the agent's memory dir
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
 - `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device

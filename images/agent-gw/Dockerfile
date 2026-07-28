@@ -18,6 +18,12 @@ RUN npm run build
 # --- Runtime ---
 FROM python:3.12-slim
 
+# Version de l'image, injectée par la CI (metadata-action). Sert uniquement à
+# l'affichage dans les Réglages de la PWA : savoir quelle version tourne sans
+# aller lire le manifeste k8s. `dev` sur un build local sans --build-arg.
+ARG VERSION=dev
+ENV GW_VERSION=${VERSION}
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \

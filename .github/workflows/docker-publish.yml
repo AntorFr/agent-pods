@@ -88,6 +88,11 @@ jobs:
         with:
           context: images/${{ matrix.image }}
           platforms: ${{ steps.release.outputs.platforms }}
+          # Version SemVer résolue par metadata-action (ex. 0.33.2 ; « main » sur un
+          # push de branche). Seule agent-gw la consomme, pour l'afficher dans ses
+          # Réglages ; les autres images ignorent l'arg (warning bénin au build).
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
