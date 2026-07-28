@@ -18,7 +18,7 @@ Défaut = jeu historique, **Alfred ne bouge pas**. Tests `test/apps_test.py` (d�
 explicite, rognage, vide, payload `/api/version`), planif toujours vert, bundle + statics
 rebuildés. **À faire : tag → image → déploiement.**
 
-**Tâches planifiées — livré côté code (agent-gw, non taguée)** : Alfred n'avait aucun
+**Tâches planifiées — DÉPLOYÉ (2026-07-29, agent-gw 0.34.1)** : Alfred n'avait aucun
 déclencheur temporel ; la consolidation des gestes (todo/voyage), le push mémoire du soir
 et la « une » du matin attendaient qu'on lui ouvre une session. Nouveau module
 `app/planif.py` : une boucle asyncio lit `memory/planif/*.md` (fiches `type: planif`, en
@@ -41,6 +41,30 @@ mot pour mot en dessous. Cerveau : **D30** + **F8** (repo Alfred), qui amende la
 tient : palier 1 = tâches **muettes**. 47 tests verts (`test/planif_test.py`), hook testé sur
 les 3 canaux, `node --check` + bundle + statics OK. ⚠️ **0.34.0 est publiée mais périmée**
 (taguée avant le cadre de provenance) : déployer **0.34.1**, jamais 0.34.0.
+Déploiement : tag `agent-gw-v0.34.1` → image GHCR multi-arch vérifiée au manifest registry →
+`alfred-helm.yml` 0.33.2 → 0.34.1 → refresh ArgoCD forcé → pod 3/3 Running en 0.34.1,
+`/api/planif` présent dans `app.openapi()`. **E2E prouvé en prod** : fiche temporaire calée à
+`00:11`, tour parti à `00:11:08` (tick de 30 s), 3,7 s, réponse conforme, journal écrit —
+fiche et entrée de journal retirées derrière. Garde rejouée **sur le pod** : canal `planif` →
+`exit 2` sur `mail_search` / `calendar_events` / `mail_draft` / `calendar_create` ; canal
+`pwa` inchangé (lectures et brouillon passent, `calendar_update` réclame le bouclier).
+
+> 🔎 **Gotcha de déploiement — le hook ne voyage PAS dans l'image.** `google_guard.py` vit
+> dans le **workspace** (repo Alfred, monté sur le PVC), pas dans `agent-gw`. Au moment du
+> déploiement, le pod était encore sur un commit antérieur : l'image portait le canal
+> `planif`, **le coupe-circuit n'était pas là**. Une fenêtre où des tours planifiés
+> auraient pu atteindre Google. → **Livrer une garde = deux gestes** : publier l'image ET
+> `memory-sync pull` dans le pod. Vérifier avec un `grep` sur le fichier réel du workspace,
+> jamais en supposant que « c'est poussé sur origin donc c'est actif ».
+
+> 🔎 **Gotcha de vérification — « la route est-elle servie ? » ne se prouve PAS par un 401.**
+> Le middleware d'auth d'agent-gw s'exécute **avant** le routage : `/api/nexistepas` répond
+> `401` exactement comme `/api/planif` (mesuré sur le pod, 2026-07-29). Le test utilisé pour
+> 0.33.0 était donc un faux positif. Ne marche pas non plus : parcourir `app.routes` — les
+> routeurs montés par `include_router` y apparaissent en `_IncludedRouter` sans `.path`, si
+> bien que `/api/voyage/*` semble absent alors qu'il tourne. **Le seul test concluant depuis
+> le pod :**
+> `python -c "from app.main import app; print(sorted(app.openapi()['paths']))"`.
 
 **⚠️ Fausse piste à ne PAS refaire — approbation MCP (2026-07-28).** Une indispo du serveur
 **ghost** s'était déguisée en problème d'approbation des serveurs MCP, d'où une piste
@@ -66,9 +90,11 @@ qui renverse partiellement D27. Endpoint testé (TestClient : coche, décoche, m
 persistance, 400 sans clé) ; bundle + statics rebuildés, tests moteur verts, `node --check`
 OK. Tag `agent-gw-v0.33.0` → image GHCR multi-arch (amd64+arm64) vérifiée au manifest
 registry → `alfred-helm.yml` bumpé 0.32.0 → 0.33.0 → refresh ArgoCD forcé → pod alfred
-3/3 Running, image `agent-gw:0.33.0` confirmée, `/api/todo/state` répond **401** (route
-servie et gardée — un 404 aurait signé une image sans le code). **Reste à valider au
-doigt sur l'écran : la bascule optimiste dans un vrai navigateur.**
+3/3 Running, image `agent-gw:0.33.0` confirmée, `/api/todo/state` répond **401** (~~route
+servie et gardée — un 404 aurait signé une image sans le code~~ ⚠️ **raisonnement FAUX**,
+cf. l'entrée planif : le middleware d'auth passe AVANT le routage, une route inexistante
+répond 401 elle aussi). **Reste à valider au doigt sur l'écran : la bascule optimiste dans
+un vrai navigateur.**
 
 ⚠️ Les entrées « non taguée » plus bas (UI mobile, pièces jointes) sont **périmées** :
 elles ont été taguées et déployées depuis (0.30.0 → 0.32.0) sans que ce fichier soit
@@ -154,10 +180,9 @@ l'access token). Avenant skill correspondance = côté cerveau.
       workflows (toute la chaîne `tag → CI → image → bump → ArgoCD` en dépend). Puis
       addon `github` dans rosetta-mcp, `github_guard.py`, vue `repos`, repo cockpit,
       `skippy-helm.yml`.
-- [ ] **Tâches planifiées** : taguer `agent-gw-vX.Y.Z` → image CI → bumper `image.tag` dans
-      `alfred-helm.yml` → ArgoCD. Puis vérifier en prod : `/api/planif` répond (401 = servi
-      et gardé), l'onglet s'affiche, et **une vraie fiche part à l'heure dite** (la première
-      poussée par Alfred sera la consolidation `todo-state.json`).
+- [ ] **Tâches planifiées** : reste à voir de ses yeux l'onglet `#/planif` dans un vrai
+      navigateur (vide aujourd'hui — Alfred n'a pas encore posé de fiche). La première sera
+      la consolidation de `todo-state.json`.
 - [ ] **UI mobile (3 retouches)** : taguer une nouvelle `agent-gw-vX.Y.Z` → image CI →
       bumper `image.tag` dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD. Tester sur
       téléphone : le « + » (+ pastille), l'absence de zoom involontaire, le swipe chat⇆apps.
