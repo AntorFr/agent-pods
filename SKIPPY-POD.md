@@ -107,6 +107,68 @@ Copie de `google_guard.py` : allowlist stricte, fail-closed, sémantique par can
   restent ouvertes : un `.agent/status.md` est du contenu qu'on a écrit soi-même, pas
   un mail hostile. C'est ce qui rend possible un tour d'horloge « rafraîchis le tableau ».
 
+## Charte graphique (validée 2026-07-30)
+
+Identité **distincte d'Alfred**, et construite en contrepoint terme à terme : lui est clair,
+sérif, teal, coins à 13 px, ombres douces. Skippy est sombre, **monospace en titrage**,
+ambre, coins à 3 px, et **sans aucune ombre** — de la lumière émise (filets d'un pixel sur
+les arêtes, halos) plutôt que de la profondeur simulée.
+
+### Jetons
+
+```
+--void #080A0D   --hull #101419   --hull2 #171C23   --raise #1F252E
+--rivet #242B34  --alloy #D7DEE6  --dim #8E98A5     --faint #5C6570  --ghost #2C333C
+--amber #F2A93B (accent unique)   --amber-deep #B8781E   --amber-low #6B4712
+--ok #3FBF86 (réservé)            --hot #E8543F (réservé)
+```
+
+Neutres à biais bleu froid (de l'alliage, pas du gris). Clair : mêmes jetons inversés avec
+l'ambre descendu à `#B0731A` pour tenir le contraste sur fond pâle — **pas** une inversion
+naïve. Rayon 3 px partout. Typo : monospace système en display **et** en donnée (chiffres en
+`tabular-nums`), sans-serif système pour la prose seule. **Aucun webfont** — le mono système
+est le parti pris, pas un pis-aller.
+
+### Trois règles dures
+
+1. **Un seul accent.** L'ambre, partout. Pas de teinte par tuile : la v1 en avait, le
+   validateur a montré que son bleu passait sous le plancher de chroma (lisait comme du
+   gris). Les tuiles se distinguent par leur libellé, jamais par leur teinte.
+2. **Vert et rouge sont des états réservés**, jamais des accents — et jamais seuls. Mesuré :
+   amber↔vert tombe à **ΔE 8,0 en protanopie**, tout juste au plancher, ce qui n'est légal
+   qu'avec encodage secondaire. Donc **chaque pastille porte son libellé écrit**
+   (« CI · 8/10 vertes », « à déployer ») et chaque bande de builds annonce son compte.
+3. **Le noyau est un composant, pas un ornement.** Une horloge canvas (72 graduations,
+   trois anneaux contrarotatifs, cœur pulsé) instanciée en 180 px sur la passerelle et en
+   44 px dans le fil avec un multiplicateur de vitesse : **au repos il dérive, au travail il
+   tourne**. C'est l'indicateur d'activité, ce qui lui donne une raison d'exister.
+
+### Ce que le chat montre, et pourquoi
+
+La surface principale (défaut mobile, rail flotte à droite en desktop) diverge d'Alfred sur
+trois points, tous justifiés par le métier :
+
+- **La trace d'outils est visible** (`◇ actions_runs · esphome-projects`, repliée sous son
+  compte). Un agent de code qui cache ce qu'il touche est un agent qu'on ne peut pas
+  corriger — Alfred peut se permettre la discrétion, pas Skippy.
+- **Le poids de session est permanent** dans la barre haute : un tour de code consomme du
+  contexte à une vitesse qu'un tour de majordome ne connaît pas.
+- **Le bouclier vit dans le fil**, dépôt nommé et nombre de fichiers annoncés, son état armé
+  reflété dans le composeur avec décompte. On n'arme jamais quelque chose d'abstrait.
+
+Tout le mouvement (noyau, poussière ambiante, entrée en cascade, curseur) s'arrête net sous
+`prefers-reduced-motion`.
+
+### Mise en œuvre
+
+**Un jeu de variables CSS de plus, pas un second front** : `launcher.css` déclare déjà tous
+ses jetons sur `:root`. Une feuille de thème par agent, sélectionnée par le même mécanisme
+que `GW_APPS`, et les deux corps gardent le même bundle. ⚠️ À faire au passage : la classe
+racine du moteur de contenu s'appelle `.alfred-doc` — un pod Skippy porterait le nom du
+majordome dans son DOM. Renommer en `.agent-doc`.
+
+Maquette de référence (5 écrans, hors repo) : artefact « Skippy — charte graphique ».
+
 ## Reste à faire
 
 - [x] **Question bloquante — tranchée sur la doc (2026-07-29).** Un push par token
@@ -123,7 +185,10 @@ Copie de `google_guard.py` : allowlist stricte, fail-closed, sémantique par can
       sélectionnables par env, publiés sur `/api/version`, lus au boot ; tuile **et**
       route masquées ensemble. La mémoire reste hors module. Défaut = jeu historique
       (Alfred ne bouge pas). C'est la brique commune aux deux corps.
-- [ ] Vue `repos` : tableau des `.agent/status.md` de la flotte, lus depuis origin
+- [ ] Vue `repos` : tableau des `.agent/status.md` de la flotte, lus depuis origin —
+      maquette validée (activité 30 j en sparkline, 10 derniers builds, « attendent un geste »
+      comme seule métrique en ambre, dépôts sans fiche estompés et non comptés en dette)
+- [ ] Thème par agent : feuille de jetons Skippy + renommage `.alfred-doc` → `.agent-doc`
 - [ ] Repo « cockpit » = `/workspace` du pod (CLAUDE.md de Skippy + manifeste de la
       flotte). Le modèle mono-repo d'Alfred ne tient pas : Skippy opère sur ~23 repos.
 - [ ] `skippy-helm.yml` dans k8s-home-lab (copie d'`alfred-helm.yml` : fullname, hôte,
