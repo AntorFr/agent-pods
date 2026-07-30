@@ -20,6 +20,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ResultMessage,
     TextBlock,
+    ToolUseBlock,
     query,
 )
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -95,6 +96,33 @@ APPS = [a.strip() for a in os.environ.get(
 # reste, inertes tant que l'attribut est absent). `alfred` = pas d'attribut, donc
 # la charte historique — un pod existant ne bouge pas d'un pixel.
 THEME = os.environ.get("GW_THEME", "alfred").strip() or "alfred"
+# Trace d'outils dans le fil. Un agent de CODE qui cache ce qu'il touche est un
+# agent qu'on ne peut pas corriger : quand il lit un log de CI et conclut, il faut
+# voir QUEL log. Un majordome peut se permettre la discrétion, d'où le défaut off.
+# Seuls le nom de l'outil et une cible courte sortent — jamais l'input complet,
+# qui peut porter le contenu d'un fichier ou une commande entière.
+TRACE = os.environ.get("GW_TRACE", "0").strip().lower() in ("1", "true", "yes", "on")
+# Champs candidats pour résumer un appel, du plus parlant au plus générique.
+_TRACE_KEYS = (
+    "file_path", "path", "notebook_path", "command", "pattern", "query",
+    "url", "repo", "prompt", "description", "subagent_type",
+)
+
+
+def _trace_target(payload: object) -> str:
+    """Une ligne lisible pour la trace : le premier champ parlant, tronqué.
+
+    Volontairement pauvre. On veut « ce qu'il a touché », pas un dump : l'input
+    d'un Write porte le fichier entier, celui d'un Bash une commande qui peut
+    contenir un secret."""
+    if not isinstance(payload, dict):
+        return ""
+    for key in _TRACE_KEYS:
+        val = payload.get(key)
+        if isinstance(val, str) and val.strip():
+            one_line = " ".join(val.split())
+            return one_line[:77] + "…" if len(one_line) > 78 else one_line
+    return ""
 # Image version, baked at build time by the CI (Dockerfile ARG VERSION). Shown in
 # the PWA settings so one can tell which build is live without reading the k8s
 # manifest. "dev" on a local build.
@@ -866,6 +894,15 @@ async def chat(request: Request):
                                 and block.text.strip() != "No response requested."
                             ):
                                 await out.put(_sse("text", {"text": block.text}))
+                            elif TRACE and isinstance(block, ToolUseBlock):
+                                # Live seulement : /api/history ne rejoue pas la
+                                # trace (le transcript ne garde que le texte), donc
+                                # elle disparaît au rechargement. Assumé — c'est un
+                                # témoin d'exécution, pas une archive.
+                                await out.put(_sse("tool", {
+                                    "name": block.name,
+                                    "target": _trace_target(block.input),
+                                }))
                     elif isinstance(msg, ResultMessage):
                         if not ephemeral:  # la parenthèse ⚡ ne touche pas le pointeur
                             _save_session_id(msg.session_id)

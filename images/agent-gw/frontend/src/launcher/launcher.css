@@ -317,3 +317,19 @@ h2.sec{ font:600 18px/1.3 var(--serif); margin:24px 0 10px; }
   body:not(.canvas-open) .edge.left{ display:none; }
 }
 @media (prefers-reduced-motion:reduce){ *{ animation:none!important; transition:none!important; } }
+
+/* ── Trace d'outils & indicateur de travail ──────────────────────────
+   Écrits en JETONS : le bloc suit automatiquement la charte du pod (teal chez
+   Alfred, ambre chez Skippy). La trace n'apparaît que si le serveur émet des
+   events `tool` (GW_TRACE), donc jamais chez un pod qui ne l'active pas. */
+.trace{ align-self:flex-start; max-width:88%; border:1px solid var(--line); border-left:2px solid var(--accent); border-radius:var(--r); background:var(--sink); overflow:hidden; }
+.trace .th{ display:flex; align-items:center; gap:9px; padding:7px 12px; border-bottom:1px solid var(--line-soft); font:600 10px var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); }
+.trace .th b{ color:var(--accent); font-weight:600; }
+.trace ol{ margin:0; padding:7px 12px 9px; list-style:none; display:flex; flex-direction:column; gap:5px; }
+.trace li{ display:flex; gap:11px; font:11px/1.5 var(--mono); color:var(--ink-faint); min-width:0; }
+.trace li::before{ content:"◇"; color:var(--accent); opacity:.7; flex-shrink:0; }
+.trace li .tool{ color:var(--ink-soft); flex-shrink:0; }
+.trace li span:not(.tool){ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.bub.al.working{ display:flex; align-items:center; gap:12px; }
+.bub.al.working .wt{ font:600 10.5px var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--accent); }

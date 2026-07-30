@@ -106,9 +106,77 @@ function add(cls, text, eph) {
   if (cls === 'agent') el.appendChild(renderMd(text, '')); else el.textContent = text;
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
+/* Trace d'outils — ce que l'agent TOUCHE, pas ce qu'il raconte. Les appels
+   consécutifs se groupent dans un seul bloc replié sous leur compte ; un message
+   texte referme le groupe en cours. Vivant seulement : le serveur ne rejoue pas
+   la trace dans /api/history, elle disparaît au rechargement (témoin d'exécution,
+   pas archive). N'apparaît que si le pod émet des events `tool` (GW_TRACE). */
+let curTrace = null;
+function addTool(name, target) {
+  if (!curTrace || !curTrace.isConnected) {
+    curTrace = document.createElement('div');
+    curTrace.className = 'trace';
+    curTrace.innerHTML = '<div class="th"><b>1 outil</b></div><ol></ol>';
+    chat.appendChild(curTrace);
+  }
+  const ol = curTrace.querySelector('ol');
+  const li = document.createElement('li');
+  const t = document.createElement('span'); t.className = 'tool'; t.textContent = name;
+  li.appendChild(t);
+  if (target) { const g = document.createElement('span'); g.textContent = target; li.appendChild(g); }
+  ol.appendChild(li);
+  const n = ol.children.length;
+  curTrace.querySelector('.th b').textContent = n + ' outil' + (n > 1 ? 's' : '');
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* Indicateur de travail. Sous le thème skippy, les trois points cèdent la place
+   au noyau : mêmes anneaux que la passerelle, en 40 px et plus rapides — au repos
+   il dérive, au travail il tourne. Un seul composant, deux vitesses. */
+function coreCanvas(px) {
+  const c = document.createElement('canvas');
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  c.width = c.height = px * dpr; c.style.width = c.style.height = px + 'px';
+  const k = c.getContext('2d'), S = c.width, C = S / 2, u = S / 360;
+  const arc = (r, from, to, w, col) => {
+    k.beginPath(); k.arc(C, C, r * u, from, to);
+    k.strokeStyle = col; k.lineWidth = w * u; k.lineCap = 'round'; k.stroke();
+  };
+  const paint = (t) => {
+    k.clearRect(0, 0, S, S);
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2, big = i % 6 === 0;
+      k.beginPath();
+      k.moveTo(C + Math.cos(a) * 168 * u, C + Math.sin(a) * 168 * u);
+      k.lineTo(C + Math.cos(a) * (big ? 150 : 158) * u, C + Math.sin(a) * (big ? 150 : 158) * u);
+      k.strokeStyle = big ? 'rgba(184,120,30,.8)' : 'rgba(92,101,112,.55)';
+      k.lineWidth = (big ? 2.5 : 1.5) * u; k.stroke();
+    }
+    arc(128, 0, Math.PI * 2, 2, 'rgba(36,43,52,.95)');
+    arc(128, t * .0019, t * .0019 + 1.5, 4, 'rgba(242,169,59,.9)');
+    arc(96, -t * .0013, -t * .0013 + 2.4, 3.5, 'rgba(215,222,230,.34)');
+    const p = .5 + .5 * Math.sin(t * .004);
+    k.beginPath(); k.arc(C, C, (24 + p * 10) * u, 0, 6.284);
+    k.fillStyle = `rgba(242,169,59,${.18 + p * .22})`; k.fill();
+    k.beginPath(); k.arc(C, C, 13 * u, 0, 6.284);
+    k.fillStyle = `rgba(255,214,140,${.85 + p * .15})`; k.fill();
+  };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) paint(900);
+  else (function spin(t) { if (!c.isConnected && t) return; paint(t); requestAnimationFrame(spin); })(0);
+  return c;
+}
+
 function addTyping() {
   const el = document.createElement('div'); el.className = 'bub al';
-  el.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  if (document.documentElement.dataset.agent === 'skippy') {
+    el.classList.add('working');
+    el.appendChild(coreCanvas(40));
+    const lab = document.createElement('span');
+    lab.className = 'wt'; lab.textContent = 'Le Magnifique opère';
+    el.appendChild(lab);
+  } else {
+    el.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  }
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
 const savedModel = localStorage.getItem('gw_model') || '';
@@ -217,7 +285,8 @@ async function sendMessage(text, forceEph, atts) {
         const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
         const ev = /^event: (.*)$/m.exec(raw)?.[1];
         const data = JSON.parse(/^data: (.*)$/m.exec(raw)?.[1] || '{}');
-        if (ev === 'text') { add('agent', data.text, eph); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
+        if (ev === 'text') { curTrace = null; add('agent', data.text, eph); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
+        else if (ev === 'tool') { addTool(data.name, data.target); chat.appendChild(pending); chat.scrollTop = chat.scrollHeight; }
         else if (ev === 'error') add('error', data.message);
         else if (ev === 'done') { if (data.ephemeral) ephSession = data.session_id; else { refreshSession(); syncHistoryLen(); } }
       }
@@ -228,6 +297,7 @@ async function sendMessage(text, forceEph, atts) {
     if (!eph) pollResyncHistory();   // le serveur a peut-être fini la réponse malgré la coupure — on la récupère sans reload
   } finally {
     pending.remove();
+    curTrace = null;   // le tour est clos : le prochain appel d'outil ouvre un groupe neuf
     status.classList.remove('busy'); status.title = 'Alfred est au repos';
     busy = false;
     syncConfirm();

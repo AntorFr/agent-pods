@@ -73,5 +73,26 @@ m = importlib.reload(main)
 check("valeur blanche -> repli sur alfred (jamais d'attribut vide)", m.THEME == "alfred")
 os.environ.pop("GW_THEME", None)
 
+print("\n--- GW_TRACE ---")
+
+os.environ.pop("GW_TRACE", None)
+m = importlib.reload(main)
+check("absent -> trace coupée (le majordome reste discret)", m.TRACE is False)
+
+for val in ("1", "true", "ON", "yes"):
+    os.environ["GW_TRACE"] = val
+    check("« %s » active la trace" % val, importlib.reload(main).TRACE is True)
+os.environ["GW_TRACE"] = "0"
+check("« 0 » la coupe", importlib.reload(main).TRACE is False)
+os.environ.pop("GW_TRACE", None)
+m = importlib.reload(main)
+
+tt = m._trace_target
+check("cible = le champ le plus parlant", tt({"file_path": "app/main.py", "limit": 20}) == "app/main.py")
+check("commande repliée sur une ligne", tt({"command": "git status\n  --short"}) == "git status --short")
+check("cible tronquée à 78 caractères", len(tt({"command": "x" * 300})) == 78)
+check("dict sans champ connu -> vide (on ne dump JAMAIS l'input)", tt({"content": "secret"}) == "")
+check("entrée non-dict -> vide", tt("nope") == "")
+
 print("\nFAIL" if FAILS else "\nSPIKE OK")
 sys.exit(1 if FAILS else 0)
