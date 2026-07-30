@@ -187,7 +187,11 @@ _query_lock = asyncio.Lock()
 # Paths reachable without a session (PWA shell plumbing + auth flow itself).
 # /api/confirm/consume is localhost-guarded in its handler: the agent's hook
 # calls it from inside the pod, where no session cookie exists.
-_PUBLIC_PATHS = ("/auth/", "/api/auth/config", "/api/confirm/consume", "/api/health", "/sw.js", "/manifest.webmanifest", "/static/")
+# `/icon.svg` est public au même titre que `/static/` d'où elle vient : c'est un
+# actif de marque, sans donnée. Sans ça le favicon part en 307 vers le login — la
+# page de connexion elle-même s'affiche sans icône, et l'installateur de PWA, qui
+# fetche l'icône du manifeste sans forcément joindre le cookie, échoue.
+_PUBLIC_PATHS = ("/auth/", "/api/auth/config", "/api/confirm/consume", "/api/health", "/sw.js", "/manifest.webmanifest", "/icon.svg", "/static/")
 
 
 def _is_authenticated(request: Request) -> bool:

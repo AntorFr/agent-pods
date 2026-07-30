@@ -100,6 +100,14 @@ check("skin inconnu -> repli sur le socle, jamais un 404",
 os.environ.pop("GW_THEME", None)
 m = importlib.reload(main)
 
+# Régression vécue en prod (0.40.0) : sortie de /static/, l'icône est retombée
+# derrière le SSO et répondait 307 vers le login. La page de connexion s'affichait
+# donc sans favicon, et l'installateur de PWA — qui fetche l'icône du manifeste
+# sans forcément joindre le cookie — n'avait rien.
+check("/icon.svg est publique, comme le /static/ d'où elle vient",
+      "/icon.svg" in m._PUBLIC_PATHS)
+check("le manifeste l'est aussi", "/manifest.webmanifest" in m._PUBLIC_PATHS)
+
 for svg in (m.STATIC_DIR / "icon.svg", m.STATIC_DIR / "skins" / "skippy" / "icon.svg"):
     try:
         ElementTree.parse(svg)
