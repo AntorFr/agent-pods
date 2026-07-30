@@ -2,6 +2,25 @@
 
 > MàJ : 2026-07-31
 
+**Régression rattrapée (2026-07-31, non taguée — jamais partie en image)** : l'extraction du
+registre de skins (`8e93c18`) a remplacé un bloc contigu de `main.js` au lieu d'y insérer le
+sien, emportant **toute la couche mémoire du lanceur** (`memInfo`/`memIndex`, `loadTree`,
+`loadIndex`, `domains`, `countIn`, `isFiche`, `prettify`, `memPrefix`, `childrenOf`,
+`ficheCount`, `todoStats`, l'overlay todo, `loadWorkbooks`, `labelMemLinks`, `currentRoute`).
+La PWA était **morte au premier rendu** (`ReferenceError: domains is not defined`). Bloc
+restauré verbatim depuis `HEAD~1`, bundle + statics refaits.
+
+> 🔎 **Gotcha — ni `node --check` ni `esbuild --bundle` ne voient ce genre de trou.** Un
+> identifiant supprimé devient une **variable libre**, syntaxiquement valable et parfaitement
+> bundlable : les deux passent au vert sur un lanceur mort. Le test qui, lui, le voit —
+> **les noms de haut niveau définis sont manglés par `--minify`, les libres ne le sont pas** :
+> ```
+> npx esbuild src/launcher/main.js --bundle --format=iife --minify --outfile=/tmp/probe.js
+> grep -c "prettify" /tmp/probe.js   # 0 = défini · >0 = variable libre, donc cassé
+> ```
+> Contrôle indispensable : vérifier qu'un nom **connu défini** (`renderHome`) rend bien 0,
+> sinon c'est le mangling qui ne s'applique pas et le test ne prouve rien.
+
 **Pod Skippy NÉ + charte propre — DÉPLOYÉ (2026-07-31, agent-gw 0.37.0)** : second corps sur
 les mêmes images, `skippy.berard.me`, 2/2 Running. Trois variables d'env nouvelles, toutes
 par-pod et toutes à défaut **inerte** (Alfred ne bouge pas d'un pixel) :
