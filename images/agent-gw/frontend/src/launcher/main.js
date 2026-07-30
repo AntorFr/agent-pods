@@ -575,7 +575,9 @@ window.addEventListener('mouseup', () => {
 });
 
 /* ── Registre des apps ───────────────────────────────────────────── */
-// Teinte (hue HSL) + glyphe par domaine ; défaut = hash du nom.
+// Couleur + glyphe des MODULES du lanceur (ceux qui n'ont pas de dossier de
+// mémoire pour se décrire), et repli des domaines pas encore migrés. Un domaine
+// se déclare lui-même : voir l'habillage déclaratif plus bas.
 const IC = {
   todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l4 4 12-12"/></svg>',
   shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>',
@@ -598,11 +600,53 @@ const APP_META = {
   planif:   { label: 'Planifications', ico: '⏱', color: 'agenda', module: true },
 };
 const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
+
+/* ── Habillage DÉCLARATIF d'un domaine ────────────────────────────────
+   Un domaine porte sa propre identité dans le frontmatter de son INDEX.md :
+
+     titre: Santé      le libellé affiché
+     ico: ❤️            un emoji (les glyphes SVG restent réservés aux modules)
+     couleur: rouge    un nom de la palette ci-dessous, PAS un code hexa
+
+   Écrire un domaine suffit donc à l'habiller : plus besoin d'une ligne dans
+   APP_META, donc plus besoin d'un redéploiement pour un emoji. APP_META ne reste
+   que pour les MODULES du lanceur (todo, atelier, planif…), qui n'ont pas de
+   dossier de mémoire pour parler d'eux — et comme repli des domaines pas encore
+   migrés.
+
+   POURQUOI UN NOM DE COULEUR ET PAS UN HEXA — deux raisons, aucune négociable :
+   1. La palette est thémée. Chaque jeton a une valeur en clair ET en sombre, et
+      un skin (`data-agent`) les repeint en bloc. Un hexa figé dans une fiche
+      ignorerait les trois.
+   2. `couleur` finit dans un attribut `style` : c'est une valeur d'origine
+      MÉMOIRE, donc potentiellement dérivée d'un contenu non fiable (D17). Un
+      vocabulaire FERMÉ est ce qui rend l'injection impossible — hors liste, on
+      retombe sur le repli sans rien interpoler. */
+const HUES = {
+  rouge: 'todo', orange: 'cuisine', ambre: 'voyage', vert: 'diy',
+  emeraude: 'shop', turquoise: 'achats', bleu: 'maison', indigo: 'proj',
+  violet: 'agenda', rose: 'cadeaux', gris: 'contacts', ardoise: 'search',
+};
+// L'INDEX.md qui porte l'identité du domaine (`sujets` n'est pas sous domaines/).
+const domIndexPath = (name) => (name === 'sujets' ? 'sujets/INDEX.md' : 'domaines/' + name + '/INDEX.md');
+
 function metaFor(name) {
   const m = APP_META[name];
-  if (m) return { label: m.label, ico: m.ico, color: m.color, module: !!m.module };
   let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % COLORS.length;
-  return { label: prettify(name), ico: '◆', color: COLORS[h], module: false };
+  const base = m
+    ? { label: m.label, ico: m.ico, color: m.color, module: !!m.module }
+    : { label: prettify(name), ico: '◆', color: COLORS[h], module: false };
+
+  // La déclaration du domaine prime, CHAMP PAR CHAMP : une fiche qui ne donne
+  // qu'une icône garde le libellé et la couleur du repli.
+  const fm = (memIndex && memIndex.get(domIndexPath(name))) || null;
+  if (!fm) return base;
+  if (fm.titre) base.label = fm.titre;
+  // esc() obligatoire : contrairement aux glyphes d'APP_META (du SVG écrit ici),
+  // `ico` vient d'un fichier et part en innerHTML.
+  if (fm.ico) base.ico = esc(fm.ico);
+  if (HUES[fm.couleur]) base.color = HUES[fm.couleur];
+  return base;
 }
 
 /* ── Modules activés (GW_APPS) ───────────────────────────────────────
@@ -833,8 +877,12 @@ function tileHTML(id, route, st, foot) {
   const m = metaFor(id);
   return `<a class="tile" href="${route}" style="--tc:var(--${m.color})"><span class="ico">${m.ico}</span><div class="nm">${esc(m.label)}</div><div class="st">${esc(st || '')}</div><div class="foot">${foot || ''}</div></a>`;
 }
-function renderHome() {
+async function renderHome() {
   crumbs([{ label: 'Accueil', hash: '#/' }]);
+  // L'index porte l'habillage déclaré des domaines (cf. metaFor) : sans lui les
+  // tuiles sortiraient en livrée de repli puis changeraient sous le doigt. En
+  // cache après le 1er appel — au boot il est déjà chargé, l'attente est nulle.
+  await loadIndex();
   // diy/atelier ne sont écartés des domaines que si le module Atelier les
   // représente déjà par sa propre tuile ; sinon ils redeviennent des domaines
   // ordinaires plutôt que de disparaître de l'accueil.
@@ -2362,7 +2410,9 @@ window.addEventListener('hashchange', renderRoute);
 (async function boot() {
   // Les modules d'abord : renderRoute() décide sur eux, et un premier rendu fait
   // avec le repli afficherait brièvement des tuiles qui n'existent pas ici.
-  await Promise.all([loadTree(), loadApps()]);
+  // L'index part en parallèle : l'accueil l'attend désormais (habillage déclaré
+  // des domaines), autant ne pas le sérialiser derrière l'arbo.
+  await Promise.all([loadTree(), loadApps(), loadIndex()]);
   renderRoute();
   syncConfirm();
   pollTunnel();

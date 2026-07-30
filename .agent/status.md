@@ -2,6 +2,27 @@
 
 > MàJ : 2026-07-31
 
+**Habillage déclaratif des domaines — livré côté code (agent-gw, non taguée)** : l'icône et la
+couleur d'un domaine étaient une ligne d'`APP_META` dans `main.js`. Un domaine neuf (`sante`)
+sortait donc en `◆` + couleur hachée jusqu'au prochain déploiement — et Alfred, qui *crée* les
+domaines, devait mendier une ligne de code pour chacun. Désormais un domaine **se décrit
+lui-même** dans le frontmatter de son `INDEX.md` : `titre` / `ico` / `couleur`, lus par
+`metaFor` depuis `/api/memory/index` (déjà chargé, **zéro route nouvelle**, backend intact).
+Précédence **champ par champ**, `APP_META` conservé en repli → aucun domaine existant ne bouge
+tant qu'Alfred ne l'a pas migré. `couleur` est un **vocabulaire fermé de 12 teintes** (`rouge`
+… `ardoise`) mappées sur les jetons existants, jamais un hexa : la palette est thémée
+clair/sombre **et** repeinte en bloc par les skins `data-agent` (un hexa figé ignorerait les
+trois), et surtout la valeur finit dans un attribut `style` — un nom hors liste est **ignoré**,
+ce qui ferme l'injection depuis un contenu mémoire d'origine douteuse (D17). `ico` est échappé
+(les glyphes SVG restent aux modules). L'accueil attend maintenant l'index avant de peindre
+(sinon les tuiles changeraient de livrée sous le doigt) ; il part en parallèle au boot, coût
+nul. Contrat documenté dans `frontend/AUTHORING.md`, 9 tests (`test/habillage_test.py`) qui
+pinnent le chemin de données — s'il cassait, la panne serait **muette** (repli silencieux).
+**À faire : la moitié cerveau** (repo Alfred, skill `amelioration` + décision consignée) —
+étendre le contrat `redaction` et poser le frontmatter dans chaque `domaines/*/INDEX.md` ;
+tant qu'elle manque, l'attribut existe mais personne ne l'écrit. Puis tag → image →
+déploiement.
+
 **Régression rattrapée (2026-07-31, non taguée — jamais partie en image)** : l'extraction du
 registre de skins (`8e93c18`) a remplacé un bloc contigu de `main.js` au lieu d'y insérer le
 sien, emportant **toute la couche mémoire du lanceur** (`memInfo`/`memIndex`, `loadTree`,

@@ -176,6 +176,41 @@ dans son frontmatter), pas un domaine `piscine` à part (erreur corrigée le 202
 avait été promue à tort). La navigation par cartes de sous-domaine s'en charge automatiquement,
 aucun code à demander.
 
+## L'habillage d'un domaine (`domaines/<nom>/INDEX.md`)
+
+Un domaine **se décrit lui-même**. Son icône et sa couleur ne sont plus une ligne de code du
+lanceur : elles vivent dans le frontmatter de son `INDEX.md`. Créer un domaine suffit donc à
+l'habiller — **aucun redéploiement** n'est nécessaire pour un emoji.
+
+```yaml
+---
+type: espace
+domaine: sante
+titre: Santé      # le libellé affiché (tuile, fil d'Ariane, en-tête)
+ico: ❤️            # un emoji
+couleur: rouge    # un nom de la palette ci-dessous
+---
+```
+
+Les trois champs sont **indépendants et facultatifs** : n'en déclarer qu'un garde les deux
+autres au repli. Un domaine qui ne déclare rien retombe sur l'habillage par défaut (`◆` et une
+couleur tirée du nom) — c'est le sort des nouveaux venus, et la seule façon d'en sortir.
+
+**`couleur` — vocabulaire FERMÉ, jamais un code hexa :**
+
+`rouge` · `orange` · `ambre` · `vert` · `emeraude` · `turquoise` · `bleu` · `indigo` ·
+`violet` · `rose` · `gris` · `ardoise`
+
+Un nom hors liste est **ignoré** (repli), pas interprété. Deux raisons, aucune négociable :
+la palette est **thémée** (chaque teinte a sa valeur en clair et en sombre, et un skin
+`data-agent` les repeint en bloc — un hexa figé ignorerait les trois) ; et la valeur finit
+dans un attribut `style`, donc c'est le vocabulaire fermé qui rend l'injection impossible
+depuis un contenu mémoire d'origine douteuse.
+
+**Un emoji, pas un glyphe SVG.** `ico` est échappé avant affichage : les pictos vectoriels
+restent réservés aux modules du lanceur (Todo, L'Atelier), qui n'ont pas de dossier de mémoire
+pour parler d'eux.
+
 ## Le contrat voyage (`domaines/voyages/<id>/`)
 
 Un voyage est un **app-module** (timeline + suggestions dans la PWA), pas une fiche : sa
