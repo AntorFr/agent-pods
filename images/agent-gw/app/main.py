@@ -30,7 +30,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, planif, voyages
+from . import auth, fleet, planif, voyages
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
@@ -102,6 +102,8 @@ THEME = os.environ.get("GW_THEME", "alfred").strip() or "alfred"
 # Seuls le nom de l'outil et une cible courte sortent — jamais l'input complet,
 # qui peut porter le contenu d'un fichier ou une commande entière.
 TRACE = os.environ.get("GW_TRACE", "0").strip().lower() in ("1", "true", "yes", "on")
+# Dossier des clones de la flotte, relatif au workspace — source de la vue `repos`.
+FLEET_DIR = os.environ.get("GW_FLEET_DIR", "repos")
 # Champs candidats pour résumer un appel, du plus parlant au plus générique.
 _TRACE_KEYS = (
     "file_path", "path", "notebook_path", "command", "pattern", "query",
@@ -457,6 +459,16 @@ async def version():
     the version shown always reflects the server actually answering rather than a
     cached bundle."""
     return {"version": GW_VERSION, "apps": APPS, "theme": THEME}
+
+
+@app.get("/api/repos")
+async def repos_board():
+    """Le tableau de flotte : un scan des `.agent/status.md` des clones locaux.
+
+    Synchrone mais borné (git en lecture, timeout 5 s par appel) : sur une
+    vingtaine de dépôts le scan tient largement sous la seconde, et l'alternative
+    — un cache à invalider — coûterait plus cher qu'elle ne rapporte."""
+    return await asyncio.to_thread(fleet.scan, WORKSPACE, FLEET_DIR)
 
 
 @app.get("/api/todo/state")

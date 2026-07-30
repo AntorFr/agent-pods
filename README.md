@@ -61,6 +61,12 @@ typing indicator, model picker) and an SSE API:
   exposes (`GW_APPS`). The launcher reads `apps` at boot to gate its tiles and
   routes; the PWA settings panel fetches it again on open, so the version names the
   server actually answering, not a cached bundle.
+- `GET /api/repos` — fleet board: scans `<workspace>/<GW_FLEET_DIR>/*/.agent/status.md`
+  (root `STATUS.md` tolerated for repos still on the old convention) and returns, per
+  repo, the leading paragraph of the fiche, its open checkboxes, 30 days of commit
+  counts, the branch and whether the clone is dirty. Sorted so whatever awaits a
+  gesture comes first. Read-only, `git` calls bounded by a 5 s timeout — a broken
+  repo yields a poor card, never a broken page.
 - `GET /api/memory/tree` — read-only listing of the agent's memory dir
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
 - `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device
@@ -118,6 +124,9 @@ Environment:
 | `GW_MODELS` | `Fable:claude-fable-5,Opus:opus,Sonnet:sonnet,Haiku:haiku` | `Label:model` pairs for the PWA dropdown. CLI aliases resolve to the latest model of each family. |
 | `GW_MEMORY_DIR` | `memory` | Memory dir shown in the PWA side panel, relative to the workspace |
 | `GW_TODO_FILE` | `todo/taches.md` | Todo file for the dedicated view, relative to the memory dir |
+| `GW_THEME` | `alfred` | Which **skin** dresses the launcher. A skin is a small module under `frontend/src/launcher/skins/` declaring only what differs between bodies — brand, composer placeholder, home screen, extra routes, status bar, busy indicator — plus a stylesheet scoped to `:root[data-agent="<id>"]`. `alfred` is the neutral base: no attribute, no override, an existing pod does not move. Adding a theme is three files-worth of edits and touches nothing else; see the contract in `skins/index.js`. |
+| `GW_TRACE` | `0` | Stream tool calls into the chat (`◇ <tool> · <target>`), grouped under their count. Live only — `/api/history` does not replay them. Only the tool **name** and a short target leave the server, never the full input (a Write carries a whole file, a Bash command may carry a secret). Off by default: a butler stays discreet, a coding agent that hides what it touches cannot be corrected. |
+| `GW_FLEET_DIR` | `repos` | Where the fleet clones live, relative to the workspace — the source of `GET /api/repos` and the `repos` view. Reads the **disk**, not the GitHub API. |
 | `GW_APPS` | `todo,projets,atelier,planif,voyages` | App-modules the launcher exposes. The image is agent-agnostic; the launcher was not. Anything absent loses **both its tile and its route** — a bookmarked URL cannot revive a module this pod does not have. Memory browsing (fiches, domains) is not a module and is always on. The default is the historical set, so upgrading an existing pod changes nothing. |
 | `GW_TUNNEL_LOG` | `~/.vscode-cli/tunnel.out` | Mirrored tunnel output (see claude-pod `TUNNEL_LOG`) |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | *(unset)* | OIDC SSO (e.g. Authelia). All four required to enable; login then goes through the IdP and a 30-day session cookie. |

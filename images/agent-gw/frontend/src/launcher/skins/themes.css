@@ -1,0 +1,7 @@
+/* Feuilles des skins — une ligne par thème, chargée dans le bundle du lanceur.
+   Chaque fichier scope TOUT sous `:root[data-agent="<id>"]` (ou sous des classes
+   qui n'existent que dans le markup de son skin) : sans l'attribut, un thème est
+   inerte. C'est ce qui garantit qu'ajouter un thème ne peut pas abîmer les autres.
+
+   Ajouter un thème : une ligne ici + une dans `skins/index.js`. */
+@import './skippy.css';

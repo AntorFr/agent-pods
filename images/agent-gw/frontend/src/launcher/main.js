@@ -3,10 +3,11 @@
 // engine.js chargé avant) et marked/DOMPurify (vendors) pour le chat, comme l'ancienne UI.
 // Sert à /app en parallèle de / (ancienne UI) le temps de la migration.
 import './launcher.css';
-// APRÈS launcher.css : surcharges de jetons par agent, inertes tant que
-// `data-agent` n'est pas posé sur <html> (cf. loadApps). L'ordre source tranche
-// les égalités de spécificité avec les règles `:root[data-theme]` d'Alfred.
-import './theme-skippy.css';
+// APRÈS launcher.css : les feuilles des skins, inertes tant que `data-agent`
+// n'est pas posé sur <html>. L'ordre source tranche les égalités de spécificité
+// avec les règles `:root[data-theme]` du socle.
+import './skins/themes.css';
+import { resolveSkin } from './skins/index.js';
 
 const $ = (id) => document.getElementById(id);
 const mqMobile = window.matchMedia('(max-width: 820px)'); // seuil deux-écrans, aligné sur launcher.css
@@ -130,50 +131,19 @@ function addTool(name, target) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-/* Indicateur de travail. Sous le thème skippy, les trois points cèdent la place
-   au noyau : mêmes anneaux que la passerelle, en 40 px et plus rapides — au repos
-   il dérive, au travail il tourne. Un seul composant, deux vitesses. */
-function coreCanvas(px) {
-  const c = document.createElement('canvas');
-  const dpr = Math.min(devicePixelRatio || 1, 2);
-  c.width = c.height = px * dpr; c.style.width = c.style.height = px + 'px';
-  const k = c.getContext('2d'), S = c.width, C = S / 2, u = S / 360;
-  const arc = (r, from, to, w, col) => {
-    k.beginPath(); k.arc(C, C, r * u, from, to);
-    k.strokeStyle = col; k.lineWidth = w * u; k.lineCap = 'round'; k.stroke();
-  };
-  const paint = (t) => {
-    k.clearRect(0, 0, S, S);
-    for (let i = 0; i < 36; i++) {
-      const a = (i / 36) * Math.PI * 2, big = i % 6 === 0;
-      k.beginPath();
-      k.moveTo(C + Math.cos(a) * 168 * u, C + Math.sin(a) * 168 * u);
-      k.lineTo(C + Math.cos(a) * (big ? 150 : 158) * u, C + Math.sin(a) * (big ? 150 : 158) * u);
-      k.strokeStyle = big ? 'rgba(184,120,30,.8)' : 'rgba(92,101,112,.55)';
-      k.lineWidth = (big ? 2.5 : 1.5) * u; k.stroke();
-    }
-    arc(128, 0, Math.PI * 2, 2, 'rgba(36,43,52,.95)');
-    arc(128, t * .0019, t * .0019 + 1.5, 4, 'rgba(242,169,59,.9)');
-    arc(96, -t * .0013, -t * .0013 + 2.4, 3.5, 'rgba(215,222,230,.34)');
-    const p = .5 + .5 * Math.sin(t * .004);
-    k.beginPath(); k.arc(C, C, (24 + p * 10) * u, 0, 6.284);
-    k.fillStyle = `rgba(242,169,59,${.18 + p * .22})`; k.fill();
-    k.beginPath(); k.arc(C, C, 13 * u, 0, 6.284);
-    k.fillStyle = `rgba(255,214,140,${.85 + p * .15})`; k.fill();
-  };
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) paint(900);
-  else (function spin(t) { if (!c.isConnected && t) return; paint(t); requestAnimationFrame(spin); })(0);
-  return c;
-}
-
+/* Témoin de travail : le skin peut fournir son propre nœud (le noyau de Skippy)
+   avec un libellé ; sans skin, ce sont les trois points historiques. */
 function addTyping() {
   const el = document.createElement('div'); el.className = 'bub al';
-  if (document.documentElement.dataset.agent === 'skippy') {
+  const node = SKIN.busyNode && SKIN.busyNode();
+  if (node) {
     el.classList.add('working');
-    el.appendChild(coreCanvas(40));
-    const lab = document.createElement('span');
-    lab.className = 'wt'; lab.textContent = 'Le Magnifique opère';
-    el.appendChild(lab);
+    el.appendChild(node);
+    if (SKIN.busyLabel) {
+      const lab = document.createElement('span');
+      lab.className = 'wt'; lab.textContent = SKIN.busyLabel;
+      el.appendChild(lab);
+    }
   } else {
     el.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
   }
@@ -651,128 +621,43 @@ async function loadApps() {
     if (!r.ok) return;
     const d = await r.json();
     if (Array.isArray(d.apps)) APPS = new Set(d.apps);
-    // Thème par agent : l'attribut arme les surcharges de theme-*.css. Posé AVANT
-    // le premier rendu (cf. boot), sinon on verrait passer la livrée d'Alfred.
-    // `alfred` reste implicite : aucun attribut, aucune surcharge, rien ne bouge.
+    // L'attribut arme les feuilles des skins. Posé AVANT le premier rendu (cf.
+    // boot), sinon on verrait passer la livrée du socle. `alfred` reste
+    // implicite : aucun attribut, aucune surcharge, rien ne bouge.
     if (d.theme && d.theme !== 'alfred') document.documentElement.dataset.agent = d.theme;
+    SKIN = resolveSkin(d.theme, SKIN_API);
+    applySkinChrome(d);
   } catch {}
 }
 
-/* ── Mémoire (arbo) ──────────────────────────────────────────────── */
-let memInfo = null; // {root, todo, entries:[{path,dir}]}
-let memIndex = null; // Map path -> frontmatter (dérivé, une requête)
-async function loadTree() {
-  try { const r = await fetch('/api/memory/tree', { headers: headers(false) }); if (r.ok) memInfo = await r.json(); } catch {}
-}
-function loadTreeThen(fn) { loadTree().then(fn); }
-async function loadIndex() {
-  if (memIndex) return;
-  memIndex = new Map();
-  try { const r = await fetch('/api/memory/index', { headers: headers(false) }); if (r.ok) { const { items } = await r.json(); for (const it of items) memIndex.set(it.path, it.fm || {}); } } catch {}
-}
-// Overlay des gestes todo (D28) : cocher est un POST direct, jamais une phrase au LLM.
-// Prioritaire sur le `done:` de la fiche tant qu'Alfred n'a pas consolidé — sans quoi la
-// case se décocherait au rafraîchissement suivant. Valeur : date ISO (faite), false
-// (décochée explicitement), absente (aucun geste en attente → la fiche fait foi).
-let todoOverlay = {};
-async function loadTodoState() {
-  try { const r = await fetch('/api/todo/state', { headers: headers(false), cache: 'no-store' }); todoOverlay = (await r.json()).fait || {}; } catch { todoOverlay = {}; }
-  return todoOverlay;
-}
-// Le done: effectif d'une tâche — l'overlay d'abord, la fiche ensuite.
-const doneOf = (id, fm) => isDone(id in todoOverlay ? todoOverlay[id] : fm.done);
-// Le geste lui-même. Optimiste : l'appelant a déjà basculé l'affichage, on ne
-// recharge rien ; en cas d'échec on rend la main avec false pour qu'il révoque.
-async function tickTask(id, done) {
-  try {
-    const r = await fetch('/api/todo/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ key: id, done }) });
-    if (!r.ok) return false;
-    todoOverlay = (await r.json()).fait || {};
-    return true;
-  } catch { return false; }
+/* ── Skin actif ──────────────────────────────────────────────────────
+   Le socle (Alfred) est le skin NEUTRE : tous les champs absents, donc tous les
+   comportements par défaut. Un skin ne peut qu'ajouter, jamais retrancher — d'où
+   l'impossibilité qu'un thème neuf casse un corps existant.
+   Les primitives du lanceur sont injectées : voir `skins/index.js`. */
+const SKIN_API = {
+  $, esc, crumbs, headers,
+  get page() { return page; },
+  appOn: (id) => appOn(id),
+};
+let SKIN = resolveSkin(null, SKIN_API);
+
+/** Habillage de la coque : le nom du corps est écrit en dur dans app.html, et la
+    barre d'état n'existe que si le skin en fournit une. */
+function applySkinChrome(info) {
+  const nameBtn = $('home2');
+  if (SKIN.brand && nameBtn) nameBtn.innerHTML = `<b>${esc(SKIN.brand)}</b>`;
+  if (SKIN.title) document.title = SKIN.title;
+  if (SKIN.placeholder && input) input.placeholder = SKIN.placeholder;
+  const st = $('rail-status');
+  if (SKIN.idleLabel && st) st.title = SKIN.idleLabel;
+
+  const main = document.querySelector('main.main');
+  if (!SKIN.console || !main || main.querySelector(':scope > .console')) return;
+  const bar = SKIN.console(SKIN_API, info || {});
+  if (bar) main.insertBefore(bar, main.firstChild);
 }
 
-let wbCache = null;
-async function loadWorkbooks() {
-  if (wbCache) return wbCache;
-  try { const r = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' }); wbCache = (await r.json()).workbooks || []; } catch { wbCache = []; }
-  return wbCache;
-}
-const prettify = (s) => { s = s.replace(MD_EXT, '').replace(/-/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
-// Un wikilink SANS alias sort du moteur avec son chemin brut pour libellé — on le
-// remplace par le TITRE de la cible (frontmatter), sinon son nom de fichier joliment.
-function labelMemLinks(root) {
-  if (!memIndex) return;
-  root.querySelectorAll('a[href^="/mem/"]').forEach((a) => {
-    const t = decodeURIComponent(a.getAttribute('href').slice(5));
-    if (a.textContent.trim() !== t) return; // un alias explicite : on ne touche pas
-    let full = /\.[a-z0-9]+$/i.test(t) ? t : t + '.md';
-    let fm = memIndex.get(full);
-    if (!fm && memInfo) {
-      const base = ('/' + full.split('/').pop()).toLowerCase();
-      const e = memInfo.entries.find((x) => !x.dir && ('/' + x.path.toLowerCase()).endsWith(base));
-      if (e) { full = e.path; fm = memIndex.get(e.path); }
-    }
-    a.textContent = (fm && fm.titre) || prettify(full.split('/').pop());
-  });
-}
-// Compteur de la tuile d'accueil : dérivé des fiches type:tache (même source que la vue todo).
-async function todoStats() {
-  try {
-    await Promise.all([loadIndex(), loadTodoState()]);
-    if (!memIndex) return null;
-    const today = new Date().toISOString().slice(0, 10);
-    let total = 0, late = 0;
-    for (const [path, fm] of memIndex) {
-      if (fm.type !== 'tache' || doneOf(slugOf(path), fm)) continue;
-      total++;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(fm.due || '') && fm.due < today) late++;
-    }
-    return { total, late };
-  } catch { return null; }
-}
-// Sous-domaines de 1er niveau sous domaines/ + todo + sujets.
-function domains() {
-  if (!memInfo) return [];
-  const set = new Set();
-  for (const e of memInfo.entries) {
-    const p = e.path;
-    if (p.startsWith('domaines/')) set.add(p.split('/')[1]);
-    else if (p.startsWith('sujets/') && !p.startsWith('sujets/archive')) set.add('sujets');
-  }
-  return [...set].filter(Boolean).sort();
-}
-const isFiche = (p) => MD_EXT.test(p) && !/(^|\/)INDEX\.md$/i.test(p) && !p.startsWith('sujets/archive');
-function countIn(prefix) {
-  if (!memInfo) return 0;
-  return memInfo.entries.filter((e) => !e.dir && isFiche(e.path) && e.path.startsWith(prefix)).length;
-}
-// Préfixe mémoire d'un sous-chemin d'app (ex. "cadeaux/frere" -> "domaines/cadeaux/frere/").
-function memPrefix(subpath) {
-  const segs = subpath.split('/');
-  const base = segs[0] === 'sujets' ? 'sujets' : 'domaines/' + segs[0];
-  const rest = segs.slice(1).join('/');
-  return (rest ? base + '/' + rest : base) + '/';
-}
-// Enfants immédiats d'un préfixe : sous-dossiers (regroupements) + fiches .md de ce niveau.
-function childrenOf(prefix) {
-  const folders = new Set(), files = [];
-  for (const e of memInfo.entries) {
-    if (!e.path.startsWith(prefix) || e.path.startsWith('sujets/archive')) continue;
-    const rest = e.path.slice(prefix.length);
-    if (!rest) continue;
-    const slash = rest.indexOf('/');
-    if (slash >= 0) { const f = rest.slice(0, slash); if (f !== 'assets') folders.add(f); }
-    else if (!e.dir && MD_EXT.test(rest) && !/^INDEX\.md$/i.test(rest)) files.push(e.path);
-  }
-  return { folders: [...folders].sort((a, b) => a.localeCompare(b, 'fr')), files: files.sort() };
-}
-function ficheCount(prefix) {
-  return memInfo.entries.filter((e) => !e.dir && isFiche(e.path) && e.path.startsWith(prefix)).length;
-}
-
-/* ── Routeur (hash) + fil d'Ariane ───────────────────────────────── */
-function currentRoute() { return decodeURIComponent(location.hash.replace(/^#\/?/, '')); }
 $('home').addEventListener('click', () => { location.hash = '#/'; });
 $('home2') && $('home2').addEventListener('click', () => { location.hash = '#/'; });
 
@@ -794,7 +679,17 @@ function renderRoute() {
   // l'écran apps ; revenir à la racine (route vide) ramène au chat. Le swipe/les
   // poignées basculent en plus, à la main, entre les deux.
   if (mqMobile.matches) document.body.classList.toggle('canvas-open', route !== '');
-  if (!route) return renderHome();
+  // Le skin passe AVANT les routes communes : deux corps ne répondent pas à la
+  // même question, donc ils n'ouvrent pas sur le même écran. Un skin sans `home`
+  // ni `routes` (le socle) laisse tout retomber sur le comportement d'Alfred.
+  if (!route) return SKIN.home ? SKIN.home() : renderHome();
+  if (SKIN.routes) {
+    for (const [prefix, render] of Object.entries(SKIN.routes)) {
+      if (prefix.endsWith('/')) {
+        if (route.startsWith(prefix)) return render(decodeURIComponent(route.slice(prefix.length)));
+      } else if (route === prefix) return render('');
+    }
+  }
   // La mémoire (fiches, domaines) est le socle : elle n'est pas un module, tout
   // agent qui écrit dans memory/ la parcourt. Seuls les modules ci-dessous se
   // configurent — une route éteinte retombe sur l'accueil, jamais sur un écran mort.
