@@ -808,6 +808,12 @@ function applySkinChrome(info) {
   if (SKIN.placeholder && input) input.placeholder = SKIN.placeholder;
   const st = $('rail-status');
   if (SKIN.idleLabel && st) st.title = SKIN.idleLabel;
+  // Le blason de l'en-tête est inline dans app.html (le nœud papillon du
+  // majordome) : un skin peut le remplacer. Le favicon et le manifeste, eux, sont
+  // servis PAR LE SERVEUR (/icon.svg, /manifest.webmanifest) — le navigateur les
+  // réclame avant que ce script n'existe, ils ne peuvent pas venir d'ici.
+  const crestEl = document.querySelector('.crestbtn .crest');
+  if (SKIN.crest && crestEl) crestEl.innerHTML = SKIN.crest;
 
   const main = document.querySelector('main.main');
   if (!SKIN.console || !main || main.querySelector(':scope > .console')) return;

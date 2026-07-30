@@ -73,6 +73,41 @@ m = importlib.reload(main)
 check("valeur blanche -> repli sur alfred (jamais d'attribut vide)", m.THEME == "alfred")
 os.environ.pop("GW_THEME", None)
 
+print("\n--- actifs d'habillage (favicon, manifeste) ---")
+
+import json as _json  # noqa: E402
+from xml.etree import ElementTree  # noqa: E402
+
+os.environ["GW_THEME"] = "skippy"
+m = importlib.reload(main)
+icon = m._skin_asset("icon.svg")
+check("skippy sert SON icône", icon and icon.parts[-3:] == ("skins", "skippy", "icon.svg"))
+mf = _json.loads(bytes(asyncio.run(m.manifest()).body).decode())
+check("manifeste au nom du skin", mf["name"] == "Skippy")
+check("couleurs du skin", mf["theme_color"] == "#080A0D")
+check("icône du manifeste = la route thémée", mf["icons"][0]["src"] == "/icon.svg")
+
+os.environ["GW_THEME"] = "alfred"
+m = importlib.reload(main)
+check("le socle garde son icône historique", m._skin_asset("icon.svg").name == "icon.svg"
+      and "skins" not in str(m._skin_asset("icon.svg")))
+check("le socle garde son nom", _json.loads(bytes(asyncio.run(m.manifest()).body).decode())["name"] == "Alfred")
+
+os.environ["GW_THEME"] = "fantome"
+m = importlib.reload(main)
+check("skin inconnu -> repli sur le socle, jamais un 404",
+      "skins" not in str(m._skin_asset("icon.svg")))
+os.environ.pop("GW_THEME", None)
+m = importlib.reload(main)
+
+for svg in (m.STATIC_DIR / "icon.svg", m.STATIC_DIR / "skins" / "skippy" / "icon.svg"):
+    try:
+        ElementTree.parse(svg)
+        ok = True
+    except Exception:
+        ok = False
+    check("SVG bien formé : %s" % svg.name if "skins" not in str(svg) else "SVG bien formé : skippy", ok)
+
 print("\n--- GW_TRACE ---")
 
 os.environ.pop("GW_TRACE", None)

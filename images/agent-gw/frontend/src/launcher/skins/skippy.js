@@ -233,9 +233,19 @@ export default function createSkippySkin(api) {
     return bar;
   }
 
+  /* Le blason de l'en-tête. Même silhouette que le favicon, mais en
+     `currentColor` : le bouton hérite de la couleur du rail, donc le dessin doit
+     tenir en monochrome — pas de cœur ambre ici, c'est le trait qui porte. */
+  const crest = `<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-linecap="round">
+    <circle cx="50" cy="50" r="31" stroke-width="9" stroke-dasharray="120 75" transform="rotate(-40 50 50)"/>
+    <circle cx="50" cy="50" r="10" fill="currentColor" stroke="none"/>
+    <path d="M50 8 v9 M50 83 v9 M8 50 h9 M83 50 h9" stroke-width="8"/>
+  </svg>`;
+
   return {
     brand: 'SKIPPY',
     title: 'Skippy',
+    crest,
     placeholder: 'Ordonner quelque chose au Magnifique…',
     idleLabel: 'Le Magnifique est au repos',
     busyLabel: 'Le Magnifique opère',

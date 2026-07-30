@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Skippy">
+  <!-- Blason Skippy — le noyau, réduit à ce qui survit à 16 px.
+       La maquette a 72 graduations et trois anneaux : à la taille d'un favicon
+       ils se transforment en bouillie grise. On garde donc la SILHOUETTE — un
+       anneau ambre interrompu, un cœur incandescent, sur un fond de coque — et
+       huit graduations seulement, épaisses. C'est reconnaissable dans un onglet,
+       et ça reste net en 512 px sur un écran d'accueil. -->
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#F2A93B" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#F2A93B" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="100" height="100" rx="22" fill="#0A0C0F"/>
+  <circle cx="50" cy="50" r="30" fill="url(#halo)"/>
+
+  <!-- Graduations : huit, épaisses, alignées sur les points cardinaux et les
+       diagonales. Au-delà, elles se confondent en niveaux de gris. -->
+  <g stroke="#B8781E" stroke-width="4" stroke-linecap="round">
+    <path d="M50 12 v7 M50 81 v7 M12 50 h7 M81 50 h7"/>
+  </g>
+  <g stroke="#5C6570" stroke-width="3.5" stroke-linecap="round">
+    <path d="M23.2 23.2 l5 5 M71.8 71.8 l5 5 M76.8 23.2 l-5 5 M28.2 71.8 l-5 5"/>
+  </g>
+
+  <!-- L'anneau ambre, interrompu : c'est le geste qui dit « ça tourne ». -->
+  <circle cx="50" cy="50" r="31" fill="none" stroke="#F2A93B" stroke-width="5"
+          stroke-linecap="round" stroke-dasharray="120 75" transform="rotate(-40 50 50)"/>
+  <!-- Le second anneau, en acier, plus discret et à contre-sens. -->
+  <circle cx="50" cy="50" r="21" fill="none" stroke="#D7DEE6" stroke-width="3"
+          stroke-linecap="round" stroke-dasharray="46 86" stroke-opacity=".55"
+          transform="rotate(150 50 50)"/>
+
+  <!-- Le cœur. -->
+  <circle cx="50" cy="50" r="9.5" fill="#FFD68C"/>
+</svg>

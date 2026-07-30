@@ -981,11 +981,46 @@ async def service_worker():
     return FileResponse(STATIC_DIR / "sw.js", media_type="text/javascript")
 
 
+def _skin_asset(name: str) -> Path | None:
+    """L'actif d'habillage du skin actif, sinon celui du socle, sinon rien.
+
+    Un skin dépose ses actifs SERVEUR sous `static/skins/<id>/` — ce sont ceux
+    que le navigateur réclame AVANT que le moindre JavaScript ne tourne (favicon,
+    manifeste), donc ils ne peuvent pas venir du registre côté client."""
+    themed = STATIC_DIR / "skins" / THEME / name
+    if themed.is_file():
+        return themed
+    base = STATIC_DIR / name
+    return base if base.is_file() else None
+
+
+@app.get("/icon.svg")
+async def icon():
+    """Favicon et icône d'écran d'accueil, par skin. Servie ici plutôt que depuis
+    `/static` : le chemin doit être stable dans `app.html`, c'est le CONTENU qui
+    change selon `GW_THEME`."""
+    path = _skin_asset("icon.svg")
+    if not path:
+        raise HTTPException(status_code=404, detail="icon absente")
+    return FileResponse(path, media_type="image/svg+xml")
+
+
 @app.get("/manifest.webmanifest")
 async def manifest():
-    return FileResponse(
-        STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json"
-    )
+    """Manifeste PWA : le socle, écrasé champ par champ par le skin. Deux pods
+    installés sur le même téléphone doivent porter deux noms et deux couleurs —
+    sinon on se retrouve avec deux icônes « Alfred » indiscernables."""
+    base = json.loads((STATIC_DIR / "manifest.webmanifest").read_text(encoding="utf-8"))
+    themed = STATIC_DIR / "skins" / THEME / "manifest.json"
+    if themed.is_file():
+        try:
+            base.update(json.loads(themed.read_text(encoding="utf-8")))
+        except ValueError:
+            pass  # un manifeste de skin illisible ne casse pas l'installation
+    base["icons"] = [
+        {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+    ]
+    return JSONResponse(base, media_type="application/manifest+json")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

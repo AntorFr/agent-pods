@@ -21,6 +21,11 @@
 
      id            string    identifiant, = la valeur de GW_THEME
      brand         string    nom affiché dans la coque
+     crest         string    markup SVG du blason de l'en-tête. En `currentColor` :
+                             le bouton hérite de la couleur du rail. Le FAVICON et
+                             le MANIFESTE ne passent PAS par ici — le navigateur les
+                             réclame avant tout JavaScript ; ils vivent côté serveur
+                             sous `static/skins/<id>/{icon.svg,manifest.json}`.
      title         string    titre du document (onglet)
      placeholder   string    invite du composeur
      idleLabel     string    infobulle du témoin d'activité au repos
