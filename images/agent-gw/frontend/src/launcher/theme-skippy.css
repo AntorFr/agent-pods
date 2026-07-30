@@ -1,0 +1,96 @@
+/* Thème `skippy` — surcharge de jetons, aucune règle structurelle réécrite.
+   Chargé dans le MÊME bundle que launcher.css et activé par l'attribut
+   `data-agent="skippy"` posé au boot depuis /api/version (champ `theme`).
+
+   Contrepied assumé d'Alfred : lui est clair, sérif, teal, coins à 13 px, ombres
+   douces — un salon. Skippy est sombre, monospace en titrage, ambre, coins à 3 px,
+   et sans ombre portée : de la lumière émise (bordures nettes, halos) plutôt que de
+   la profondeur simulée. Cf. la charte dans agent-pods/SKIPPY-POD.md.
+
+   Spécificités : `:root[data-agent]` (0,2,0) bat `:root` (0,1,0) et la règle
+   `@media (prefers-color-scheme:dark) :root`. Les variantes explicites
+   `[data-agent][data-theme]` (0,3,0) battent les `:root[data-theme]` d'Alfred (0,2,0),
+   donc le bouton de thème continue de fonctionner dans les deux sens. Ce fichier est
+   importé APRÈS launcher.css, l'ordre source tranche les égalités restantes. */
+
+:root[data-agent="skippy"],
+:root[data-agent="skippy"][data-theme="dark"] {
+  --bg:#080A0D; --surface:#101419; --surface2:#171C23; --raise:#1F252E; --sink:#05070A;
+  --ink:#D7DEE6; --ink-soft:#8E98A5; --ink-faint:#5C6570;
+  --line:#242B34; --line-soft:#191E25;
+
+  /* Un SEUL accent : l'ambre. La canette, et le phosphore d'un terminal. */
+  --accent:#F2A93B; --accent-lo:rgba(242,169,59,.10);
+
+  /* États RÉSERVÉS, jamais des accents. Mesuré au validateur : amber↔vert tombe à
+     ΔE 8,0 en protanopie — au plancher, légal seulement avec encodage secondaire,
+     d'où le libellé écrit sur chaque pastille côté markup. `--warn` = l'ambre :
+     l'attention EST la couleur d'accent, ça évite une quatrième teinte. */
+  --good:#3FBF86; --warn:#F2A93B; --crit:#E8543F;
+
+  /* Pas de teinte par domaine : les tuiles se distinguent par leur libellé.
+     La v1 de la charte en avait, le validateur a montré que son bleu passait sous
+     le plancher de chroma (lisait comme du gris). Un agent de code n'a de toute
+     façon pas de domaines de vie. */
+  --todo:#F2A93B; --shop:#F2A93B; --proj:#F2A93B; --agenda:#F2A93B; --search:#8E98A5;
+  --diy:#F2A93B; --maison:#F2A93B; --cuisine:#F2A93B; --achats:#F2A93B;
+  --cadeaux:#F2A93B; --contacts:#8E98A5; --voyage:#F2A93B;
+
+  /* Aucune ombre d'ambiance : la séparation vient des bordures. On garde une ombre
+     PROFONDE pour les seuls éléments flottants (modales, popovers), sans quoi ils
+     se confondraient avec le fond. */
+  --shadow-sm:none;
+  --shadow:0 8px 24px rgba(0,0,0,.55);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.72);
+
+  /* Le geste typographique : `--serif` porte les titres du lanceur. On y branche
+     le monospace système -> titrage mono, exactement l'inverse d'Alfred. Aucun
+     webfont : la CSP l'interdirait, et la fonte système EST le parti pris. */
+  --serif:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+
+  --r:3px; --r-lg:4px;
+}
+
+/* Variante claire — la PWA garde son bouton de thème, refuser le clair serait un
+   oubli, pas un parti pris. L'ambre descend à #B0731A pour tenir le contraste sur
+   fond pâle : même identité, pas une inversion naïve. */
+:root[data-agent="skippy"][data-theme="light"] {
+  --bg:#E9ECF0; --surface:#FFFFFF; --surface2:#F3F5F8; --raise:#FFFFFF; --sink:#DFE3E9;
+  --ink:#141920; --ink-soft:#5A6370; --ink-faint:#8A929E;
+  --line:#D5DAE1; --line-soft:#E6E9EE;
+  --accent:#B0731A; --accent-lo:rgba(176,115,26,.10);
+  --good:#2E9E63; --warn:#B0731A; --crit:#C4402C;
+  --todo:#B0731A; --shop:#B0731A; --proj:#B0731A; --agenda:#B0731A; --search:#5A6370;
+  --diy:#B0731A; --maison:#B0731A; --cuisine:#B0731A; --achats:#B0731A;
+  --cadeaux:#B0731A; --contacts:#5A6370; --voyage:#B0731A;
+  --shadow-sm:none;
+  --shadow:0 4px 14px rgba(20,28,45,.10);
+  --shadow-lg:0 14px 36px rgba(20,28,45,.16);
+}
+
+/* Le moteur de contenu (engine.css) porte ses propres jetons sur `.alfred-doc` :
+   sans ça, une fiche rendue dans le pod Skippy resterait en livrée de majordome.
+   (Le nom de classe est à renommer en `.agent-doc` — dette notée dans SKIPPY-POD.md.) */
+:root[data-agent="skippy"] .alfred-doc {
+  --bg:#080A0D; --surface:#101419; --surface2:#171C23; --sink:#05070A;
+  --ink:#D7DEE6; --ink-soft:#8E98A5; --ink-faint:#5C6570; --line:#242B34;
+  --accent:#F2A93B; --accent-lo:rgba(242,169,59,.10);
+  --good:#3FBF86; --warn:#F2A93B; --crit:#E8543F; --proj:#F2A93B;
+  --shadow-sm:none;
+  --serif:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --r:3px;
+}
+:root[data-agent="skippy"][data-theme="light"] .alfred-doc {
+  --bg:#E9ECF0; --surface:#FFFFFF; --surface2:#F3F5F8; --sink:#DFE3E9;
+  --ink:#141920; --ink-soft:#5A6370; --ink-faint:#8A929E; --line:#D5DAE1;
+  --accent:#B0731A; --accent-lo:rgba(176,115,26,.10);
+  --good:#2E9E63; --warn:#B0731A; --crit:#C4402C; --proj:#B0731A;
+}
+
+/* Les deux seules retouches structurelles de ce palier : le titrage mono veut un
+   interlettrage serré (une fonte à chasse fixe paraît lâche en grande taille), et
+   les étiquettes de rangée passent en capitales espacées — la signature HUD. */
+:root[data-agent="skippy"] .hi,
+:root[data-agent="skippy"] h1,
+:root[data-agent="skippy"] h2 { letter-spacing:-.02em; }
+:root[data-agent="skippy"] .rowlabel { text-transform:uppercase; letter-spacing:.22em; font-size:9.5px; }

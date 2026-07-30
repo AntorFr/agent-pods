@@ -3,6 +3,10 @@
 // engine.js chargé avant) et marked/DOMPurify (vendors) pour le chat, comme l'ancienne UI.
 // Sert à /app en parallèle de / (ancienne UI) le temps de la migration.
 import './launcher.css';
+// APRÈS launcher.css : surcharges de jetons par agent, inertes tant que
+// `data-agent` n'est pas posé sur <html> (cf. loadApps). L'ordre source tranche
+// les égalités de spécificité avec les règles `:root[data-theme]` d'Alfred.
+import './theme-skippy.css';
 
 const $ = (id) => document.getElementById(id);
 const mqMobile = window.matchMedia('(max-width: 820px)'); // seuil deux-écrans, aligné sur launcher.css
@@ -577,6 +581,10 @@ async function loadApps() {
     if (!r.ok) return;
     const d = await r.json();
     if (Array.isArray(d.apps)) APPS = new Set(d.apps);
+    // Thème par agent : l'attribut arme les surcharges de theme-*.css. Posé AVANT
+    // le premier rendu (cf. boot), sinon on verrait passer la livrée d'Alfred.
+    // `alfred` reste implicite : aucun attribut, aucune surcharge, rien ne bouge.
+    if (d.theme && d.theme !== 'alfred') document.documentElement.dataset.agent = d.theme;
   } catch {}
 }
 

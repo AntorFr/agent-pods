@@ -90,6 +90,11 @@ TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
 APPS = [a.strip() for a in os.environ.get(
     "GW_APPS", "todo,projets,atelier,planif,voyages",
 ).split(",") if a.strip()]
+# Identité visuelle du pod. Le front pose `data-agent=<theme>` sur <html> au boot,
+# ce qui arme les surcharges de jetons de `theme-<theme>.css` (bundlées avec le
+# reste, inertes tant que l'attribut est absent). `alfred` = pas d'attribut, donc
+# la charte historique — un pod existant ne bouge pas d'un pixel.
+THEME = os.environ.get("GW_THEME", "alfred").strip() or "alfred"
 # Image version, baked at build time by the CI (Dockerfile ARG VERSION). Shown in
 # the PWA settings so one can tell which build is live without reading the k8s
 # manifest. "dev" on a local build.
@@ -423,7 +428,7 @@ async def version():
     its tiles and routes on `apps`; and again when the settings panel opens, so
     the version shown always reflects the server actually answering rather than a
     cached bundle."""
-    return {"version": GW_VERSION, "apps": APPS}
+    return {"version": GW_VERSION, "apps": APPS, "theme": THEME}
 
 
 @app.get("/api/todo/state")

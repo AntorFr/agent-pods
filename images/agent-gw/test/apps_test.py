@@ -54,8 +54,24 @@ check("chaîne vide -> aucun module (accueil sans tuile transverse)", m.APPS == 
 m = load("repos")
 check(
     "/api/version publie les modules (le lanceur s'en sert au boot)",
-    asyncio.run(m.version()) == {"version": m.GW_VERSION, "apps": ["repos"]},
+    asyncio.run(m.version()) == {"version": m.GW_VERSION, "apps": ["repos"], "theme": "alfred"},
 )
+
+print("\n--- GW_THEME ---")
+
+os.environ.pop("GW_THEME", None)
+m = importlib.reload(main)
+check("absent -> alfred (le pod existant ne bouge pas)", m.THEME == "alfred")
+
+os.environ["GW_THEME"] = "skippy"
+m = importlib.reload(main)
+check("valeur explicite -> publiée sur /api/version",
+      asyncio.run(m.version())["theme"] == "skippy")
+
+os.environ["GW_THEME"] = "   "
+m = importlib.reload(main)
+check("valeur blanche -> repli sur alfred (jamais d'attribut vide)", m.THEME == "alfred")
+os.environ.pop("GW_THEME", None)
 
 print("\nFAIL" if FAILS else "\nSPIKE OK")
 sys.exit(1 if FAILS else 0)
