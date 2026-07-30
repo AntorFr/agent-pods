@@ -23,6 +23,14 @@ pinnent le chemin de données — s'il cassait, la panne serait **muette** (repl
 tant qu'elle manque, l'attribut existe mais personne ne l'écrit. Puis tag → image →
 déploiement.
 
+> ☠️ **`agent-gw-v0.38.0` EST EMPOISONNÉE — NE JAMAIS LA DÉPLOYER.** Le tag pointe sur
+> `8e93c18`, c'est-à-dire la régression décrite ci-dessous *avant* son correctif : l'image a
+> bien été construite et publiée sur GHCR, et elle sert une PWA morte au premier rendu.
+> Correction : **0.39.0** (`f741766`), qui embarque la restauration ET l'habillage déclaratif.
+> Vérifié à HEAD avant tag — sonde de mangling à 0 sur les 15 noms emportés, témoin compris,
+> et les 5 suites au vert. (La note « jamais partie en image » ci-dessous était fausse : le
+> tag avait été posé avant que la régression soit connue.)
+
 **Régression rattrapée (2026-07-31, non taguée — jamais partie en image)** : l'extraction du
 registre de skins (`8e93c18`) a remplacé un bloc contigu de `main.js` au lieu d'y insérer le
 sien, emportant **toute la couche mémoire du lanceur** (`memInfo`/`memIndex`, `loadTree`,
