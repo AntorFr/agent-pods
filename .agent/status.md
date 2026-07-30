@@ -1,6 +1,40 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-29
+> MàJ : 2026-07-31
+
+**Pod Skippy NÉ + charte propre — DÉPLOYÉ (2026-07-31, agent-gw 0.37.0)** : second corps sur
+les mêmes images, `skippy.berard.me`, 2/2 Running. Trois variables d'env nouvelles, toutes
+par-pod et toutes à défaut **inerte** (Alfred ne bouge pas d'un pixel) :
+`GW_APPS` (modules du lanceur, 0.35.0), `GW_THEME` (0.36.0) et `GW_TRACE` (0.37.0).
+- **`GW_THEME`** : les jetons de couleur/rayon/fonte étaient codés en dur sur `:root`, donc
+  partagés — le pod Skippy s'affichait en livrée de majordome. `theme-skippy.css` est une
+  **surcharge de jetons scopée** par `data-agent` (posé au boot depuis `/api/version`,
+  AVANT le premier rendu), importée après `launcher.css`. Aucune règle existante réécrite.
+  Couvre aussi `.alfred-doc` (sinon les fiches restaient en teal). Le bouton clair/sombre
+  continue de marcher : les variantes `[data-agent][data-theme]` (0,3,0) battent les
+  `:root[data-theme]` d'Alfred (0,2,0).
+- **`GW_TRACE`** : le flux SSE ne portait que `text`/`done`/`error`. Les `ToolUseBlock` du
+  SDK sortent désormais en events `tool` — **nom + cible courte uniquement** (champ parlant
+  de l'input, replié, 78 car. max) : jamais l'input complet, qui porte le fichier entier
+  d'un Write ou une commande Bash potentiellement chargée. Live seulement, `/api/history`
+  ne rejoue pas la trace. Off par défaut.
+- Le **noyau** (canvas, indicateur de travail) remplace les trois points sous le thème
+  skippy ; boucle coupée par `prefers-reduced-motion` **et** par le retrait du nœud.
+15 tests (`test/apps_test.py`), moteur et planif verts, bundle + statics rebuildés.
+Vérifié en prod : image `0.37.0` sur le pod, `GW_THEME=skippy GW_TRACE=1 GW_APPS=repos` dans
+l'env, 12 occurrences de `data-agent` dans le `launcher.css` **servi**, `/api/health` OK,
+307 vers `/auth/login` en externe avec certificat valide.
+⚠️ **0.36.0 est publiée mais n'a jamais vu de cluster** (superseded par 0.37.0) — ne pas la
+déployer. **Reste à valider au doigt sur l'écran : le rendu réel de la charte.**
+
+> 🔎 **Gotcha — un `hostPath` neuf naît `root:root`.** Le pod démarrait 1/2 : la gateway
+> allait très bien (elle n'écrit rien au boot) pendant que le sidecar tunnel bouclait sur
+> `could not lock config file /home/agent/.gitconfig: Permission denied`. `fsGroup` ne
+> corrige pas ce cas (ne s'applique pas aux hostPath). Diagnostic en une commande : comparer
+> `ls -ldn <mountPath>` avec une app qui marche (`1000 1000` vs `0 0`). Fix sans SSH : un pod
+> jetable busybox en `runAsUser: 0` monté sur `/mnt/data`. Détail dans `k8s-config.md` (repo
+> skippy). Les apps existantes ont été chownées à leur naissance — le piège ne se manifeste
+> que sur une app NEUVE.
 
 **Modules configurables `GW_APPS` — livré côté code (agent-gw, non taguée)** : les images
 se disent agent-agnostiques depuis le début, le **lanceur** ne l'était pas — routes et

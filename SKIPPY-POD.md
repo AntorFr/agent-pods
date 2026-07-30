@@ -188,7 +188,12 @@ Maquette de référence (5 écrans, hors repo) : artefact « Skippy — charte g
 - [ ] Vue `repos` : tableau des `.agent/status.md` de la flotte, lus depuis origin —
       maquette validée (activité 30 j en sparkline, 10 derniers builds, « attendent un geste »
       comme seule métrique en ambre, dépôts sans fiche estompés et non comptés en dette)
-- [ ] Thème par agent : feuille de jetons Skippy + renommage `.alfred-doc` → `.agent-doc`
+- [x] **Thème par agent — DÉPLOYÉ** (`GW_THEME`, agent-gw 0.36.0/0.37.0) : surcharge de
+      jetons scopée par `data-agent`, plus la trace d'outils (`GW_TRACE`), le noyau en
+      indicateur de travail et le calque fantôme. Reste du palier 2 non fait, et assumé :
+      **réglettes graduées et équerres d'angle** — pur décor, demandant du markup neuf.
+- [ ] Renommer `.alfred-doc` → `.agent-doc` (le thème le couvre par surcharge, mais un pod
+      Skippy porte toujours le nom du majordome dans son DOM)
 - [ ] Repo « cockpit » = `/workspace` du pod (CLAUDE.md de Skippy + manifeste de la
       flotte). Le modèle mono-repo d'Alfred ne tient pas : Skippy opère sur ~23 repos.
 - [ ] `skippy-helm.yml` dans k8s-home-lab (copie d'`alfred-helm.yml` : fullname, hôte,
