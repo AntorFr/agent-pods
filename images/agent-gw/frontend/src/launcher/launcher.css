@@ -1,7 +1,7 @@
 /* Alfred — launcher shell (nouvelle UI). Design system repris de la maquette validée :
    châssis neutre froid, la couleur vient des apps, titres serif (touche majordome),
    ombres en couches, deux thèmes à parité. Bundlé par esbuild -> launcher.css. Le rendu
-   des fiches réutilise .alfred-doc (engine.css), chargé à part. */
+   des fiches réutilise .agent-doc (engine.css), chargé à part. */
 
 :root{
   --bg:#EEF1F6; --surface:#FFFFFF; --surface2:#F4F6FA; --raise:#FFFFFF; --sink:#E5E9F0;
@@ -206,7 +206,7 @@ h2.sec{ font:600 18px/1.3 var(--serif); margin:24px 0 10px; }
 .atelier-full .done-btn{ margin-top:34px; border:none; background:var(--good); color:#fff; border-radius:16px; padding:20px 48px; font:800 22px var(--sans); } .atelier-full .progress{ width:min(420px,80vw); height:8px; border-radius:5px; background:var(--surface2); overflow:hidden; margin-top:26px; } .atelier-full .progress > div{ height:100%; background:var(--good); } .atelier-full .pcount{ font:12px var(--mono); color:var(--ink-faint); margin-top:10px; }
 
 /* Fiche mémoire rendue par le moteur */
-.view .alfred-doc{ max-width:none; }
+.view .agent-doc{ max-width:none; }
 
 /* Modales (tunnel + pièce) */
 .modal{ position:fixed; inset:0; z-index:50; background:rgba(8,11,18,.55); display:grid; place-items:center; padding:20px; } .modal[hidden]{ display:none; }

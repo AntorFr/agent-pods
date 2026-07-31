@@ -888,10 +888,10 @@ async function openMemory(path) {
     const text = await res.text();
     if (window.Alfred && window.Alfred.render) {
       // Markdoc content engine: frontmatter parsed out, blocks rendered, styled
-      // via engine.css (scoped .alfred-doc). Falls back to marked if unavailable.
+      // via engine.css (scoped .agent-doc). Falls back to marked if unavailable.
       const { html } = window.Alfred.render(text, { baseDir });
       const doc = document.createElement('div');
-      doc.className = 'alfred-doc';
+      doc.className = 'agent-doc';
       doc.innerHTML = html;
       memViewerEl.appendChild(doc);
     } else {

@@ -68,10 +68,11 @@
   --shadow-lg:0 14px 36px rgba(20,28,45,.16);
 }
 
-/* Le moteur de contenu (engine.css) porte ses propres jetons sur `.alfred-doc` :
+/* Le moteur de contenu (engine.css) porte ses propres jetons sur `.agent-doc` :
    sans ça, une fiche rendue dans le pod Skippy resterait en livrée de majordome.
-   (Le nom de classe est à renommer en `.agent-doc` — dette notée dans SKIPPY-POD.md.) */
-:root[data-agent="skippy"] .alfred-doc {
+   (Renommée de `.alfred-doc` le 2026-07-31 : un corps de code ne porte pas le nom
+   du majordome dans son DOM.) */
+:root[data-agent="skippy"] .agent-doc {
   --bg:#080A0D; --surface:#101419; --surface2:#171C23; --sink:#05070A;
   --ink:#D7DEE6; --ink-soft:#8E98A5; --ink-faint:#5C6570; --line:#242B34;
   --accent:#F2A93B; --accent-lo:rgba(242,169,59,.10);
@@ -80,7 +81,7 @@
   --serif:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --r:3px;
 }
-:root[data-agent="skippy"][data-theme="light"] .alfred-doc {
+:root[data-agent="skippy"][data-theme="light"] .agent-doc {
   --bg:#E9ECF0; --surface:#FFFFFF; --surface2:#F3F5F8; --sink:#DFE3E9;
   --ink:#141920; --ink-soft:#5A6370; --ink-faint:#8A929E; --line:#D5DAE1;
   --accent:#B0731A; --accent-lo:rgba(176,115,26,.10);

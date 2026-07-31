@@ -80,6 +80,7 @@ d = fleet.scan(str(root), "repos")
 noms = [c["nom"] for c in d["repos"]]
 check("un dossier sans .git est ignoré", "pas-un-depot" not in noms)
 check("trois dépôts vus", d["total"] == 3)
+check("workspace sans .git -> aucune carte cockpit", not any(c["cockpit"] for c in d["repos"]))
 check("STATUS.md racine toléré (ancienne norme)", d["avec_fiche"] == 2)
 check("ce qui attend un geste remonte en tête", noms[0] in ("avec-fiche", "ancienne-norme"))
 check("le dépôt sans fiche est signalé, pas inventé",
@@ -88,6 +89,21 @@ check("activité toujours présente, même vide", len(d["repos"][0]["activite"])
 
 d0 = fleet.scan(str(root), "flotte-inexistante")
 check("racine absente -> vue vide, pas d'exception", d0["total"] == 0 and d0["repos"] == [])
+
+print("\n--- le cockpit sur son propre tableau ---")
+# Le workspace n'est pas un clone sous repos/ : il échappait au scan, et le
+# tableau de bord ignorait le poste de pilotage.
+(root / ".git").mkdir()
+(root / ".agent").mkdir()
+(root / ".agent" / "status.md").write_text(SIMPLE, encoding="utf-8")
+dc = fleet.scan(str(root), "repos")
+cockpits = [c for c in dc["repos"] if c["cockpit"]]
+check("le cockpit apparaît", len(cockpits) == 1)
+check("il ouvre le tableau", dc["repos"][0]["cockpit"] is True)
+check("sa fiche est lue comme les autres", cockpits[0]["etat"].startswith("une ligne"))
+check("il compte dans les totaux", dc["total"] == 4 and dc["avec_fiche"] == 3)
+check("les autres cartes ne sont pas marquées cockpit",
+      sum(1 for c in dc["repos"] if c["cockpit"]) == 1)
 
 print("\nFAIL" if FAILS else "\nSPIKE OK")
 sys.exit(1 if FAILS else 0)

@@ -183,6 +183,7 @@ export default function createSkippySkin(api) {
       // La couleur ne dit JAMAIS l'information seule : amber↔vert tombe à ΔE 8
       // en protanopie, donc chaque pastille porte son libellé écrit.
       const pills = [
+        c.cockpit ? '<span class="pc amb">cockpit</span>' : '',
         c.etapes.length ? `<span class="pc hot">${c.etapes.length} à traiter</span>` : '',
         c.fiche ? '' : '<span class="pc">sans fiche</span>',
         c.sale ? '<span class="pc amb">clone modifié</span>' : '',

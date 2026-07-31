@@ -1144,7 +1144,7 @@ async function renderFiche(path) {
     const isSpace = spacePages.length > 1;
     if (window.Alfred?.render) {
       const { frontmatter: fm, html } = window.Alfred.render(text, { baseDir });
-      const doc = document.createElement('div'); doc.className = 'alfred-doc'; doc.innerHTML = html;
+      const doc = document.createElement('div'); doc.className = 'agent-doc'; doc.innerHTML = html;
       // Barre de propriétés (maquette) : dérivée du frontmatter, injectée sous le h1.
       const props = [];
       const kv = (k, v) => props.push(`<span class="k">${k}</span>${v}`);

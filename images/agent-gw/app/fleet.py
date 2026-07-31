@@ -102,34 +102,61 @@ def _parse_status(text: str) -> dict:
     return {"maj": maj, "etat": etat, "etapes": steps}
 
 
+def _repo_name(path: Path) -> str:
+    """Le nom du dépôt selon son remote, sinon celui du dossier.
+
+    Le workspace s'appelle « workspace » sur le disque : afficher ça sur le
+    tableau n'apprendrait rien. Son remote, lui, porte le vrai nom."""
+    url = _git(path, "config", "--get", "remote.origin.url")
+    if url:
+        return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") or path.name
+    return path.name
+
+
+def _card(path: Path, cockpit: bool = False) -> dict:
+    card: dict = {"nom": _repo_name(path), "fiche": False, "etat": "", "etapes": [],
+                  "maj": "", "cockpit": cockpit}
+    for rel in STATUS_PATHS:
+        fiche = path / rel
+        if fiche.is_file():
+            try:
+                card.update(_parse_status(fiche.read_text(encoding="utf-8")))
+                card["fiche"] = True
+                card["source"] = rel
+            except OSError:
+                pass
+            break
+    card["activite"] = _activity(path)
+    card["dernier"] = _git(path, "log", "-1", "--format=%cI")
+    card["branche"] = _git(path, "rev-parse", "--abbrev-ref", "HEAD")
+    # « Sale » = des modifications non committées traînent dans le clone.
+    card["sale"] = bool(_git(path, "status", "--porcelain"))
+    return card
+
+
 def scan(workspace: str, fleet_dir: str) -> dict:
     """Un passage sur la flotte. Trie : ce qui attend un geste d'abord."""
-    root = (Path(workspace) / fleet_dir).resolve()
+    ws = Path(workspace).resolve()
+    root = (ws / fleet_dir).resolve()
     repos: list[dict] = []
+
+    # Le cockpit lui-même : c'est le workspace, pas un clone sous repos/, donc il
+    # échappait au scan — un tableau de bord qui ignore le poste de pilotage.
+    # Marqué `cockpit` pour que le front puisse le distinguer ; sinon une carte
+    # comme les autres, avec la même fiche et la même activité.
+    if (ws / ".git").exists():
+        repos.append(_card(ws, cockpit=True))
+
     if root.is_dir():
         for path in sorted(root.iterdir()):
-            if not (path / ".git").exists():
-                continue
-            card: dict = {"nom": path.name, "fiche": False, "etat": "", "etapes": [], "maj": ""}
-            for rel in STATUS_PATHS:
-                fiche = path / rel
-                if fiche.is_file():
-                    try:
-                        card.update(_parse_status(fiche.read_text(encoding="utf-8")))
-                        card["fiche"] = True
-                        card["source"] = rel
-                    except OSError:
-                        pass
-                    break
-            card["activite"] = _activity(path)
-            card["dernier"] = _git(path, "log", "-1", "--format=%cI")
-            card["branche"] = _git(path, "rev-parse", "--abbrev-ref", "HEAD")
-            # « Sale » = des modifications non committées traînent dans le clone.
-            card["sale"] = bool(_git(path, "status", "--porcelain"))
-            repos.append(card)
+            if (path / ".git").exists():
+                repos.append(_card(path))
 
     # Ce qui attend un geste remonte : c'est la seule question que pose ce tableau.
-    repos.sort(key=lambda c: (not c["etapes"], not c["fiche"], c["nom"].lower()))
+    # Le cockpit d'abord — c'est le poste de pilotage, il ouvre le tableau. Puis
+    # ce qui attend un geste : la seule question que pose vraiment cette page.
+    repos.sort(key=lambda c: (not c["cockpit"], not c["etapes"], not c["fiche"],
+                              c["nom"].lower()))
     return {
         "repos": repos,
         "total": len(repos),
