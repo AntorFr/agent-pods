@@ -2,6 +2,49 @@
 
 > MàJ : 2026-07-31
 
+**`GW_FEATURES` — les capacités de la coque, désactivables par corps — DÉPLOYÉ (2026-07-31,
+agent-gw 0.46.0)** : `GW_APPS` disait où l'on peut **aller** (tuiles et routes) ; rien ne disait
+ce que le chat sait **faire**. Un lecteur de code-barres chez un agent de code n'a aucun sens, et
+la seule façon de l'éteindre aurait été un `if agent == skippy` dans la coque — exactement ce
+qu'on venait de retirer du CSS. Même patron que les modules et les thèmes : **la coque interroge
+un registre publié par `/api/version`, jamais le nom du corps**. Capacités : `scan`, `attach`,
+`eph`, `tunnel`, `sujets`. Défaut = jeu historique, Alfred ne bouge pas.
+
+> ⚠️ **On RETIRE du DOM, on ne masque pas.** Un nœud absent ne reçoit aucun événement, ne prend
+> pas le focus clavier, et **ne peut pas déclencher le chargement paresseux d'un bundle** — le
+> décodeur de code-barres pèse 448 Ko. Un `display:none` laisserait les trois. Appliqué **avant
+> le premier rendu** (le boot attendait déjà `/api/version`), sinon on verrait apparaître puis
+> disparaître des boutons que ce corps n'expose pas.
+
+> ⚠️ **Une capacité se coupe À LA SOURCE, pas bouton par bouton.** Retirer 📎 sans toucher au
+> coller ni au glisser-déposer laisserait **deux portes d'entrée** ouvertes sur une capacité
+> censée être éteinte. D'où le point de passage unique `takesFiles`. La garde de navigation,
+> elle, reste **inconditionnelle** : même sans pièces jointes, un fichier lâché par erreur ne
+> doit jamais faire quitter la session.
+
+> 🛡 **Le bouclier n'est PAS dans la liste, et ce n'est pas un oubli.** C'est une garde, pas un
+> composant : la seule façon pour Monsieur de consentir à une action sensible. Une garde qu'on
+> éteint par variable d'environnement est un piège — le jour où quelqu'un la retire « parce
+> qu'elle gêne », il ne reste plus rien entre un outil d'écriture et un contenu non fiable. Un
+> test verrouille son absence de toute liste.
+
+8 tests neufs (`test/apps_test.py`), dont **deux qui verrouillent les deux listes l'une sur
+l'autre** — le défaut Python et le repli JS. Si elles divergeaient, la panne serait **muette** :
+un pod dont l'appel `/api/version` rate exposerait un jeu de contrôles différent de sa config.
+Éprouvés à l'envers (désynchronisation introduite → FAIL).
+**Déployé** : tag `agent-gw-v0.46.0` → image multi-arch vérifiée au manifeste registry → les
+**deux** manifestes bumpés → pods `alfred` 3/3 et `skippy` 2/2 Running, 0 redémarrage.
+Vérifié **dans les pods** (`/api/version` est gardé, même en localhost — le middleware passe
+avant le routage) : skippy annonce `['attach','eph','tunnel','sujets']`, alfred le jeu complet.
+
+> 🔎 **Piège de vérification — ne pas grepper un nom de FONCTION dans un bundle minifié.**
+> `grep applyFeatures` sur le `launcher.js` **servi** rend **0** alors que le code est bien là :
+> esbuild renomme tout ce qui n'est pas une chaîne littérale. (Même trap que pour les noms de
+> classes, déjà consigné plus bas.) Le contrôle qui, lui, ne ment pas : **comparer l'empreinte**
+> du bundle servi à celle du `dist/` construit à HEAD —
+> `curl -s https://<hôte>/static/launcher.js | shasum -a 256`. Fait : identique au bit près sur
+> les deux hôtes.
+
 **Contrat de thème + rail de chat rethémable — DÉPLOYÉ (2026-07-31, agent-gw 0.45.0)** : le
 skin Skippy était une **surcharge de jetons**, mais la coque avait 83 rayons et 18 couleurs
 **écrits en dur** — le rail de chat, la zone la plus ancienne, n'était donc pas rethémable du
