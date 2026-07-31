@@ -7,7 +7,10 @@
 
    AJOUTER UN THÈME, en trois gestes :
      1. `skins/<id>.js`  → une fabrique `(api) => skin` (contrat ci-dessous) ;
-     2. `skins/<id>.css` → ses jetons, scopés `:root[data-agent="<id>"]` ;
+     2. `skins/<id>.css` → ses jetons, scopés `:root[data-agent="<id>"]` — et RIEN
+        d'autre. Le contrat CSS complet (la liste des jetons, et pourquoi une
+        feuille de thème n'a pas le droit d'écrire une règle) est en tête de
+        `launcher.css` ; `test/theme-lint.mjs` le fait respecter au build ;
      3. une ligne ici (`FACTORIES`) et une dans `skins/themes.css`.
    Puis `GW_THEME=<id>` sur le pod. Rien d'autre à toucher.
 
