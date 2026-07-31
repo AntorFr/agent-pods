@@ -5,7 +5,7 @@
   "description": "Alfred PWA frontend — Markdoc content engine + design system, bundled with esbuild.",
   "scripts": {
     "build": "esbuild src/main.js --bundle --format=iife --global-name=Alfred --minify --outfile=dist/engine.js && esbuild src/launcher/main.js --bundle --format=iife --minify --outfile=dist/launcher.js && esbuild src/scan/main.js --bundle --format=iife --minify --outfile=dist/scan.js",
-    "test": "node test/render-test.mjs && node test/chart-test.mjs && node test/scan-test.mjs"
+    "test": "node test/render-test.mjs && node test/chart-test.mjs && node test/scan-test.mjs && node test/theme-lint.mjs"
   },
   "dependencies": {
     "@markdoc/markdoc": "^0.5.2",
