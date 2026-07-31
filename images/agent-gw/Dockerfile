@@ -45,6 +45,19 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
+# kubectl — diagnostic cluster pour les corps qui en ont le droit. Le binaire ne
+# donne AUCUN accès par lui-même : tout dépend du ServiceAccount monté et de son
+# RBAC (lecture seule, secrets exclus, pour le pod skippy). Un pod sans SA dédié
+# ne peut rien en faire. TARGETARCH vient de buildx : l'image est multi-arch, et
+# figer amd64 ici donnerait un binaire mort sur arm64.
+ARG TARGETARCH
+RUN set -eux; \
+    ver="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"; \
+    curl -fsSLo /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${ver}/bin/linux/${TARGETARCH}/kubectl"; \
+    chmod 0755 /usr/local/bin/kubectl; \
+    kubectl version --client=true --output=yaml >/dev/null
+
 WORKDIR /app
 
 COPY requirements.txt ./
