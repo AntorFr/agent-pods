@@ -138,8 +138,22 @@ MCP_TOKEN = os.environ.get("GW_MCP_TOKEN", "")
 # FastMCP validates the Host header (DNS-rebinding protection). Behind an
 # ingress the Host is the public name, which must be allow-listed or every
 # call 421s. Comma-separated; localhost is always added for in-pod checks.
+# Identité du corps pour la surface MCP : nom du serveur, nom de l'outil
+# (`ask_<agent>`) et hôte par défaut. Un pod qui exposerait `ask_alfred` en
+# décrivant un majordome alors qu'il tient des dépôts serait pire qu'inutile —
+# l'agent appelant choisit son outil sur son NOM et sa DESCRIPTION.
+AGENT = os.environ.get("GW_AGENT", "alfred").strip() or "alfred"
+# Ce que l'outil annonce aux autres agents. Propre au corps, donc dans les values
+# du déploiement plutôt qu'en dur ici. Le défaut décrit Alfred : c'est le socle.
+MCP_DESCRIPTION = os.environ.get("GW_MCP_DESCRIPTION", "").strip() or (
+    "Hand a task or question to Alfred, the user's personal butler agent. "
+    "Alfred manages the user's memory (todos, projects, notes, gift ideas) "
+    "and calendar, and files everything with his own discipline (routing, "
+    "index updates, git commit). Use it to add a todo, update a project, "
+    "record a note, or ask what the user noted about something."
+)
 MCP_ALLOWED_HOSTS = [
-    h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", "alfred.berard.me").split(",") if h.strip()
+    h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", f"{AGENT}.berard.me").split(",") if h.strip()
 ]
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -148,7 +162,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 # HTTP: each tool call is independent; the "task" is carried by the SDK
 # session id the caller passes back. Mounted at /mcp, token-guarded.
 mcp_server = FastMCP(
-    "alfred",
+    AGENT,
     stateless_http=True,
     json_response=True,
     streamable_http_path="/",
@@ -706,17 +720,17 @@ async def _run_alfred(
 
 
 @mcp_server.tool(
+    # Nom ET description viennent du corps : `ask_alfred` chez le majordome,
+    # `ask_skippy` chez l'agent de code. Le nom Python reste générique — c'est
+    # celui exposé au protocole qui compte pour l'agent appelant.
+    name=f"ask_{AGENT}",
     description=(
-        "Hand a task or question to Alfred, the user's personal butler agent. "
-        "Alfred manages the user's memory (todos, projects, notes, gift ideas) "
-        "and calendar, and files everything with his own discipline (routing, "
-        "index updates, git commit). Use it to add a todo, update a project, "
-        "record a note, or ask what the user noted about something. "
-        "Each call is a fresh task; to continue a clarification Alfred asked "
-        "for, pass back the task_id it returned. Set 'agent' to your own name."
-    )
+        MCP_DESCRIPTION + " Each call is a fresh task; to continue a "
+        "clarification it asked for, pass back the task_id it returned. "
+        "Set 'agent' to your own name."
+    ),
 )
-async def ask_alfred(request: str, task_id: str | None = None, agent: str = "agent") -> dict:
+async def ask_agent(request: str, task_id: str | None = None, agent: str = "agent") -> dict:
     request = (request or "").strip()
     if not request:
         return {"error": "empty request"}

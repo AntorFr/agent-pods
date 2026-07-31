@@ -116,6 +116,41 @@ for svg in (m.STATIC_DIR / "icon.svg", m.STATIC_DIR / "skins" / "skippy" / "icon
         ok = False
     check("SVG bien formé : %s" % svg.name if "skins" not in str(svg) else "SVG bien formé : skippy", ok)
 
+print("\n--- GW_AGENT : l'identité de la surface MCP ---")
+
+
+def tools_of(mod):
+    return [t.name for t in asyncio.run(mod.mcp_server.list_tools())]
+
+
+for var in ("GW_AGENT", "GW_MCP_DESCRIPTION", "GW_MCP_ALLOWED_HOSTS"):
+    os.environ.pop(var, None)
+m = importlib.reload(main)
+check("défaut -> alfred (le majordome ne bouge pas)", m.AGENT == "alfred")
+check("outil ask_alfred", tools_of(m) == ["ask_alfred"])
+check("hôte MCP dérivé de l'agent", m.MCP_ALLOWED_HOSTS == ["alfred.berard.me"])
+
+os.environ["GW_AGENT"] = "skippy"
+os.environ["GW_MCP_DESCRIPTION"] = "Confie une tâche technique à Skippy."
+m = importlib.reload(main)
+check("GW_AGENT=skippy -> outil ask_skippy", tools_of(m) == ["ask_skippy"])
+check("serveur MCP renommé aussi", m.mcp_server.name == "skippy")
+# Sans dérivation, l'hôte serait resté alfred.berard.me et FastMCP aurait répondu
+# 421 sur skippy.berard.me : la protection anti-rebinding DNS valide le Host.
+check("hôte suit l'agent (sinon 421 sur son propre domaine)",
+      m.MCP_ALLOWED_HOSTS == ["skippy.berard.me"])
+check("description du corps servie aux autres agents",
+      asyncio.run(m.mcp_server.list_tools())[0].description.startswith("Confie une tâche"))
+
+os.environ["GW_MCP_ALLOWED_HOSTS"] = "a.example,b.example"
+m = importlib.reload(main)
+check("surcharge explicite des hôtes respectée",
+      m.MCP_ALLOWED_HOSTS == ["a.example", "b.example"])
+
+for var in ("GW_AGENT", "GW_MCP_DESCRIPTION", "GW_MCP_ALLOWED_HOSTS"):
+    os.environ.pop(var, None)
+m = importlib.reload(main)
+
 print("\n--- GW_TRACE ---")
 
 os.environ.pop("GW_TRACE", None)
