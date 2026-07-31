@@ -2,6 +2,59 @@
 
 > MàJ : 2026-07-31
 
+**Bloc `{% graphique %}` — livré côté code (agent-gw, non taguée)** : Alfred pouvait écrire des
+chiffres, pas les montrer. Nouveau bloc au catalogue Markdoc (`frontend/src/chart.js`), dessiné
+**au transform**, sans bibliothèque ni canvas ni montage JS — l'invariant « rien ne s'exécute
+depuis une fiche » interdisait Chart.js/mermaid, qui auraient exigé un étage de montage.
+**+4,4 ko** sur `engine.js` (Chart.js ≈ 200 ko, mermaid > 1 Mo). Corps du bloc = les données,
+une paire `libellé: valeur` par ligne (paragraphe, liste à tirets ou bloc encadré → même
+résultat). Quatre attributs fermés : `type` (`barres`|`ligne`), `titre`, `unite`, `couleur`
+(les 12 teintes des domaines). Refus explicites à l'écran plutôt qu'un dessin faux : ligne
+malformée, négatif en `barres`, courbe à un point. 33 tests (`test/chart-test.mjs`, câblé dans
+`npm test`), contrat d'écriture dans `frontend/AUTHORING.md`. **À faire : la moitié cerveau**
+(repo Alfred, skill `redaction` + `amelioration`) — sans elle Alfred ne saura pas que le bloc
+existe. Puis tag → image → déploiement.
+
+> 🔎 **Gotcha — une seule série, et ce n'est pas de la paresse.** Passées au validateur de
+> palette, les 12 teintes **échouent** comme palette catégorielle dans les deux thèmes
+> (clair : `shop`↔`achats` ΔE 7,3 *en vision normale* ; sombre : `agenda`↔`proj` ΔE 1,2 en
+> protanopie). Ce sont des jetons d'**identité de domaine**, jamais montrés côte à côte. Deux
+> séries y seraient indistinguables → une série par graphique, deux mesures = deux blocs.
+> Ajouter des séries impose d'abord de choisir une vraie rampe catégorielle validée.
+
+> 🔎 **Gotcha — le texte d'un SVG rétrécit avec son conteneur, et ça ne se voit pas au bureau.**
+> Un `viewBox` de 660 rend ses libellés à 12,2 px dans une colonne de 820 px… et à **7,4 px sur
+> un téléphone de 390** (barres à 8,3 px). Mesuré, jamais visible sur une maquette desktop.
+> D'où deux techniques dans un seul bloc : **`barres` en HTML/CSS** (texte réel à taille
+> constante, qui passe à la ligne au lieu de rétrécir — plus simple ET meilleur), **`ligne` en
+> SVG** avec compensation par **requête de conteneur** (`container-type:inline-size` sur la
+> figure). ⚠️ Les blocs `@container` doivent être écrits **après** les règles de base : une
+> requête de conteneur n'ajoute **aucune spécificité**, donc une règle aussi spécifique écrite
+> plus bas gagne — symptôme : la compensation semble ignorée alors que le CSS est bien là.
+> ⚠️ Corollaire : toute réserve de marge calculée pour la police *nominale* rogne le texte une
+> fois compensé (l'étiquette de fin sortait en `79,8 k`) → marges dimensionnées sur la **plus
+> grande** taille possible, et vérifiées par `getBBox()` sur 16 combinaisons largeur × jeu de
+> données, pas au jugé.
+
+> 🔎 **Gotcha — `--window-size` ne fait PAS un viewport mobile.** Chrome headless plafonne à
+> ~500 px de large sur macOS : `innerWidth` vaut 500 même avec `--window-size=390`, et la
+> capture est simplement **rognée**. Une mesure « pas de débordement » prise ainsi ne prouve
+> rien, et une capture peut faire croire à un bug de mise en page inexistant. Pour éprouver une
+> largeur téléphone : un conteneur de largeur **imposée en CSS** dans une fenêtre plus large.
+
+> 🔎 **Gotcha — `renderPage` filtre les erreurs d'attribut.** Markdoc classe
+> `attribute-value-invalid` au niveau `error`, et `render.js` ne remonte que les `critical` :
+> une valeur hors vocabulaire (`couleur="fuchsia"`) est **détectée puis jetée en silence**. La
+> promesse « un attribut hors catalogue est rejeté » d'AUTHORING.md vaut pour les *noms*, pas
+> pour les *valeurs* — ce qui protège vraiment est la revérification en JS avant émission.
+> Vaut pour tous les blocs, pas seulement celui-ci.
+
+> 🔎 **Gotcha — DOMPurify ne filtre pas le CSS.** Mesuré : `style="background:url(javascript:…)"`
+> et `expression(…)` traversent la sanitisation intacts (inertes dans un navigateur moderne,
+> mais **non filtrés**). Tout nombre qui part dans un attribut `style` n'est donc garanti que
+> par son **générateur** — ici un flottant parsé passé à `toFixed`, jamais une chaîne d'origine
+> mémoire. Ne jamais interpoler un libellé dans un `style`.
+
 **Identité par skin, jusqu'au favicon — DÉPLOYÉ (2026-07-31, agent-gw 0.40.1)** : le nœud
 papillon du majordome s'affichait dans l'onglet du pod de code, et deux PWA installées sur le
 même téléphone portaient le même nom. Favicon et manifeste sont réclamés par le navigateur

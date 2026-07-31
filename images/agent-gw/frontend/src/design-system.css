@@ -100,16 +100,35 @@
 .agent-doc .chart .bar i{ display:block; height:100%; min-width:3px; background:var(--serie); border-radius:0 4px 4px 0; }
 .agent-doc .chart .rval{ font:600 12.5px var(--sans); color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap; }
 
-/* A line plot needs real geometry, so it stays SVG — held inside a legible scale
-   band and allowed to scroll sideways on a narrow screen, like tables above. */
-.agent-doc .chart .plotwrap{ overflow-x:auto; }
-.agent-doc .chart-svg{ display:block; width:100%; min-width:560px; max-width:660px; height:auto; }
+/* A line plot needs real geometry, so it stays SVG — and an SVG scales its own text
+   with the viewBox, so a 660-unit plot renders its ticks at 5.9px once the column
+   drops to a phone's 354px. Making it scroll instead would keep the type legible but
+   hide half the curve, i.e. hide the shape, which is the whole point of a line.
+   So the plot always fits, and the type is compensated against the chart's OWN width
+   (a container query, not a viewport one — the same page has a wide and a narrow
+   column). Geometry properties are set in CSS for the same reason. */
+.agent-doc .chart-ligne{ container-type:inline-size; }
+.agent-doc .chart-svg{ display:block; width:100%; max-width:660px; height:auto; }
 .agent-doc .chart-svg .val{ fill:var(--ink); font:600 12.5px var(--sans); font-variant-numeric:tabular-nums; }
 .agent-doc .chart-svg .tick{ fill:var(--ink-faint); font:11px var(--sans); font-variant-numeric:tabular-nums; }
 .agent-doc .chart-svg .grid{ stroke:var(--line); stroke-width:1; }
 .agent-doc .chart-svg .line{ fill:none; stroke:var(--serie); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; }
 /* 2px surface ring so a dot stays legible where it crosses the line. */
 .agent-doc .chart-svg .dot{ fill:var(--serie); stroke:var(--surface); stroke-width:2; }
+/* ⚠️ These MUST stay after the base rules above: a container query adds no
+   specificity, so an equally-specific plain rule written later would win. */
+@container (max-width:620px){
+  .agent-doc .chart-svg .tick{ font-size:15px; }
+  .agent-doc .chart-svg .val{ font-size:17px; }
+  .agent-doc .chart-svg .line{ stroke-width:2.7; }
+  .agent-doc .chart-svg .dot{ r:5.5; stroke-width:2.7; }
+}
+@container (max-width:430px){
+  .agent-doc .chart-svg .tick{ font-size:19px; }
+  .agent-doc .chart-svg .val{ font-size:21px; }
+  .agent-doc .chart-svg .line{ stroke-width:3.4; }
+  .agent-doc .chart-svg .dot{ r:7; stroke-width:3.4; }
+}
 .agent-doc .chart-err{ border:1px solid color-mix(in srgb,var(--crit) 34%,transparent); background:color-mix(in srgb,var(--crit) 10%,transparent); border-radius:var(--r); padding:11px 14px; margin:1.1em 0; font:12.5px var(--mono); color:var(--ink-soft); }
 
 /* Coded module embedded by {% outil %} — front mounts the real component here;

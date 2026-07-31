@@ -112,8 +112,46 @@ Texte important, mis en évidence.
 
 {% piece-jointe fichier="assets/plan.pdf" /%}   {# carte de téléchargement #}
 
+{% graphique type="barres" titre="Coût par place" unite="€" couleur="vert" %}
+IVAR: 17
+PAX gainé: 26
+{% /graphique %}
+
 Lien vers une autre fiche : [[voiles-lego-impression]] ou [[voiles-lego-impression|texte affiché]]
 ```
+
+### Graphique — deux formes, une seule série
+
+Le corps porte les données : **une paire `libellé: valeur` par ligne** (une liste à tirets ou
+un bloc de code encadré marchent aussi, c'est le même résultat). Les nombres s'écrivent à la
+française — `1 234,5` — ou à l'anglaise, les deux sont lus.
+
+| Attribut | Valeurs | À quoi ça sert |
+|---|---|---|
+| `type` | `barres` (défaut) · `ligne` | **`barres`** pour *comparer* des choses ; **`ligne`** pour suivre une *évolution* dans le temps |
+| `titre` | texte libre | S'affiche au-dessus. Une série n'a pas de légende : c'est le titre qui dit ce qu'on regarde |
+| `unite` | `€`, `kg`, `cm`, `pas`… | Collée à chaque valeur avec la bonne espace |
+| `couleur` | une des 12 teintes (`rouge` `orange` `ambre` `vert` `emeraude` `turquoise` `bleu` `indigo` `violet` `rose` `gris` `ardoise`) | Décorative — sans elle, la teinte d'accent. **Jamais un code hexa** |
+
+**Une seule série par graphique — ce n'est pas une limitation à contourner.** Les 12 teintes
+sont des jetons d'**identité** (celles des domaines), pas une palette de séries : mesurées au
+validateur, deux d'entre elles côte à côte sont indistinguables, y compris en vision normale.
+Deux mesures à montrer ⇒ **deux graphiques**. Si tu crois avoir besoin de séries multiples,
+c'est une demande de bloc à Skippy, pas un attribut à inventer.
+
+**Ce que le bloc refuse**, en le disant à l'écran plutôt qu'en dessinant faux :
+- une ligne sans `:` ou dont la valeur n'est pas un nombre ;
+- une **valeur négative en `barres`** (une barre ne descend pas sous zéro → passe en `ligne`) ;
+- une **courbe à un seul point**.
+
+**Ce qu'il faut savoir avant d'en poser un :**
+- **Une seule valeur n'est pas un graphique** — une barre isolée, c'est une phrase. Écris-la.
+- En `ligne`, les points sont **espacés régulièrement**, quel que soit l'écart réel entre les
+  dates. Pour des relevés irréguliers, la forme de la courbe ment un peu — dis-le, ou espace
+  tes points.
+- Un graphique **duplique** des chiffres qui vivent peut-être ailleurs. Il est donc un
+  **jugement consigné et daté** — la série que tu as choisi de montrer — et il porte sa source
+  en wikilink. Ce n'est pas un miroir vivant d'une donnée qui bouge.
 
 ### Images — deux façons d'en mettre une, un seul comportement voulu
 
@@ -239,3 +277,5 @@ trajet-résa). Le contrat détaillé du JSON est dans `images/agent-gw/VOYAGES.m
   Skippy) — ne le contourne pas en HTML.
 - Pas de duplication : une tâche/idée vit une fois dans sa base ; on la **référence** (`refs`,
   `projet`), on ne la recopie pas.
+- Pas de graphique pour une seule valeur, ni de deuxième série glissée dans un `{% graphique %}` :
+  deux mesures = deux blocs.

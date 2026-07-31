@@ -3,6 +3,7 @@
 // these; he never writes HTML. Adding a block = adding an entry here (code) +
 // a line in Alfred's skill. Unknown tags/attributes are rejected by Markdoc.
 import Markdoc from '@markdoc/markdoc';
+import { chart, TINTS } from './chart.js';
 
 const { Tag } = Markdoc;
 
@@ -106,6 +107,19 @@ export const config = {
           new Tag('div', {}, [new Tag('div', { class: 'fn' }, [name])]),
         ]);
       },
+    },
+
+    // A chart, drawn as inline SVG at transform time (see chart.js for why no
+    // library, and why a single series). The body carries the data, one
+    // "libellé: valeur" per line.
+    graphique: {
+      attributes: {
+        type: { type: String, default: 'barres', matches: ['barres', 'ligne'] },
+        titre: { type: String },
+        unite: { type: String },
+        couleur: { type: String, matches: TINTS },
+      },
+      transform: chart,
     },
 
     // Embeds a coded app-module by reference; the front swaps in the real
