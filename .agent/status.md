@@ -45,7 +45,7 @@ alignés sur les 8 crans (±1-2 px : `.cmd` et le textarea 15→13, `.dz-inner` 
 `position:relative` pour tous (support du calque fantôme — sans offset, ne déplace rien).
 **Reste à valider au doigt sur l'écran**, puis tag → image → déploiement.
 
-**Lecteur de code-barres dans la PWA — livré côté code (agent-gw, non taguée)** : un
+**Lecteur de code-barres dans la PWA — DÉPLOYÉ (2026-07-31, agent-gw 0.44.0)** : un
 bouton `▥` dans le moretray du composer, un overlay caméra plein écran, un panier de codes
 qui s'accumule. **Le scanner est BÊTE, et c'est le design** : il décode, il dépose dans le
 composer, il se tait. Il n'envoie rien et ne décide rien — c'est le contexte de la
@@ -89,8 +89,16 @@ contrôle EAN, panier, message déposé —, **3 suites JS au vert**. Les suites
 été relancées (ni `fastapi` ni `claude_agent_sdk` sur le Mac) : **aucun Python touché**, et
 `/static/scan.js` tombe sous le préfixe `/static/` déjà public, donc `_PUBLIC_PATHS` ne bouge
 pas (relu, pas supposé — cf. le gotcha 0.40.1 juste en dessous).
-**À faire : tag → image → déploiement**, puis l'essai réel sur l'iPhone en **PWA installée**
-(`getUserMedia` en mode `standalone`), qui ne se vérifie pas depuis un Mac.
+**Déployé** (tag `agent-gw-v0.44.0` → image → bump `alfred-helm.yml` → rollout ArgoCD).
+Vérifié **depuis l'extérieur et déconnecté**, comme l'exige le gotcha 0.40.1 ci-dessous :
+`/static/scan.js` → **200 `text/javascript`, 459 077 octets**, et `/` toujours **307** — la
+garde n'a pas bougé. Côté serveur, l'addon `food` répond de bout en bout par le vrai trajet
+(pod → `rosetta-bridge` → hub → OFF).
+
+> ⚠️ **Reste le seul essai qui n'a PAS été fait : le scan lui-même, sur l'iPhone, en PWA
+> installée.** Ni le décodeur de repli, ni `getUserMedia` en mode `standalone`, ni
+> `playsinline` ne se vérifient depuis un Mac — tout ce qui précède prouve que les octets
+> sont servis, pas qu'une caméra s'ouvre. À faire au doigt sur l'écran.
 
 **Bloc `{% graphique %}` — livré côté code (agent-gw, non taguée)** : Alfred pouvait écrire des
 chiffres, pas les montrer. Nouveau bloc au catalogue Markdoc (`frontend/src/chart.js`), dessiné
