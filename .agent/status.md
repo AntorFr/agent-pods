@@ -2,7 +2,7 @@
 
 > MàJ : 2026-07-31
 
-**Contrat de thème + rail de chat rethémable — livré côté code (agent-gw, non taguée)** : le
+**Contrat de thème + rail de chat rethémable — DÉPLOYÉ (2026-07-31, agent-gw 0.45.0)** : le
 skin Skippy était une **surcharge de jetons**, mais la coque avait 83 rayons et 18 couleurs
 **écrits en dur** — le rail de chat, la zone la plus ancienne, n'était donc pas rethémable du
 tout. Symptômes visibles : bulles à 15 px au milieu d'une trace à 3 px, composeur en
@@ -43,7 +43,28 @@ composeur (au repos seul) et sur l'invite de la passerelle, qui n'existait pas.
 alignés sur les 8 crans (±1-2 px : `.cmd` et le textarea 15→13, `.dz-inner` 16→17, plaques
 12→11, barres 3/5→4), dégradé des plaques unifié à 62 % (était 55/60/62), et `.hi` devient
 `position:relative` pour tous (support du calque fantôme — sans offset, ne déplace rien).
-**Reste à valider au doigt sur l'écran**, puis tag → image → déploiement.
+
+**Déploiement (les DEUX corps, c'est le point à ne pas rater)** : tag `agent-gw-v0.45.0` →
+image GHCR vérifiée au manifeste registry (`linux/amd64` + `linux/arm64`) → `alfred-helm.yml`
+0.44.0 → 0.45.0 **et** `skippy-helm.yml` **0.42.0 → 0.45.0** → refresh ArgoCD forcé → pods
+`alfred` 3/3 et `skippy` 2/2 Running, 0 redémarrage. Skippy avait **deux versions de retard**
+(il ratait `{% graphique %}` et le lecteur de code-barres) : un bump de theme se fait sur tout
+ce qui tourne sur l'image, pas seulement sur le corps qu'on regarde. Diff `0.42.0..0.45.0`
+relu avant bump : **aucune variable d'env nouvelle**.
+Vérifié **depuis l'extérieur et déconnecté** : sur les deux hôtes, `/` → **307** (la garde SSO
+n'a pas bougé) et `/static/launcher.css` → **54 206 o** portant `--caret-display`, `--r-bub`,
+`--code-inline-bg`, `--ghosttag`, `--plate-fg-tint`, `--bub-al-rule` et la règle `.md pre{`.
+Côté Skippy : `GW_THEME=skippy` sur le pod et **6 occurrences de `[data-agent=skippy]`** dans
+la feuille servie, avec `--r-round:2px`, `--f-title:var(--f-mono)`, `--ghosttag:"SKIPPY"`.
+
+> 🔎 **Piège de vérification — la minification retire les guillemets des sélecteurs
+> d'attribut.** Un `grep 'data-agent="skippy"'` sur le CSS **servi** rend **0** alors que le
+> thème est bien là : esbuild écrit `[data-agent=skippy]`. Grepper l'attribut nu, jamais la
+> forme source. (Faux négatif vécu à la vérification de la 0.45.0.)
+
+⚠️ **Reste le seul essai qui n'a PAS été fait : le rendu, à l'œil, dans un navigateur.** Tout
+ce qui précède prouve que les bons octets sont servis, pas qu'ils sont beaux. Les bulles de
+Skippy, ses blocs de code, son caret et son bouton d'envoi carré demandent un coup d'œil.
 
 **Lecteur de code-barres dans la PWA — DÉPLOYÉ (2026-07-31, agent-gw 0.44.0)** : un
 bouton `▥` dans le moretray du composer, un overlay caméra plein écran, un panier de codes
