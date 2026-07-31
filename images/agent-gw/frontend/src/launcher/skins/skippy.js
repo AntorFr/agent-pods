@@ -118,6 +118,7 @@ export default function createSkippySkin(api) {
           <div class="hailwrap">
             <h1 class="hail">${salut}, <em>petit singe</em>.</h1>
             <p class="hailsub" id="bridge-sub">${esc(date)}</p>
+            <button class="promptbox" id="bridge-prompt" type="button"><span class="caret" aria-hidden="true"></span><span>Ordonner quelque chose au Magnifique…</span><kbd>⌘K</kbd></button>
           </div>
         </div>
         <div class="instruments" id="bridge-gauges"></div>
@@ -127,6 +128,9 @@ export default function createSkippySkin(api) {
     </div>`;
 
     page.querySelector('.corewrap').appendChild(core(150, 1));
+    // L'invite ne fait que rendre la main au composeur : le chat reste la surface,
+    // la passerelle n'est qu'un point d'entrée.
+    $('bridge-prompt').addEventListener('click', () => $('input')?.focus());
 
     const tiles = [];
     if (appOn('repos')) tiles.push(tile('REPOS', '#/repos', 'La flotte', 'Statut de chaque dépôt', 'tile-repos'));

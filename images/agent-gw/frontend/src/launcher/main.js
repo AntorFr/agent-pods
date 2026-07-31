@@ -290,11 +290,17 @@ $('composer').addEventListener('submit', (e) => {
   const atts = pendingAtts;
   if (!text && !atts.length) return;
   input.value = ''; input.style.height = 'auto';
+  $('composer').classList.remove('filled');   // le champ se vide sans event `input`
   pendingAtts = []; renderAtts();
   submitText(text, atts);
 });
 input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); } });
-input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+input.addEventListener('input', () => {
+  input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  // `.filled` masque le curseur-bloc du thème dès qu'il y a du texte : sinon il
+  // doublerait le vrai caret du système. Le focus, lui, est géré en CSS (:focus-within).
+  $('composer').classList.toggle('filled', input.value.length > 0);
+});
 
 /* ── Joindre : picker 📎, coller, glisser-déposer ────────────────── */
 $('attach').addEventListener('click', () => fileInput.click());
@@ -1058,7 +1064,7 @@ async function renderHome() {
   page.innerHTML = `<div class="wrap">
     <h1 class="hi">${salut}, Monsieur.<span class="m"> Que puis-je pour vous ?</span></h1>
     <div class="subhi">${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} — ${total} fiches en mémoire.</div>
-    <button class="cmd" id="cmdk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="ph">Demander à Alfred…</span><kbd>⌘K</kbd></button>
+    <button class="cmd" id="cmdk" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="caret" aria-hidden="true"></span><span class="ph">Demander à Alfred…</span><kbd>⌘K</kbd></button>
     <div id="brief-slot"></div>
     ${tools.length ? `<div class="rowlabel">Transverse</div><div class="mosaic">${tools.join('')}</div>` : ''}
     <div class="rowlabel">Domaines</div><div class="mosaic">${domTiles.join('')}</div>

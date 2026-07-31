@@ -38,7 +38,10 @@
           <button class="shield" id="attach" type="button" title="Joindre un fichier">📎</button>
           <button class="shield" id="scan" type="button" title="Scanner un code-barres">▥</button>
         </div>
-        <textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea>
+        <!-- .field n'est qu'une ancre de position pour le curseur-bloc : elle reprend le
+             flex du textarea et ne peint rien. Le caret reste invisible tant que le thème
+             ne lève pas --caret-display (cf. le contrat en tête de launcher.css). -->
+        <div class="field"><span class="caret" aria-hidden="true"></span><textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea></div>
         <button class="snd" id="send" type="submit" title="Envoyer">↑</button>
       </form>
       <input id="fileinput" type="file" multiple hidden>
