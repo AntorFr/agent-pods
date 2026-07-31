@@ -8,6 +8,7 @@ import './launcher.css';
 // avec les règles `:root[data-theme]` du socle.
 import './skins/themes.css';
 import { resolveSkin } from './skins/index.js';
+import { FORMATS, addCode, composeMessage } from '../scan/codes.js';
 
 const $ = (id) => document.getElementById(id);
 const mqMobile = window.matchMedia('(max-width: 820px)'); // seuil deux-écrans, aligné sur launcher.css
@@ -315,6 +316,150 @@ chatPane.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDe
 chatPane.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; dropzone.classList.remove('on'); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
 // Un fichier lâché hors de la zone ne doit pas faire naviguer le navigateur.
 ['dragover', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (hasFiles(e) && !e.target?.closest?.('.chat')) e.preventDefault(); }));
+/* ── Lecteur de code-barres ──────────────────────────────────────── */
+// Le scanner est un PÉRIPHÉRIQUE DE SAISIE : il décode, il dépose dans le
+// composer, il se tait. Il n'envoie rien et ne décide rien — c'est le contexte
+// de la conversation qui tranche ce qu'on fait du produit (fiche nutritionnelle,
+// liste de courses, suivi diététique). Corollaire assumé : on ACCUMULE puis on
+// dépose, plutôt que d'envoyer à chaque bip — Monsieur écrit son intention une
+// fois, scanne son panier, envoie une fois. Ça tombe aussi pile sur l'appel
+// groupé de l'addon `food`, donc sur son quota amont (15 lectures/min par IP).
+//
+// Deux décodeurs. BarcodeDetector natif quand le navigateur l'a (Android/Chrome) ;
+// sinon /static/scan.js (@zxing/library, 116 Ko gzip) chargé À LA DEMANDE — iOS
+// Safari porte l'API mais désactivée par défaut de 17.0 à 26.5, Firefox ne l'a pas.
+const scanWrap = $('scanwrap'), scanVideo = $('scanvideo'), scanList = $('scanlist');
+let scanStream = null, scanTimer = null, scanBasket = [], scanDetector = null, scanCanvas = null;
+
+function scanSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+// Charge le bundle de repli une seule fois. Injecté en <script> plutôt qu'importé :
+// tout le front est en IIFE, on n'ajoute pas un chargeur de modules pour un fichier.
+let scanFallback = null;
+function loadFallback() {
+  if (window.AlfredScan) return Promise.resolve(window.AlfredScan);
+  if (!scanFallback) {
+    scanFallback = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/static/scan.js';
+      s.onload = () => resolve(window.AlfredScan);
+      s.onerror = () => { scanFallback = null; reject(new Error('décodeur indisponible')); };
+      document.head.appendChild(s);
+    });
+  }
+  return scanFallback;
+}
+
+function renderBasket() {
+  scanList.innerHTML = '';
+  for (const code of scanBasket) {
+    const c = document.createElement('span');
+    c.className = 'scode'; c.textContent = code;
+    scanList.appendChild(c);
+  }
+  $('scan-done').disabled = !scanBasket.length;
+  $('scan-done').textContent = scanBasket.length
+    ? `Ajouter ${scanBasket.length} code${scanBasket.length > 1 ? 's' : ''}` : 'Ajouter';
+}
+
+function scanHit(raw) {
+  if (!addCode(scanBasket, raw)) return;   // invalide ou déjà dans le panier
+  navigator.vibrate?.(40);
+  renderBasket();
+}
+
+async function scanTick() {
+  if (scanVideo.readyState < 2 || !scanVideo.videoWidth) return;
+  if (scanDetector) {
+    // Chemin natif : le détecteur lit la balise vidéo directement, sans canvas.
+    const found = await scanDetector.detect(scanVideo).catch(() => []);
+    for (const b of found) scanHit(b.rawValue);
+    return;
+  }
+  const decoder = window.AlfredScan;
+  if (!decoder) return;
+  // Repli : on redimensionne à 640 px de large. Décoder la pleine résolution d'un
+  // capteur moderne en JS coûte plus cher que ça ne rapporte en lisibilité.
+  const w = Math.min(640, scanVideo.videoWidth);
+  const h = Math.round(scanVideo.videoHeight * (w / scanVideo.videoWidth));
+  if (!scanCanvas) scanCanvas = document.createElement('canvas');
+  if (scanCanvas.width !== w) { scanCanvas.width = w; scanCanvas.height = h; }
+  const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(scanVideo, 0, 0, w, h);
+  const code = decoder.decode(ctx.getImageData(0, 0, w, h));
+  if (code) scanHit(code);
+}
+
+function scanError(msg) {
+  closeScan();
+  add('error', msg);
+}
+
+async function openScan() {
+  if (!scanSupported()) {
+    // Contexte non sécurisé (http://) ou navigateur sans caméra : le dire, plutôt
+    // que d'ouvrir un carré noir.
+    return add('error', 'Ce navigateur ne donne pas accès à la caméra (une origine HTTPS est requise).');
+  }
+  scanBasket = []; renderBasket();
+  scanWrap.hidden = false;
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      audio: false,
+    });
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    return scanError(denied
+      ? 'Accès à la caméra refusé — l’autoriser dans les réglages du navigateur.'
+      : 'Aucune caméra disponible.');
+  }
+  scanVideo.srcObject = scanStream;
+  // playsinline est posé dans app.html : sans lui, iOS bascule la vidéo en lecteur
+  // natif plein écran et l'overlay disparaît sous lui.
+  await scanVideo.play().catch(() => {});
+
+  if ('BarcodeDetector' in window) {
+    try {
+      const supported = await window.BarcodeDetector.getSupportedFormats();
+      const formats = FORMATS.filter((f) => supported.includes(f));
+      if (formats.length) scanDetector = new window.BarcodeDetector({ formats });
+    } catch { scanDetector = null; }
+  }
+  if (!scanDetector) {
+    try { await loadFallback(); } catch { return scanError('Décodeur indisponible.'); }
+  }
+  // Une trame toutes les 120 ms : au-delà on chauffe le téléphone sans lire plus vite.
+  let running = false;
+  scanTimer = setInterval(async () => {
+    if (running) return;              // une trame lente ne doit pas en empiler d'autres
+    running = true;
+    try { await scanTick(); } finally { running = false; }
+  }, 120);
+}
+
+function closeScan() {
+  if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
+  // Couper les pistes, sinon la caméra (et sa diode) reste allumée après fermeture.
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  scanVideo.srcObject = null;
+  scanDetector = null;
+  scanWrap.hidden = true;
+}
+
+$('scan').addEventListener('click', openScan);
+$('scan-close').addEventListener('click', () => { closeScan(); scanBasket = []; });
+$('scan-done').addEventListener('click', () => {
+  const codes = scanBasket.slice();
+  closeScan(); scanBasket = [];
+  if (!codes.length) return;
+  input.value = composeMessage(input.value, codes);
+  input.focus();
+  input.dispatchEvent(new Event('input'));   // rend au textarea sa hauteur
+});
+
 $('reset').addEventListener('click', async () => {
   if (!confirm('Repartir sur une session vierge (sans consolidation) ?')) return;
   await fetch('/api/reset', { method: 'POST', headers: headers(false) });
@@ -1565,9 +1710,9 @@ function plaqueSVG(pl, refL) {
       const short = r.et.replace(/^[^-]+-/, '');
       const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
       g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${cc}" stroke-width="1" stroke-opacity=".45"/>`;
-      g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
-      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
-      if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--mono)" font-size="13" font-weight="700">✓</text>`;
+      g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
+      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
+      if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
     }
     // Cotes façon plan — l'axe suit le SENS : id + LARGEUR sur l'arête courte, LONGUEUR (flèches) sur l'axe long.
     const a = 4;
@@ -1575,25 +1720,25 @@ function plaqueSVG(pl, refL) {
       // largeur = arête gauche (verticale) ; longueur = arête haute (horizontale, flèches)
       const lx = Math.max(bx - 5, 9);
       g += `<line x1="${lx - 3}" y1="${byo + 1}" x2="${lx + 3}" y2="${byo + 1}" stroke="${cc}" stroke-width="1.5"/><line x1="${lx - 3}" y1="${byo + bh - 1}" x2="${lx + 3}" y2="${byo + bh - 1}" stroke="${cc}" stroke-width="1.5"/>`;
-      g += `<text x="${lx}" y="${byo + bh / 2}" transform="rotate(-90 ${lx} ${byo + bh / 2})" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
+      g += `<text x="${lx}" y="${byo + bh / 2}" transform="rotate(-90 ${lx} ${byo + bh / 2})" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
       const dy = byo + 15, mx = bx + bw / 2;
       g += `<line x1="${bx + 1}" y1="${dy}" x2="${bx + bw - 1}" y2="${dy}" stroke="var(--ink-soft)" stroke-width="1"/>`;
       g += `<path d="M${bx} ${dy} l${a} ${-a} M${bx} ${dy} l${a} ${a} M${bx + bw} ${dy} l${-a} ${-a} M${bx + bw} ${dy} l${-a} ${a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
-      g += `<text x="${mx}" y="${dy - 4}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+      g += `<text x="${mx}" y="${dy - 4}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
     } else {
       // court : id + largeur en tête (arête haute) ; longueur en flèches verticales
       const wy = Math.max(byo - 4, 9);
       g += `<line x1="${bx + 1}" y1="${wy + 3}" x2="${bx + 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/><line x1="${bx + bw - 1}" y1="${wy + 3}" x2="${bx + bw - 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/>`;
-      g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
+      g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${band.largeur}</text>`;
       const dx = bx + 17, my = byo + bh / 2;
       g += `<line x1="${dx}" y1="${byo + 1}" x2="${dx}" y2="${byo + bh - 1}" stroke="var(--ink-soft)" stroke-width="1"/>`;
       g += `<path d="M${dx} ${byo} l${-a} ${a} M${dx} ${byo} l${a} ${a} M${dx} ${byo + bh} l${-a} ${-a} M${dx} ${byo + bh} l${a} ${-a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
-      g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+      g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
     }
     g += `</g>`;
   }
   const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
-  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
+  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
 }
 function renderDebit(body) {
   const plaques = wb.data.debit || [];
@@ -1641,18 +1786,18 @@ function renderTronconnage(body) {
     // COTE largeur sur le flanc — style cote : ligne + empattements + valeur (unité incluse)
     const fx = -7;
     svg += `<line x1="${fx}" y1="0" x2="${fx}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="0" x2="${fx + 3}" y2="0" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="${bh}" x2="${fx + 3}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-    svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${g.largeur} mm</text>`;
+    svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${g.largeur} mm</text>`;
     let x = 0;
     for (let i = 0; i < g.troncs.length; i++) {
       const t = g.troncs[i], w = t.longueur * S2, short = t.et.replace(/^[^-]+-/, '');
       const nf = Math.max(9, Math.min(12, w / (short.length * 0.62)));
       svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
       // NOM de la pièce seul au centre (cliquable)
-      svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
+      svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
       // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse
       const cy = bh + 15;
       svg += `<line x1="${x + 2}" y1="${cy}" x2="${x + w - 2}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + 2}" y1="${cy - 3}" x2="${x + 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + w - 2}" y1="${cy - 3}" x2="${x + w - 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="9">${t.longueur} mm</text>`;
+      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${t.longueur} mm</text>`;
       x += w;
       if (i < g.troncs.length - 1) x += troncon * S2;
     }
@@ -1684,9 +1829,9 @@ function renderRainurage(body) {
     let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
     svg += `<rect x="0" y="${gTop}" width="${len * S2 - off * S2}" height="${Math.max(gw * S2, 2)}" fill="var(--proj)" fill-opacity=".6" stroke="var(--proj)" stroke-width="1"/>`;
-    svg += `<line x1="-9" y1="${bh}" x2="-9" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${bh}" x2="-6" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${gTop + gw * S2}" x2="-6" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><text x="-14" y="${(bh + gTop + gw * S2) / 2 + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${off}</text>`;
-    svg += `<text x="-14" y="9" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">avant</text><text x="-14" y="${bh - 1}" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">arr.</text>`;
-    svg += `<text x="0" y="${bh + 15}" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">panneau ${len}×${larg} · rainure largeur ${gw} · profondeur ${gd} mm · traversante ◀ arrêt ▶ ${off}</text>`;
+    svg += `<line x1="-9" y1="${bh}" x2="-9" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${bh}" x2="-6" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="-12" y1="${gTop + gw * S2}" x2="-6" y2="${gTop + gw * S2}" stroke="var(--ink-soft)" stroke-width="1"/><text x="-14" y="${(bh + gTop + gw * S2) / 2 + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${off}</text>`;
+    svg += `<text x="-14" y="9" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">avant</text><text x="-14" y="${bh - 1}" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">arr.</text>`;
+    svg += `<text x="0" y="${bh + 15}" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">panneau ${len}×${larg} · rainure largeur ${gw} · profondeur ${gd} mm · traversante ◀ arrêt ▶ ${off}</text>`;
     svg += `</g></svg>`;
     const chips = g.pieces.map((p) => `<button class="colchip${wbDone('rainure-' + p.etiquette) ? ' done' : ''}" data-tick="rainure-${esc(p.etiquette)}">${wbDone('rainure-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
     html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>Rainure — largeur ${gw} · prof. ${gd} mm</b><span>${g.pieces.length} pièces · ex. ${esc(p0.role)} ${len}×${larg}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
@@ -1749,11 +1894,11 @@ function renderLamello(body) {
     }
     // cote TRAVERS (w) à gauche, depuis l'avant (haut) — labels décalés si valeurs proches
     svg += `<line x1="-9" y1="0" x2="-9" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    leftVals.forEach((wv, i) => { const y = wv * S2, lx = i % 2 ? -24 : -13; svg += `<line x1="-12" y1="${y}" x2="-6" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${wv}</text>`; });
-    svg += `<text x="-6" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--mono)" font-size="8">${leftLbl}</text>`;
+    leftVals.forEach((wv, i) => { const y = wv * S2, lx = i % 2 ? -24 : -13; svg += `<line x1="-12" y1="${y}" x2="-6" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${wv}</text>`; });
+    svg += `<text x="-6" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">${leftLbl}</text>`;
     // cote LONGUEUR (h / abouts) en bas, depuis la gauche (bas)
     svg += `<line x1="0" y1="${bh + 7}" x2="${len * S2}" y2="${bh + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    for (const xv of botVals) { const x = xv * S2; svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${xv}</text>`; }
+    for (const xv of botVals) { const x = xv * S2; svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${xv}</text>`; }
     for (const c of conns) svg += mk(c.x, c.y, c.t);
     svg += `</g></svg>`;
     const chips = g.pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
@@ -1801,7 +1946,7 @@ function sceneSVG(scene) {
       const ref = n.ref ? ` class="pname" data-et="${esc(n.ref)}" style="cursor:pointer"` : '';
       const nid = n.id ? ` data-nid="${esc(n.id)}"` : '';   // cible du surlignage séquence (v0.2)
       g += `<rect${ref}${nid} x="${X(n.x)}" y="${X(n.y)}" width="${X(n.w)}" height="${X(n.h)}" rx="2" ${skin} stroke="var(--shop)" stroke-width="1.5"/>`;
-      if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="600">${esc(n.label)}</text>`;
+      if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="600">${esc(n.label)}</text>`;
     } else if (n.type === 'trait') {
       const pts = (n.pts || []).map((p) => `${X(p[0])},${X(p[1])}`).join(' ');
       const dash = n.style === 'axe' ? 'stroke-dasharray="9 3 2 3"' : n.style === 'pointille' ? 'stroke-dasharray="3 3"' : '';
@@ -1815,7 +1960,7 @@ function sceneSVG(scene) {
       g += `<line x1="${X(a[0])}" y1="${X(a[1])}" x2="${X(a2[0])}" y2="${X(a2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
       g += `<line x1="${X(b[0])}" y1="${X(b[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
       g += `<line x1="${X(a2[0])}" y1="${X(a2[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink)" stroke-width="1"/>`;
-      g += `<text x="${X(mx)}" y="${X(my)}" transform="rotate(${ang.toFixed(0)} ${X(mx)} ${X(my)})" text-anchor="middle" dy="-3" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3.5">${esc(n.texte || dist + ' mm')}</text>`;
+      g += `<text x="${X(mx)}" y="${X(my)}" transform="rotate(${ang.toFixed(0)} ${X(mx)} ${X(my)})" text-anchor="middle" dy="-3" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3.5">${esc(n.texte || dist + ' mm')}</text>`;
     } else if (n.type === 'feature') {
       if (n.forme === 'lamello') {
         const [x, y] = anc(n.at);
@@ -1832,12 +1977,12 @@ function sceneSVG(scene) {
     } else if (n.type === 'note') {
       const [x, y] = anc(n.at), w = (n.w || 170) * S, t = String(n.texte || '');
       g += `<rect x="${X(x)}" y="${X(y)}" width="${w.toFixed(0)}" height="22" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-      g += `<text x="${(x * S + 6).toFixed(1)}" y="${(y * S + 15).toFixed(1)}" fill="var(--ink)" font-family="var(--mono)" font-size="10">${esc(t.length > 42 ? t.slice(0, 40) + '…' : t)}</text>`;
+      g += `<text x="${(x * S + 6).toFixed(1)}" y="${(y * S + 15).toFixed(1)}" fill="var(--ink)" font-family="var(--f-mono)" font-size="10">${esc(t.length > 42 ? t.slice(0, 40) + '…' : t)}</text>`;
     } else if (n.type === 'repere') {
       const [x, y] = anc(n.at);
       if (n.vers) { const [vx, vy] = anc(n.vers); g += `<line x1="${X(x)}" y1="${X(y)}" x2="${X(vx)}" y2="${X(vy)}" stroke="var(--ink-soft)" stroke-width="0.7"/>`; }
       const ta = x > cad.w * 0.6 ? 'end' : 'start';   // près du bord droit → texte aligné à droite (anti-débordement)
-      g += `<text x="${X(x)}" y="${X(y)}" text-anchor="${ta}" fill="var(--ink)" font-family="var(--mono)" font-size="10" font-weight="600" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(n.texte || '')}</text>`;
+      g += `<text x="${X(x)}" y="${X(y)}" text-anchor="${ta}" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="600" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(n.texte || '')}</text>`;
     }
   }
   const vw = (cad.w * S + 2 * M).toFixed(0), vh = (cad.h * S + 2 * M).toFixed(0);
@@ -1916,8 +2061,8 @@ function renderAsm(body) {
     for (const n of niv) {
       const x = n.h * S2;
       svg += `<line x1="${x}" y1="0" x2="${x}" y2="${bh}" stroke="var(--shop)" stroke-width="2"/>`;
-      svg += `<text x="${x}" y="-4" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8">${esc(abbr(n.connecteurs))}</text>`;
-      svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 18}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--mono)" font-size="8.5">${n.h}</text>`;
+      svg += `<text x="${x}" y="-4" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8">${esc(abbr(n.connecteurs))}</text>`;
+      svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 18}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${n.h}</text>`;
     }
     svg += `</g></svg>`;
     const seq = (m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('');

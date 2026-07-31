@@ -30,12 +30,13 @@
       <div id="queued"></div>
       <div id="atts"></div>
       <form class="compose" id="composer">
-        <!-- Mobile : les trois actions se replient sous ce « + » (moretray) ; desktop : moretray en display:contents, boutons inline comme avant. -->
+        <!-- Mobile : les quatre actions se replient sous ce « + » (moretray) ; desktop : moretray en display:contents, boutons inline comme avant. -->
         <button class="more" id="more" type="button" title="Options" aria-expanded="false" aria-haspopup="true">+</button>
         <div class="moretray" id="moretray">
           <button class="shield" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
           <button class="shield" id="eph" type="button" title="Mode éphémère — question ponctuelle, hors conversation, rien n’est retenu">⚡</button>
           <button class="shield" id="attach" type="button" title="Joindre un fichier">📎</button>
+          <button class="shield" id="scan" type="button" title="Scanner un code-barres">▥</button>
         </div>
         <textarea id="input" rows="1" placeholder="Écrire à Alfred… ou « ouvre mes projets »" autocomplete="off"></textarea>
         <button class="snd" id="send" type="submit" title="Envoyer">↑</button>
@@ -89,6 +90,22 @@
       <div class="actions">
         <button id="tunnel-refresh" type="button">⟳ Rafraîchir</button>
         <button id="tunnel-close" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lecteur de code-barres. `playsinline` n'est pas décoratif : sans lui, iOS
+       bascule la vidéo dans son lecteur natif plein écran et l'overlay passe
+       dessous. `muted` est ce qui autorise la lecture automatique. -->
+  <div id="scanwrap" hidden>
+    <video id="scanvideo" playsinline muted autoplay></video>
+    <div class="scanframe"></div>
+    <div class="scanbar">
+      <div class="scanhint">Visez un code-barres — ils s’accumulent, rien n’est envoyé.</div>
+      <div id="scanlist"></div>
+      <div class="scanactions">
+        <button id="scan-close" type="button">Annuler</button>
+        <button id="scan-done" type="button" class="primary" disabled>Ajouter</button>
       </div>
     </div>
   </div>

@@ -2,6 +2,53 @@
 
 > MàJ : 2026-07-31
 
+**Lecteur de code-barres dans la PWA — livré côté code (agent-gw, non taguée)** : un
+bouton `▥` dans le moretray du composer, un overlay caméra plein écran, un panier de codes
+qui s'accumule. **Le scanner est BÊTE, et c'est le design** : il décode, il dépose dans le
+composer, il se tait. Il n'envoie rien et ne décide rien — c'est le contexte de la
+conversation qui tranche ce qu'on fait du produit (fiche nutri, courses, diététique).
+Corollaire : on accumule puis on dépose, donc Monsieur écrit son intention **une** fois,
+scanne son panier, envoie **une** fois — ce qui tombe pile sur l'appel groupé de l'addon
+`food` (rosetta 0.8.0) et sur son quota amont. Aucun module `GW_APPS`, aucune structure
+mémoire neuve, aucun endpoint : `/api/chat` suffisait.
+
+**Deux décodeurs, et le second n'est pas facultatif** : `BarcodeDetector` natif quand le
+navigateur l'a (Android/Chrome), sinon `dist/scan.js` (`@zxing/library`) chargé **à la
+demande**. Vérifié sur caniuse AVANT d'écrire : iOS Safari porte l'API mais
+**« disabled by default » de 17.0 à 26.5**, Firefox ne l'a pas du tout — sans repli, le
+bouton serait mort sur l'iPhone. Le wasm (`zxing-wasm`) écarté **après mesure** :
+`@zxing/library` fait 448 Ko / **116 Ko gzip** (le tree-shaking n'y change rien, la
+bibliothèque tire tous ses lecteurs), contre ~1,2 Mo de binaire à vendoriser, servir et
+localiser. Moins d'infra pour le même résultat.
+
+> 🔎 **Le 3ᵉ bundle est la seule chose qui rend le repli gratuit — et une fuite ne se
+> verrait PAS.** Si `@zxing/library` remontait dans `launcher.js` (un import mal placé
+> suffit), chaque chargement de page paierait 116 Ko pour une fonction que la plupart des
+> sessions n'ouvrent jamais : aucune erreur, juste une PWA plus lente. Vérifié par une
+> chaîne littérale qui **survit à la minification** (`ISO-8859-1`, `SHIFT_JIS`, propres
+> aux tables de charset de zxing) : **2 occurrences dans `scan.js`, 0 dans `launcher.js`**.
+> Ne pas grepper les noms de classes — la minification les renomme et le contrôle passerait
+> au vert pour une mauvaise raison.
+
+> ⚠️ **La liste des formats est une GARDE, pas un réglage.** EAN-8/13, UPC-A/E : des
+> symbologies **numériques**. Autoriser le QR ferait entrer du **texte arbitraire** dans le
+> composer d'Alfred — un autocollant hostile sur un rayon deviendrait une injection de
+> prompt (D17 par la porte de service). Un scan ne peut produire que des chiffres, et un
+> test le verrouille.
+
+Détails qui mordent, tous traités : `playsinline` sur la `<video>` (sans lui iOS bascule en
+lecteur natif plein écran et l'overlay passe dessous), coupure explicite des pistes à la
+fermeture (sinon la caméra et sa diode restent allumées), garde de ré-entrance sur la boucle
+de décodage (120 ms — une trame lente ne doit pas en empiler d'autres), dédup du panier (la
+boucle relit le même code dix fois par seconde), `env(safe-area-inset-bottom)` sur la barre
+d'actions. 23 tests neufs (`frontend/test/scan-test.mjs`) sur la logique pure — clé de
+contrôle EAN, panier, message déposé —, **3 suites JS au vert**. Les suites Python n'ont pas
+été relancées (ni `fastapi` ni `claude_agent_sdk` sur le Mac) : **aucun Python touché**, et
+`/static/scan.js` tombe sous le préfixe `/static/` déjà public, donc `_PUBLIC_PATHS` ne bouge
+pas (relu, pas supposé — cf. le gotcha 0.40.1 juste en dessous).
+**À faire : tag → image → déploiement**, puis l'essai réel sur l'iPhone en **PWA installée**
+(`getUserMedia` en mode `standalone`), qui ne se vérifie pas depuis un Mac.
+
 **Bloc `{% graphique %}` — livré côté code (agent-gw, non taguée)** : Alfred pouvait écrire des
 chiffres, pas les montrer. Nouveau bloc au catalogue Markdoc (`frontend/src/chart.js`), dessiné
 **au transform**, sans bibliothèque ni canvas ni montage JS — l'invariant « rien ne s'exécute

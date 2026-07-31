@@ -75,7 +75,11 @@ COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
 # conflit remonté jamais deviné). Configure son helper git depuis $GITHUB_TOKEN.
 COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
 # Bundled content engine + launcher shell (built once, never at runtime).
-COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css ./app/static/
+# scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
+# weighs 116 kB gzipped and is fetched only when the browser has no
+# BarcodeDetector (iOS Safari, Firefox). Folding it into launcher.js would bill
+# every single page load for a feature most sessions never open.
+COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css /fe/dist/scan.js ./app/static/
 
 RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /workspace \
