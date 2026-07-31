@@ -15,8 +15,9 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
    un tour d'agent exécuté ici.
 3. **Authentifie** — OIDC via Authelia, cookie de session signé, bouclier 🛡 des actions
    sensibles.
-4. **Expose `/mcp`** — endpoint `ask_alfred` (bearer `GW_MCP_TOKEN`) : d'autres agents
-   confient des tâches à Alfred sans intermédiaire.
+4. **Expose `/mcp`** — endpoints `ask_alfred` / `ask_alfred_status` (bearer `GW_MCP_TOKEN`) :
+   d'autres agents confient des tâches à Alfred sans intermédiaire. **Asynchrone** :
+   `ask_alfred` rend un `job_id` immédiatement, `ask_alfred_status` récolte la réponse.
 5. **Sert la mémoire** — API `/api/memory/raw/...` (md, images, pièces jointes) que le
    moteur de rendu de la PWA consomme.
 6. **App-modules d'état** — workbooks menuiserie (`/api/workbook/*`) et voyages
@@ -65,6 +66,8 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_PLANIF_MIN_PERIOD` | `15` | Plancher de fréquence (min). Un cron plus fin rend la fiche **invalide** (affichée telle quelle) au lieu d'être lissé en silence — le quota d'abonnement n'est pas gratuit. |
 | `GW_PLANIF_TZ` | `Europe/Paris` | Fuseau par défaut si la fiche n'en déclare pas. |
 | `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Hôtes autorisés du transport MCP (anti DNS-rebinding). |
+| `GW_MCP_MAX_PENDING` | `4` | Profondeur de la file `ask_<agent>`. Au-delà, refus **immédiat** plutôt qu'une mise en attente derrière un verrou qui ne se rendra pas avant des heures : un refus est une information, un silence n'en est pas une. Plancher dur à 1. |
+| `GW_PEER_MCP_URL` / `GW_PEER_MCP_TOKEN` / `GW_PEER_MCP_TOOL` | `""` | Rappel croisé : à la fin d'un travail, ouvrir un tour chez le demandeur avec le compte rendu (`https://<pair>/mcp/`, son `GW_MCP_TOKEN`, et le nom de **son** outil, ex. `ask_skippy`). Les trois ou rien — non câblé, l'appelant interroge `ask_<agent>_status`. Le rappel pose `notify=False` : sans ce garde-fou, deux agents se renverraient des comptes rendus indéfiniment. |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_REDIRECT_URI` / `OIDC_ALLOWED_GROUP` | `""` / `""` / `""` / `admins` | Client OIDC Authelia. Dès qu'`OIDC_ISSUER` est posé, l'auth passe en OIDC (le bearer `GW_AUTH_TOKEN` devient inutilisé). |
 
 ### Secrets

@@ -2,6 +2,39 @@
 
 > MàJ : 2026-07-31
 
+**La surface MCP passe en ASYNCHRONE — code écrit, non taguée (2026-07-31)** : `ask_<agent>`
+`await`ait un tour complet sous `_query_lock`. Derrière la PWA ou l'horloge, l'appel attendait
+donc **sans timeout, sans identifiant et sans un octet sur le fil** jusqu'au timeout HTTP de
+l'appelant — Alfred a perdu des demandes sans jamais pouvoir les reprendre, incapable même de
+distinguer « en cours » de « jamais arrivé ». Désormais : `ask_<agent>` rend
+`{job_id, status:"accepted", queued_behind, busy}` **immédiatement**, le tour part en tâche de
+fond, et `ask_<agent>_status(job_id)` récolte `pending`/`running`/`done`/`error` (+ `reply` et le
+`task_id` de reprise). File bornée par `GW_MCP_MAX_PENDING` (4) : au-delà, **refus immédiat** —
+un refus est une information, un silence n'en est pas une. Rappel croisé optionnel
+(`GW_PEER_MCP_URL`/`_TOKEN`/`_TOOL`, inerte tant que non câblé) : à la fin du travail, on ouvre un
+tour chez le demandeur avec le compte rendu. 28 tests neufs (`test/mcp_async_test.py`), suite
+complète verte, **deux contrôles éprouvés à l'envers** (anti-boucle cassé → FAIL ; `create_task`
+retransformé en `await` → FAIL).
+
+> 🔎 **Pourquoi PAS les tâches MCP ni l'élicitation — mesuré, pas supposé.** MCP 2025-11-25 a
+> exactement ce qu'il faudrait sur le papier. Sonde jetable (serveur FastMCP dans `/tmp` du pod)
+> interrogeant le **client réel** via `ctx.session.client_params` : `claude-code 2.1.220`,
+> `protocolVersion 2025-11-25`, capacités déclarées `elicitation{form,url}` ·
+> `roots{listChanged}` · `sampling: null` · **`tasks: null`**. Les tâches ne sont donc pas
+> négociables avec ce client, quel que soit le support serveur (côté python elles vivent dans
+> `mcp.shared.experimental`, « may change without notice », et **zéro** occurrence dans
+> `mcp/server/fastmcp/`). L'élicitation, elle, est déclarée **et fonctionne** — mais un
+> `ctx.elicit()` rend `action=cancel` en mode headless : elle réclame un humain devant le
+> client, ce qu'un agent n'a jamais. ⚠️ **Et le mur n'est pas là** : une notification MCP
+> n'atteint qu'un client **connecté**, or un agent n'existe qu'entre deux tours. Ce qui réveille
+> un agent est une requête HTTP entrante — d'où le rappel croisé, et non le protocole.
+
+> ⚠️ **Contrat rompu à dessein, à annoncer aux deux cerveaux.** `ask_<agent>` ne rend plus
+> `{reply, task_id}`. La description de l'outil le dit en toutes lettres (« ASYNCHRONOUS: …
+> returns immediately with a job_id »), donc un agent appelant s'adapte à la lecture — mais un
+> code qui lirait `.reply` en dur ne verrait rien. Reste à livrer : tag + image + bump des **deux**
+> manifestes, puis câbler `GW_PEER_MCP_*` en croix.
+
 **`GW_FEATURES` — les capacités de la coque, désactivables par corps — DÉPLOYÉ (2026-07-31,
 agent-gw 0.46.0)** : `GW_APPS` disait où l'on peut **aller** (tuiles et routes) ; rien ne disait
 ce que le chat sait **faire**. Un lecteur de code-barres chez un agent de code n'a aucun sens, et

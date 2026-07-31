@@ -171,6 +171,35 @@ MCP_DESCRIPTION = os.environ.get("GW_MCP_DESCRIPTION", "").strip() or (
 MCP_ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", f"{AGENT}.berard.me").split(",") if h.strip()
 ]
+# --- Surface MCP asynchrone ---------------------------------------------------
+# `ask_<agent>` rend un ACCUSÉ DE RÉCEPTION, plus la réponse. Le tour s'exécute
+# sous `_query_lock`, derrière la PWA et l'horloge : un appel bloquant attendait
+# sans timeout, sans identifiant et sans un octet sur le fil jusqu'à ce que le
+# client HTTP de l'appelant abandonne — la demande était perdue sans que personne
+# puisse la reprendre, et l'appelant ne savait même pas distinguer « en cours »
+# de « jamais arrivé ».
+#
+# ⚠️ Pourquoi PAS le protocole, alors que MCP a ce qu'il faut sur le papier —
+# vérifié sur le pod contre le client RÉEL (claude-code 2.1.220,
+# protocolVersion 2025-11-25), qui déclare exactement :
+#     elicitation {form,url} · roots {listChanged} · sampling null · tasks NULL
+# Les tâches MCP ne sont donc pas négociables avec ce client, quel que soit le
+# support serveur (côté python elles sont de toute façon dans
+# `mcp.shared.experimental`, hors FastMCP). Et une élicitation rend
+# `action=cancel` : le canal marche, mais il réclame un humain devant le client,
+# ce qu'un agent headless n'a jamais. Conclusion mesurée, pas supposée : ce qui
+# réveille un agent est une requête entrante — le rappel croisé ci-dessous.
+#
+# Profondeur de file : au-delà on refuse tout de suite. Un refus est une
+# information ; empiler des tours que personne n'exécutera avant des heures n'en
+# est pas une.
+MCP_MAX_PENDING = max(1, int(os.environ.get("GW_MCP_MAX_PENDING", "4") or 4))
+# Rappel croisé, optionnel et inerte tant qu'il n'est pas câblé : à la fin du
+# travail, on ouvre un tour chez le demandeur avec le compte rendu. Non
+# configuré → pas de rappel, l'appelant interroge `ask_<agent>_status`.
+PEER_MCP_URL = os.environ.get("GW_PEER_MCP_URL", "").strip()
+PEER_MCP_TOKEN = os.environ.get("GW_PEER_MCP_TOKEN", "").strip()
+PEER_MCP_TOOL = os.environ.get("GW_PEER_MCP_TOOL", "").strip()
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -739,31 +768,176 @@ async def _run_alfred(
     return "\n\n".join(parts).strip(), session_id
 
 
+# --- Travaux MCP : registre en mémoire ---------------------------------------
+# En mémoire et NON sur disque, volontairement : un travail n'a de sens que tant
+# que la gateway vit. Un redémarrage perd ceux en vol, et c'est le bon
+# comportement — le tour qu'ils portaient est mort avec le process, le rejouer
+# derrière le dos de l'appelant serait pire.
+_jobs: dict[str, dict] = {}
+_job_tasks: set[asyncio.Task] = set()  # référence forte : sans elle, le GC peut tuer un tour
+_JOB_TTL = 3600  # un compte rendu reste lisible une heure après la fin
+
+
+def _job_gc() -> None:
+    """Purge les travaux terminés depuis plus de _JOB_TTL. Appelé au dépôt : pas de
+    tâche de fond pour un registre qui ne grossit qu'au moment où on l'écrit."""
+    now = time.time()
+    for jid, job in list(_jobs.items()):
+        if job["status"] in ("done", "error") and now - job["ended"] > _JOB_TTL:
+            _jobs.pop(jid, None)
+
+
+def _pending_count() -> int:
+    return sum(1 for j in _jobs.values() if j["status"] in ("pending", "running"))
+
+
+def _peer_call_body(job: dict) -> dict:
+    """L'enveloppe JSON-RPC du rappel. Séparée de l'envoi pour que le garde-fou
+    anti-boucle (`notify: False`) soit verrouillé par un test sans réseau."""
+    return {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": PEER_MCP_TOOL,
+            "arguments": {
+                "request": (
+                    f"[Compte rendu de « {AGENT} », travail {job['id']} que tu lui avais "
+                    f"confié. Rien à répondre.]\n\nDemande : {job['request']}\n\n"
+                    f"Résultat : {job.get('reply') or job.get('error') or '(vide)'}"
+                ),
+                "agent": AGENT,
+                "notify": False,
+            },
+        },
+    }
+
+
+async def _notify_peer(job: dict) -> None:
+    """Ouvre un tour chez le demandeur pour lui livrer le compte rendu — le seul
+    mécanisme qui réveille réellement un agent (cf. le bloc GW_PEER_MCP_URL).
+
+    `notify=False` dans l'appel sortant est le garde-fou anti-boucle : sans lui,
+    deux agents polis se renverraient des comptes rendus jusqu'à épuisement de
+    l'abonnement. Fail-soft : le travail est fait, une notification ratée ne doit
+    rien casser — l'appelant garde `ask_<agent>_status` comme filet."""
+    if not (PEER_MCP_URL and PEER_MCP_TOKEN and PEER_MCP_TOOL):
+        return
+    import httpx
+
+    body = _peer_call_body(job)
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            await client.post(
+                PEER_MCP_URL,
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {PEER_MCP_TOKEN}",
+                    # streamable-http exige les DEUX types dans Accept, même en
+                    # json_response : sans text/event-stream le serveur rend 406.
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
+    except Exception as exc:  # fail-soft, cf. docstring
+        job["notify_error"] = str(exc)
+
+
+async def _run_job(job: dict) -> None:
+    """Exécute le tour hors du chemin de la requête MCP. C'est ici, et pas dans
+    l'outil, que l'on attend `_query_lock`."""
+    job["status"] = "running"
+    try:
+        reply, session_id = await _run_alfred(job["prompt"], resume=job["resume"])
+        job.update(status="done", reply=reply, task_id=session_id)
+    except Exception as exc:  # remonté à l'appelant via le statut, jamais avalé
+        job.update(status="error", error=str(exc))
+    job["ended"] = time.time()
+    if job["notify"]:
+        await _notify_peer(job)
+
+
 @mcp_server.tool(
     # Nom ET description viennent du corps : `ask_alfred` chez le majordome,
     # `ask_skippy` chez l'agent de code. Le nom Python reste générique — c'est
     # celui exposé au protocole qui compte pour l'agent appelant.
     name=f"ask_{AGENT}",
     description=(
-        MCP_DESCRIPTION + " Each call is a fresh task; to continue a "
-        "clarification it asked for, pass back the task_id it returned. "
-        "Set 'agent' to your own name."
+        MCP_DESCRIPTION + " ASYNCHRONOUS: this returns immediately with a "
+        f"job_id and does NOT wait for the answer. Poll `ask_{AGENT}_status(job_id)` "
+        "to collect it. To continue a previous conversation, pass back the "
+        "task_id the status tool returned once that job was done. Set 'agent' to "
+        "your own name."
     ),
 )
-async def ask_agent(request: str, task_id: str | None = None, agent: str = "agent") -> dict:
+async def ask_agent(
+    request: str, task_id: str | None = None, agent: str = "agent", notify: bool = True
+) -> dict:
     request = (request or "").strip()
     if not request:
         return {"error": "empty request"}
+    _job_gc()
+    if _pending_count() >= MCP_MAX_PENDING:
+        return {
+            "error": "file pleine",
+            "pending": _pending_count(),
+            "max_pending": MCP_MAX_PENDING,
+            "busy": _query_lock.locked(),
+            "hint": "ce corps exécute un tour à la fois ; réessaie plus tard.",
+        }
     prompt = (
         f"[Requete transmise par l'agent « {agent} » via MCP, a la demande de "
         f"Monsieur. Traite-la selon ta discipline habituelle (rangement, index, "
         f"commit), puis conclus par un compte rendu bref.]\n\n{request}"
     )
-    try:
-        reply, session_id = await _run_alfred(prompt, resume=task_id)
-    except Exception as exc:  # returned to the caller, not swallowed
-        return {"error": str(exc)}
-    return {"reply": reply, "task_id": session_id}
+    job = {
+        "id": secrets.token_hex(8),
+        "status": "pending",
+        "request": request,
+        "prompt": prompt,
+        "resume": task_id,
+        "agent": agent,
+        "notify": bool(notify),
+        "started": time.time(),
+        "ended": 0.0,
+    }
+    _jobs[job["id"]] = job
+    task = asyncio.create_task(_run_job(job))
+    _job_tasks.add(task)
+    task.add_done_callback(_job_tasks.discard)
+    return {
+        "job_id": job["id"],
+        "status": "accepted",
+        "queued_behind": _pending_count() - 1,
+        "busy": _query_lock.locked(),
+        "poll_with": f"ask_{AGENT}_status",
+    }
+
+
+@mcp_server.tool(
+    name=f"ask_{AGENT}_status",
+    description=(
+        f"Check on a job handed to {AGENT} via ask_{AGENT}. Returns "
+        "status=pending|running|done|error. When done it carries the reply and a "
+        "task_id — pass that task_id back to ask_" + AGENT + " to continue the "
+        "same conversation. Jobs are forgotten one hour after they finish."
+    ),
+)
+async def ask_agent_status(job_id: str) -> dict:
+    job = _jobs.get((job_id or "").strip())
+    if job is None:
+        return {"error": "job_id inconnu — expiré (1 h), ou jamais déposé."}
+    out = {"job_id": job["id"], "status": job["status"]}
+    if job["status"] == "done":
+        out["reply"] = job.get("reply", "")
+        out["task_id"] = job.get("task_id")
+    elif job["status"] == "error":
+        out["error"] = job.get("error", "")
+    else:
+        out["waiting_since_s"] = round(time.time() - job["started"])
+        out["busy"] = _query_lock.locked()
+    if job.get("notify_error"):
+        out["notify_error"] = job["notify_error"]
+    return out
 
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif", ".bmp", ".svg"}

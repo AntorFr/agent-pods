@@ -190,13 +190,14 @@ for var in ("GW_AGENT", "GW_MCP_DESCRIPTION", "GW_MCP_ALLOWED_HOSTS"):
     os.environ.pop(var, None)
 m = importlib.reload(main)
 check("défaut -> alfred (le majordome ne bouge pas)", m.AGENT == "alfred")
-check("outil ask_alfred", tools_of(m) == ["ask_alfred"])
+check("outils ask_alfred + son statut", sorted(tools_of(m)) == ["ask_alfred", "ask_alfred_status"])
 check("hôte MCP dérivé de l'agent", m.MCP_ALLOWED_HOSTS == ["alfred.berard.me"])
 
 os.environ["GW_AGENT"] = "skippy"
 os.environ["GW_MCP_DESCRIPTION"] = "Confie une tâche technique à Skippy."
 m = importlib.reload(main)
-check("GW_AGENT=skippy -> outil ask_skippy", tools_of(m) == ["ask_skippy"])
+check("GW_AGENT=skippy -> outils ask_skippy + son statut",
+      sorted(tools_of(m)) == ["ask_skippy", "ask_skippy_status"])
 check("serveur MCP renommé aussi", m.mcp_server.name == "skippy")
 # Sans dérivation, l'hôte serait resté alfred.berard.me et FastMCP aurait répondu
 # 421 sur skippy.berard.me : la protection anti-rebinding DNS valide le Host.
