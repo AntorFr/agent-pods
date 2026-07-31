@@ -54,8 +54,71 @@ check("chaîne vide -> aucun module (accueil sans tuile transverse)", m.APPS == 
 m = load("repos")
 check(
     "/api/version publie les modules (le lanceur s'en sert au boot)",
-    asyncio.run(m.version()) == {"version": m.GW_VERSION, "apps": ["repos"], "theme": "alfred"},
+    asyncio.run(m.version()) == {
+        "version": m.GW_VERSION, "apps": ["repos"],
+        "features": ["scan", "attach", "eph", "tunnel", "sujets"], "theme": "alfred",
+    },
 )
+
+print("\n--- GW_FEATURES : les capacités de la coque ---")
+
+
+def load_features(value):
+    """Recharge le module avec un GW_FEATURES donné (None = variable absente)."""
+    os.environ.pop("GW_FEATURES", None)
+    if value is not None:
+        os.environ["GW_FEATURES"] = value
+    return importlib.reload(main)
+
+
+m = load_features(None)
+check(
+    "absent -> jeu historique (une montée de version ne change rien)",
+    m.FEATURES == ["scan", "attach", "eph", "tunnel", "sujets"],
+)
+
+m = load_features("attach,eph,tunnel,sujets")
+check("le cas d'usage : un agent de code sans lecteur de code-barres",
+      "scan" not in m.FEATURES and "attach" in m.FEATURES)
+
+m = load_features(" scan , attach ,, ")
+check("espaces rognés, entrées vides ignorées", m.FEATURES == ["scan", "attach"])
+
+m = load_features("")
+check("chaîne vide -> aucune capacité (composeur nu ; le bouclier, lui, reste)",
+      m.FEATURES == [])
+
+# Le bouclier n'est pas un composant : il ne doit apparaître dans AUCUNE liste, ni
+# par défaut ni par accident. Une garde qu'on éteint par variable d'environnement
+# est un piège — cf. le commentaire de FEATURES dans app/main.py.
+m = load_features(None)
+check("le bouclier n'est pas une capacité désactivable", "shield" not in m.FEATURES)
+
+m = load_features("scan")
+check(
+    "/api/version publie les capacités (le lanceur retire le DOM au boot)",
+    asyncio.run(m.version())["features"] == ["scan"],
+)
+os.environ.pop("GW_FEATURES", None)
+m = importlib.reload(main)
+
+# La liste vit en DEUX langues : le défaut Python et le repli JS (utilisé quand
+# /api/version échoue). Si elles divergent, la panne est MUETTE — un pod dont
+# l'appel rate exposerait un jeu de contrôles différent de sa config. Et une
+# capacité listée mais non câblée dans `applyFeatures` serait ingérable en silence.
+import re  # noqa: E402
+
+_JS = (Path(__file__).resolve().parents[1]
+       / "frontend" / "src" / "launcher" / "main.js").read_text(encoding="utf-8")
+_fallback = re.search(r"FEATURES_FALLBACK\s*=\s*\[([^\]]*)\]", _JS)
+_js_features = re.findall(r"'([^']+)'", _fallback.group(1)) if _fallback else []
+check("le repli JS liste les mêmes capacités que le défaut serveur",
+      _js_features == m.FEATURES)
+
+_apply = re.search(r"function applyFeatures\(\)\s*\{(.*?)\n\}", _JS, re.S)
+_wired = set(re.findall(r"featureOn\('([^']+)'\)", _apply.group(1))) if _apply else set()
+check("chaque capacité est réellement câblée dans applyFeatures",
+      _wired == set(m.FEATURES))
 
 print("\n--- GW_THEME ---")
 

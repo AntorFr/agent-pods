@@ -306,6 +306,7 @@ input.addEventListener('input', () => {
 $('attach').addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', () => { if (fileInput.files.length) addFiles(fileInput.files); fileInput.value = ''; });
 input.addEventListener('paste', (e) => {
+  if (!featureOn('attach')) return;      // capacité éteinte : coller reste du texte
   const files = [...(e.clipboardData?.files || [])];
   if (files.length) { e.preventDefault(); addFiles(files); }
 });
@@ -315,11 +316,16 @@ input.addEventListener('paste', (e) => {
 // glissent en 'text/plain' et ne doivent pas déclencher l'overlay.
 const chatPane = document.querySelector('.chat'), dropzone = $('dropzone');
 const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+// `takesFiles` = « ce corps accepte-t-il un dépôt ? ». Point de passage unique des
+// quatre gestes de glisser-déposer : la capacité s'éteint ici, pas bouton par bouton.
+// La garde de navigation en bas de bloc, elle, reste INCONDITIONNELLE — même sans
+// pièces jointes, un fichier lâché par erreur ne doit jamais faire quitter la session.
+const takesFiles = (e) => featureOn('attach') && hasFiles(e);
 let dragDepth = 0;
-chatPane.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; dropzone.classList.add('on'); });
-chatPane.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
-chatPane.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropzone.classList.remove('on'); });
-chatPane.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; dropzone.classList.remove('on'); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+chatPane.addEventListener('dragenter', (e) => { if (!takesFiles(e)) return; e.preventDefault(); dragDepth++; dropzone.classList.add('on'); });
+chatPane.addEventListener('dragover', (e) => { if (takesFiles(e)) e.preventDefault(); });
+chatPane.addEventListener('dragleave', (e) => { if (!takesFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) dropzone.classList.remove('on'); });
+chatPane.addEventListener('drop', (e) => { if (!takesFiles(e)) return; e.preventDefault(); dragDepth = 0; dropzone.classList.remove('on'); if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
 // Un fichier lâché hors de la zone ne doit pas faire naviguer le navigateur.
 ['dragover', 'drop'].forEach((ev) => window.addEventListener(ev, (e) => { if (hasFiles(e) && !e.target?.closest?.('.chat')) e.preventDefault(); }));
 /* ── Lecteur de code-barres ──────────────────────────────────────── */
@@ -810,12 +816,43 @@ function metaFor(name) {
 const APPS_FALLBACK = ['todo', 'projets', 'atelier', 'planif', 'voyages'];
 let APPS = new Set(APPS_FALLBACK);
 function appOn(id) { return APPS.has(id); }
+
+/* ── Capacités de la coque (GW_FEATURES) ─────────────────────────────
+   Le second axe : `apps` dit où l'on peut ALLER, `features` dit ce que le chat
+   sait FAIRE. Un lecteur de code-barres n'a rien à faire chez un agent de code.
+
+   On RETIRE du DOM, on ne masque pas — et ce n'est pas de la coquetterie : un
+   nœud absent ne reçoit aucun événement, ne se retrouve pas au focus clavier, et
+   ne peut pas déclencher le chargement paresseux d'un bundle (le décodeur de
+   code-barres pèse 448 Ko). Un `display:none` laisserait les trois.
+
+   Même discipline que les modules : ce qui ne passe pas par un bouton est gardé
+   À LA SOURCE. Retirer 📎 sans toucher au coller ni au glisser-déposer laisserait
+   deux portes d'entrée grandes ouvertes sur une capacité censée être éteinte.
+
+   Le bouclier 🛡 n'est pas dans la liste, et ce n'est pas un oubli : c'est une
+   garde, pas un composant (cf. le commentaire de `FEATURES` dans app/main.py). */
+const FEATURES_FALLBACK = ['scan', 'attach', 'eph', 'tunnel', 'sujets'];
+let FEATURES = new Set(FEATURES_FALLBACK);
+function featureOn(id) { return FEATURES.has(id); }
+function applyFeatures() {
+  const drop = (id) => $(id)?.remove();
+  if (!featureOn('scan')) { drop('scan'); drop('scanwrap'); }
+  if (!featureOn('attach')) { drop('attach'); drop('fileinput'); drop('dropzone'); }
+  if (!featureOn('eph')) drop('eph');
+  if (!featureOn('tunnel')) { drop('vsc'); drop('tunnel-modal'); }
+  if (!featureOn('sujets')) drop('sujets');
+}
 async function loadApps() {
   try {
     const r = await fetch('/api/version', { headers: headers(false), cache: 'no-store' });
     if (!r.ok) return;
     const d = await r.json();
     if (Array.isArray(d.apps)) APPS = new Set(d.apps);
+    if (Array.isArray(d.features)) FEATURES = new Set(d.features);
+    // Avant le premier rendu (le boot attend cet appel) : sinon on verrait
+    // apparaître puis disparaître des boutons que ce corps n'expose pas.
+    applyFeatures();
     // L'attribut arme les feuilles des skins. Posé AVANT le premier rendu (cf.
     // boot), sinon on verrait passer la livrée du socle. `alfred` reste
     // implicite : aucun attribut, aucune surcharge, rien ne bouge.

@@ -91,6 +91,22 @@ TODO_FILE = os.environ.get("GW_TODO_FILE", "todo/taches.md")
 APPS = [a.strip() for a in os.environ.get(
     "GW_APPS", "todo,projets,atelier,planif,voyages",
 ).split(",") if a.strip()]
+# Second axe de modularité. `GW_APPS` dit où l'on peut ALLER (tuiles et routes) ;
+# celui-ci dit ce que le chat sait FAIRE. Un lecteur de code-barres n'a aucun sens
+# chez un agent de code, un tunnel VS Code n'en a aucun chez un corps sans tunnel.
+# Le front RETIRE du DOM ce qui n'est pas listé — le bouton ET le chemin de code
+# (coller, glisser-déposer, chargement paresseux du décodeur, qui pèse 448 Ko).
+# Défaut = le jeu historique, donc une montée de version ne change rien.
+#
+# ⚠️ Le bouclier 🛡 n'est délibérément PAS de cette liste. Ce n'est pas un composant,
+# c'est une garde : la seule façon pour Monsieur de consentir à une action sensible.
+# Une garde qu'on éteint par variable d'environnement est un piège — le jour où
+# quelqu'un la retire « parce qu'elle gêne », il ne reste plus rien entre un outil
+# d'écriture et un contenu non fiable. Si un corps n'a aucun outil gardé, le bouton
+# ne coûte qu'un pixel ; l'inverse coûterait beaucoup plus cher.
+FEATURES = [f.strip() for f in os.environ.get(
+    "GW_FEATURES", "scan,attach,eph,tunnel,sujets",
+).split(",") if f.strip()]
 # Identité visuelle du pod. Le front pose `data-agent=<theme>` sur <html> au boot,
 # ce qui arme les surcharges de jetons de `theme-<theme>.css` (bundlées avec le
 # reste, inertes tant que l'attribut est absent). `alfred` = pas d'attribut, donc
@@ -470,13 +486,17 @@ def _load_todo_state() -> dict:
 
 @app.get("/api/version")
 async def version():
-    """The running build and the app-modules this agent exposes.
+    """The running build, plus the two axes of modularity this body exposes.
+
+    `apps` = where you can GO (tiles and routes), `features` = what the chat can
+    DO (composer controls and shell capabilities). Both are per-pod env lists; the
+    launcher gates on them at boot, before the first render.
 
     Fetched twice for two different reasons: at boot by the launcher, which gates
-    its tiles and routes on `apps`; and again when the settings panel opens, so
-    the version shown always reflects the server actually answering rather than a
-    cached bundle."""
-    return {"version": GW_VERSION, "apps": APPS, "theme": THEME}
+    its tiles, routes and controls on this payload; and again when the settings
+    panel opens, so the version shown always reflects the server actually
+    answering rather than a cached bundle."""
+    return {"version": GW_VERSION, "apps": APPS, "features": FEATURES, "theme": THEME}
 
 
 @app.get("/api/repos")
