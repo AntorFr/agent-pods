@@ -1,7 +1,8 @@
-// Lecteur de code-barres — logique pure (validation, panier, message).
-// La caméra et le décodage ne sont pas testables sans navigateur ; ce qui l'est,
-// c'est tout ce qui décide de ce qui ATTEINT le composer d'Alfred. C'est
-// justement la partie qui compte : un scan finit en texte dans un prompt.
+// Lecteur de code-barres — logique pure (validation, panier, message) : tout ce
+// qui décide de ce qui ATTEINT le composer d'Alfred. C'est la partie qui compte,
+// car un scan finit en texte dans un prompt.
+// Le DÉCODAGE, lui, se teste dans test/scan-decode-test.mjs. On l'a cru hors de
+// portée sans navigateur — c'est ainsi qu'un décodeur mort est parti en prod.
 // Run: node test/scan-test.mjs
 import { FORMATS, validCode, addCode, composeMessage } from '../src/scan/codes.js';
 

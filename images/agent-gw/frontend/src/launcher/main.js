@@ -338,7 +338,7 @@ chatPane.addEventListener('drop', (e) => { if (!takesFiles(e)) return; e.prevent
 // groupé de l'addon `food`, donc sur son quota amont (15 lectures/min par IP).
 //
 // Deux décodeurs. BarcodeDetector natif quand le navigateur l'a (Android/Chrome) ;
-// sinon /static/scan.js (@zxing/library, 116 Ko gzip) chargé À LA DEMANDE — iOS
+// sinon /static/scan.js (@zxing/library, 31 Ko gzip) chargé À LA DEMANDE — iOS
 // Safari porte l'API mais désactivée par défaut de 17.0 à 26.5, Firefox ne l'a pas.
 const scanWrap = $('scanwrap'), scanVideo = $('scanvideo'), scanList = $('scanlist');
 let scanStream = null, scanTimer = null, scanBasket = [], scanDetector = null, scanCanvas = null;
@@ -382,24 +382,50 @@ function scanHit(raw) {
   renderBasket();
 }
 
+// Fenêtre de la trame RÉELLEMENT à l'écran. La vidéo est en `object-fit: cover` :
+// un capteur paysage sur un écran portrait n'affiche qu'une bande centrale. Y
+// décoder la trame entière analyserait des pixels que Monsieur ne voit pas — et
+// surtout écraserait ceux qu'il vise : le code passerait sous 2 pixels par module,
+// seuil en dessous duquel un EAN-13 cesse d'être lisible. On rend donc au décodeur
+// exactement le champ visé, à la résolution qu'il mérite.
+function visibleFrame(video) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const r = video.getBoundingClientRect();
+  if (!r.width || !r.height) return { sx: 0, sy: 0, sw: vw, sh: vh };
+  const cover = Math.max(r.width / vw, r.height / vh);
+  const sw = Math.min(vw, Math.round(r.width / cover));
+  const sh = Math.min(vh, Math.round(r.height / cover));
+  return { sx: Math.round((vw - sw) / 2), sy: Math.round((vh - sh) / 2), sw, sh };
+}
+
 async function scanTick() {
   if (scanVideo.readyState < 2 || !scanVideo.videoWidth) return;
   if (scanDetector) {
     // Chemin natif : le détecteur lit la balise vidéo directement, sans canvas.
-    const found = await scanDetector.detect(scanVideo).catch(() => []);
-    for (const b of found) scanHit(b.rawValue);
-    return;
+    try {
+      for (const b of await scanDetector.detect(scanVideo)) scanHit(b.rawValue);
+      return;
+    } catch {
+      // Un détecteur natif présent mais qui échoue à chaque trame laisserait le
+      // scan muet pour toujours. On bascule sur zxing une bonne fois, plutôt que
+      // d'avaler l'erreur en boucle.
+      scanDetector = null;
+      loadFallback().catch(() => scanError('Décodeur indisponible.'));
+      return;
+    }
   }
   const decoder = window.AlfredScan;
   if (!decoder) return;
-  // Repli : on redimensionne à 640 px de large. Décoder la pleine résolution d'un
-  // capteur moderne en JS coûte plus cher que ça ne rapporte en lisibilité.
-  const w = Math.min(640, scanVideo.videoWidth);
-  const h = Math.round(scanVideo.videoHeight * (w / scanVideo.videoWidth));
+  // Repli : 800 px de large au plus. Décoder la pleine résolution d'un capteur
+  // moderne en JS coûte plus cher que ça ne rapporte en lisibilité — mais 800 px
+  // sur le seul champ visible laissent une marge confortable au décodeur.
+  const { sx, sy, sw, sh } = visibleFrame(scanVideo);
+  const w = Math.min(800, sw);
+  const h = Math.max(1, Math.round(sh * (w / sw)));
   if (!scanCanvas) scanCanvas = document.createElement('canvas');
-  if (scanCanvas.width !== w) { scanCanvas.width = w; scanCanvas.height = h; }
+  if (scanCanvas.width !== w || scanCanvas.height !== h) { scanCanvas.width = w; scanCanvas.height = h; }
   const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(scanVideo, 0, 0, w, h);
+  ctx.drawImage(scanVideo, sx, sy, sw, sh, 0, 0, w, h);
   const code = decoder.decode(ctx.getImageData(0, 0, w, h));
   if (code) scanHit(code);
 }

@@ -2,6 +2,46 @@
 
 > MàJ : 2026-07-31
 
+**Le lecteur de code-barres était MORT en production — corrigé, non taguée (2026-07-31)** :
+signalé au doigt sur l'iPhone (« la caméra s'ouvre avec le cadre, mais rien ne se détecte »).
+La caméra n'y était pour rien : **le décodeur de repli ne pouvait mathématiquement rien lire**.
+`scan/main.js` passait le RGBA d'un canvas à `RGBLuminanceSource`, qui ne dépaquette QUE de
+l'`Int32Array` (il teste `BYTES_PER_ELEMENT === 4`) et prend un `Uint8ClampedArray` pour de la
+**luminance déjà prête, un octet par pixel** : à la place de chaque ligne, zxing lisait un quart
+de ligne d'octets R,G,B,A entrelacés. Du bruit, à chaque trame, pour toujours. Conversion en
+luminance faite maison (BT.601 en entiers, tampon réutilisé d'une trame à l'autre).
+
+> 🔎 **Deux autres défauts sortis du même log, et aucun ne se voyait à l'œil.**
+> ① `MultiFormatReader.decode(image)` **sans second argument** compare `this.hints !== hints`
+> avec `hints === undefined` → il rappelle `setHints(undefined)` et **remplace nos lecteurs par
+> la liste complète** dès la première trame : les `POSSIBLE_FORMATS` — qui sont une **garde de
+> sécurité**, pas un réglage — étaient jetés, et QR/DataMatrix/Aztec/PDF417/MaxiCode tournaient
+> sur chaque image. ② Dans cette version, `NotFoundException` **n'hérite pas** de
+> `ReaderException` : `MultiFormatReader` traitait donc « pas de code dans cette trame » — le cas
+> NOMINAL — comme une anomalie et en journalisait la **pile**, huit fois par seconde sur le
+> téléphone. Les deux disparaissent en passant par `MultiFormatOneDReader` directement.
+
+**Le viseur mentait, et ça coûtait la lisibilité** : la `<video>` est en `object-fit: cover`, donc
+un capteur paysage sur un écran portrait n'affiche qu'une bande centrale — mais le repli décodait
+la trame ENTIÈRE écrasée à 640 px. Le code visé tombait sous **2 px par module**, seuil en dessous
+duquel un EAN-13 cesse d'être lisible. Désormais `visibleFrame()` rend au décodeur exactement le
+champ affiché, à 800 px. Ajouté aussi : un `BarcodeDetector` natif qui échoue **bascule** sur
+zxing au lieu d'avaler l'erreur en boucle (`.catch(() => [])` laissait le scan muet à vie).
+
+**Le bundle de repli fond de 448 Ko à 138 Ko (31 Ko gzip)** : `@zxing/library` ne déclare pas
+`sideEffects: false`, donc esbuild ne peut rien élaguer du barrel. Imports **profonds** sur
+`esm/core/…` — le risque du chemin interne est couvert, il ne casse pas en silence mais fait
+échouer `npm run build` **et** le test de décodage, qui bundle ce fichier.
+
+> ⚠️ **La leçon, et elle est chère : « le décodage n'est pas testable sans navigateur » était
+> FAUX.** C'est cette phrase, en tête de `scan-test.mjs`, qui a laissé partir un décodeur mort
+> derrière 23 tests verts — tous sur la logique pure, aucun sur l'image. Un EAN-13 s'engendre
+> depuis sa spec en trente lignes et un `ImageData` n'est qu'un `Uint8ClampedArray` : aucune
+> caméra requise. **9 tests neufs** (`frontend/test/scan-decode-test.mjs`) qui bundlent le
+> fichier RÉELLEMENT livré et décodent EAN-13/EAN-8, contraste faible, trames vide/bruitée, deux
+> trames d'affilée — plus un **contre-exemple ITF** qui échouerait si les hints resautaient.
+> Suite JS complète au vert. Aucun Python touché. **Reste à taguer, construire et déployer.**
+
 **La surface MCP passe en ASYNCHRONE — code écrit, non taguée (2026-07-31)** : `ask_<agent>`
 `await`ait un tour complet sous `_query_lock`. Derrière la PWA ou l'horloge, l'appel attendait
 donc **sans timeout, sans identifiant et sans un octet sur le fil** jusqu'au timeout HTTP de
@@ -157,13 +197,13 @@ navigateur l'a (Android/Chrome), sinon `dist/scan.js` (`@zxing/library`) chargé
 demande**. Vérifié sur caniuse AVANT d'écrire : iOS Safari porte l'API mais
 **« disabled by default » de 17.0 à 26.5**, Firefox ne l'a pas du tout — sans repli, le
 bouton serait mort sur l'iPhone. Le wasm (`zxing-wasm`) écarté **après mesure** :
-`@zxing/library` fait 448 Ko / **116 Ko gzip** (le tree-shaking n'y change rien, la
-bibliothèque tire tous ses lecteurs), contre ~1,2 Mo de binaire à vendoriser, servir et
-localiser. Moins d'infra pour le même résultat.
+`@zxing/library` faisait alors 448 Ko / **116 Ko gzip**, contre ~1,2 Mo de binaire à
+vendoriser, servir et localiser. Moins d'infra pour le même résultat. *(Chiffre périmé : le
+bundle est descendu à 138 Ko / 31 Ko gzip par imports profonds — cf. l'entrée en tête.)*
 
 > 🔎 **Le 3ᵉ bundle est la seule chose qui rend le repli gratuit — et une fuite ne se
 > verrait PAS.** Si `@zxing/library` remontait dans `launcher.js` (un import mal placé
-> suffit), chaque chargement de page paierait 116 Ko pour une fonction que la plupart des
+> suffit), chaque chargement de page paierait le décodeur pour une fonction que la plupart des
 > sessions n'ouvrent jamais : aucune erreur, juste une PWA plus lente. Vérifié par une
 > chaîne littérale qui **survit à la minification** (`ISO-8859-1`, `SHIFT_JIS`, propres
 > aux tables de charset de zxing) : **2 occurrences dans `scan.js`, 0 dans `launcher.js`**.
@@ -192,10 +232,11 @@ Vérifié **depuis l'extérieur et déconnecté**, comme l'exige le gotcha 0.40.
 garde n'a pas bougé. Côté serveur, l'addon `food` répond de bout en bout par le vrai trajet
 (pod → `rosetta-bridge` → hub → OFF).
 
-> ⚠️ **Reste le seul essai qui n'a PAS été fait : le scan lui-même, sur l'iPhone, en PWA
-> installée.** Ni le décodeur de repli, ni `getUserMedia` en mode `standalone`, ni
-> `playsinline` ne se vérifient depuis un Mac — tout ce qui précède prouve que les octets
-> sont servis, pas qu'une caméra s'ouvre. À faire au doigt sur l'écran.
+> ⚠️ **Cet essai-là a fini par être fait — et il a ÉCHOUÉ.** Le seul contrôle qui restait (le
+> scan lui-même, au doigt sur l'iPhone) a montré un décodeur incapable de lire quoi que ce soit,
+> pendant que tout le reste — octets servis, caméra, `playsinline`, overlay — fonctionnait. Tout
+> ce qui précédait prouvait que les octets étaient servis, pas qu'un code se lisait. Correctif et
+> tests : entrée en tête de fichier.
 
 **Bloc `{% graphique %}` — livré côté code (agent-gw, non taguée)** : Alfred pouvait écrire des
 chiffres, pas les montrer. Nouveau bloc au catalogue Markdoc (`frontend/src/chart.js`), dessiné

@@ -385,8 +385,9 @@ h2.sec{ font:600 18px/1.3 var(--f-title); margin:24px 0 10px; }
 #scanwrap{ position:fixed; inset:0; z-index:60; background:#000; }
 #scanwrap[hidden]{ display:none; }
 #scanvideo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-/* Viseur purement indicatif : les deux décodeurs lisent la trame entière. Large
-   et bas, à la forme d'un code-barres, pour induire le bon cadrage.
+/* Viseur purement indicatif : les décodeurs lisent tout ce qui est À L'ÉCRAN, pas
+   seulement ce cadre (cf. visibleFrame() dans launcher/main.js). Large et bas, à
+   la forme d'un code-barres, pour induire le bon cadrage.
    theme-lint-ignore: voile posé sur l'image, cf. #scanwrap. */
 .scanframe{ position:absolute; left:8%; right:8%; top:50%; transform:translateY(-50%); height:26vh; border:2px solid var(--accent); border-radius:var(--r); box-shadow:0 0 0 100vmax rgba(0,0,0,.42); pointer-events:none; }
 /* theme-lint-ignore: dégradé de lisibilité sur l'image, cf. #scanwrap. */
