@@ -2,6 +2,49 @@
 
 > MàJ : 2026-07-31
 
+**Contrat de thème + rail de chat rethémable — livré côté code (agent-gw, non taguée)** : le
+skin Skippy était une **surcharge de jetons**, mais la coque avait 83 rayons et 18 couleurs
+**écrits en dur** — le rail de chat, la zone la plus ancienne, n'était donc pas rethémable du
+tout. Symptômes visibles : bulles à 15 px au milieu d'une trace à 3 px, composeur en
+sans-serif sous une charte monospace, et **aucune règle `pre`/`code`** (régression de la
+bascule vers la nouvelle coque — l'ancien chat les avait). `launcher.css` porte désormais un
+**contrat de thème** documenté en tête : fontes par **rôle** (`--f-title`/`--f-body`/
+`--f-input`, fini `--serif` sur lequel Skippy « branchait du monospace »), échelle de rayons à
+8 crans (`--r-micro` → `--r-round`), sur-aplat (`--on-accent`, `--on-solid`, `--scrim`),
+plaques d'icône, bulles, code, signature (`--label-track`, `--caret-display`, `--ghosttag`).
+`skippy.css` est redevenu une **déclaration pure** : plus une seule règle scopée par agent.
+Chat : blocs de code, inline, titres et tables enfin stylés ; caret clignotant sur le
+composeur (au repos seul) et sur l'invite de la passerelle, qui n'existait pas.
+
+> ⚠️ **`.mosaic{}` nu dans `skippy.css` repeignait Alfred.** Une feuille de thème est chargée
+> **inconditionnellement** (`skins/themes.css`) : toute règle non scopée y est active sur
+> **tous** les corps. Celle-ci resserrait la grille d'accueil d'Alfred (190 px au lieu de 210)
+> depuis le premier jour du skin, sans que personne le voie. Contrôle 3 du lint.
+
+> 🔎 **Gotcha — un jeton ne peut pas contenir `var(--tc)`.** Une propriété personnalisée est
+> substituée **à son site de déclaration**, puis hérite **déjà résolue**. Un
+> `--plate-bg:linear-gradient(…,var(--tc),…)` posé sur `:root` calcule `--tc` sur `:root`
+> (indéfini → valeur invalide garantie) et n'atteint jamais la tuile qui porte le `--tc`. Vaut
+> pour tout ce qui dépend d'un ton posé en style inline (`--tc`/`--dc`/`--lc`/`--c`). D'où la
+> composition par **scalaires** : la formule reste dans la règle partagée, seuls ses
+> pourcentages sont des jetons (`--plate-top`/`--plate-mix`/`--plate-fg-tint`).
+
+> 🔎 **`test/theme-lint.mjs` — la convention est vérifiée, pas espérée.** 4 contrôles :
+> (1) aucune couleur littérale ni rayon en pixels dans la coque hors bloc de jetons ;
+> (2) une règle scopée `[data-agent=…]` ne contient QUE des déclarations `--x` ;
+> (3) une règle de thème non scopée doit viser du markup propre au skin ; (4) aucun `var(--x)`
+> sans repli et non déclaré **dans sa portée** — par consommateur, pas sur la réunion des
+> feuilles, sinon un jeton déclaré par le seul Skippy passerait pour déclaré et Alfred
+> tournerait sans défaut. Échappatoire explicite `theme-lint-ignore: <raison>` (le viseur
+> caméra n'est pas thémable). Les 4 contrôles ont été **éprouvés à l'envers** (violation
+> introduite → sortie 1). Câblé dans `npm test`.
+
+⚠️ **Dérives assumées côté Alfred** (normalisation, aucune régression fonctionnelle) : rayons
+alignés sur les 8 crans (±1-2 px : `.cmd` et le textarea 15→13, `.dz-inner` 16→17, plaques
+12→11, barres 3/5→4), dégradé des plaques unifié à 62 % (était 55/60/62), et `.hi` devient
+`position:relative` pour tous (support du calque fantôme — sans offset, ne déplace rien).
+**Reste à valider au doigt sur l'écran**, puis tag → image → déploiement.
+
 **Lecteur de code-barres dans la PWA — livré côté code (agent-gw, non taguée)** : un
 bouton `▥` dans le moretray du composer, un overlay caméra plein écran, un panier de codes
 qui s'accumule. **Le scanner est BÊTE, et c'est le design** : il décode, il dépose dans le
