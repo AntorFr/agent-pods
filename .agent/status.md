@@ -306,9 +306,14 @@ et « pas de rattrapage » vient gratuitement (fenêtre de grâce 5 min, une occ
 la file). Plancher de fréquence 15 min : un cron plus fin rend la fiche **invalide** au lieu
 d'être lissé en silence. Garde : `GW_CHANNEL=planif` injecté via `ClaudeAgentOptions.env`
 (vérifié sur le pod : le SDK **fusionne** ce dict sur l'env hérité, le token OAuth survit) →
-`google_guard.py` ferme **toute** la surface Google sur ce canal, lectures comprises — pas
-seulement à cause du bouclier inarmable, mais contre le **blanchiment** (mail hostile lu sans
-témoin → résumé dans memory/ → relu comme fiable au tour suivant). Onglet PWA `#/planif` en
+`google_guard.py` n'y laisse passer que les **lectures** Google, **toute écriture refusée** —
+brouillon et `calendar_create` compris : une horloge ne fabrique pas d'objet partagé que
+personne n'a relu, et le bouclier reste inarmable sans témoin. Contre le **blanchiment** (mail
+hostile lu sans témoin → résumé dans memory/ → relu comme fiable au tour suivant), la parade
+n'est plus le refus de lire mais la **quarantaine verbatim** côté cerveau : le canal planifié
+recopie le contenu tiers mot pour mot et ne le résume jamais. ⚠️ **D40 (31/07) amende D30 sur
+ce point** — jusque-là la surface était fermée en entier, lectures comprises ; c'est le régime
+que décrivent les vérifications ci-dessous. Onglet PWA `#/planif` en
 **lecture** (créer/suspendre = message à Alfred). Le prompt porte un **cadre de provenance**
 (patron `ask_alfred`) : sans lui l'agent ne peut pas *savoir* qu'il est dans un tour planifié
 — la discipline lui dit comment s'y comporter, pas qu'il y est ; le corps de la fiche passe

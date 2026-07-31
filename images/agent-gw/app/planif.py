@@ -1,4 +1,4 @@
-"""Planif — tâches planifiées d'Alfred (spec cerveau : DECISIONS.md D30).
+"""Planif — tâches planifiées d'Alfred (spec cerveau : DECISIONS.md D30, amendée par D40).
 
 Une planification est une fiche `type: planif` de la mémoire (`memory/planif/*.md`,
 en git, écrite par Alfred seul) dont le **CORPS EST L'INSTRUCTION** : à l'heure dite,
@@ -22,10 +22,14 @@ Trois partis pris qui expliquent le code :
 
 3. **`GW_CHANNEL=planif` est passé au SDK par `options.env`** (vérifié : le SDK
    FUSIONNE ce dict par-dessus l'environnement hérité, le token OAuth survit). Le
-   hook `google_guard.py` du workspace lit cette variable et ferme TOUTE la surface
-   Google sur ce canal, lectures comprises : personne n'est là pour armer le
-   bouclier, et un mail hostile lu sans témoin puis résumé dans memory/ blanchirait
-   du contenu non fiable en mémoire de confiance.
+   hook `google_guard.py` du workspace lit cette variable et n'y laisse passer que
+   les LECTURES Google : toute écriture est refusée sur ce canal, brouillon et
+   création d'événement compris — personne n'est là pour armer le bouclier, et une
+   horloge ne fabrique pas d'objet partagé que personne n'a relu. Contre le
+   blanchiment (mail hostile lu sans témoin puis résumé dans memory/, relu comme
+   fiable au tour suivant), la parade n'est plus le refus de lire mais une
+   discipline d'écriture côté cerveau : le canal planifié recopie le contenu tiers
+   VERBATIM en quarantaine et ne le résume jamais (D40, qui amende D30).
 
 Le journal d'exécution va dans `planif/planif-state.json` — hors git, éphémère pur,
 comme workbook-state.json et todo-state.json. La gateway n'écrit JAMAIS memory/.
