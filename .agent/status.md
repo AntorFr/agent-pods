@@ -2,6 +2,28 @@
 
 > MàJ : 2026-07-31
 
+**Identité par skin, jusqu'au favicon — DÉPLOYÉ (2026-07-31, agent-gw 0.40.1)** : le nœud
+papillon du majordome s'affichait dans l'onglet du pod de code, et deux PWA installées sur le
+même téléphone portaient le même nom. Favicon et manifeste sont réclamés par le navigateur
+**avant tout JavaScript** — ils ne pouvaient donc pas venir du registre côté client. D'où un
+pendant serveur : un skin dépose ses actifs sous `static/skins/<id>/` (`icon.svg`,
+`manifest.json`), servis par les routes `/icon.svg` et `/manifest.webmanifest` — chemin stable
+dans `app.html`, contenu qui dépend de `GW_THEME`, repli sur le socle si le skin n'a rien
+déposé. Le blason de l'en-tête, lui, reste côté skin (champ `crest`, en `currentColor`).
+Icône Skippy en **SVG à la main** plutôt qu'en image générée : à 16 px une matricielle bave et
+le sujet EST géométrique — réduite à ce qui survit (anneau ambre interrompu, cœur, quatre
+graduations) au lieu des 72 de la maquette. Vérifié **depuis l'extérieur, sans session** :
+`/icon.svg` 200 `image/svg+xml` 1930 o portant bien `aria-label="Skippy"` + `#F2A93B`,
+manifeste 200 au nom de Skippy, `/` toujours 307 (la garde n'a pas bougé), et l'icône d'Alfred
+intacte. 11 tests de plus.
+
+> 🔎 **Gotcha — sortir un actif de `/static/` le fait retomber derrière le SSO.** `_PUBLIC_PATHS`
+> liste `/static/`, pas les routes racine. En 0.40.0 le favicon répondait donc **307 vers le
+> login** : page de connexion sans icône, et installateur de PWA — qui fetche l'icône du
+> manifeste sans forcément joindre le cookie — bredouille. Corrigé en 0.40.1 (+ test qui pinne
+> les chemins publics). ⚠️ **Ne se voit PAS depuis le pod** : en interne le middleware laisse
+> passer et on lit un 200 trompeur. Tout actif public se vérifie **en externe et déconnecté**.
+
 **Habillage déclaratif des domaines — livré côté code (agent-gw, non taguée)** : l'icône et la
 couleur d'un domaine étaient une ligne d'`APP_META` dans `main.js`. Un domaine neuf (`sante`)
 sortait donc en `◆` + couleur hachée jusqu'au prochain déploiement — et Alfred, qui *crée* les
