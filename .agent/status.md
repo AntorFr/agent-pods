@@ -109,10 +109,31 @@ busy:true}` **instantanément**, puis `ask_alfred_status` a rendu `done` + la r�
 > juste : `gh run view <id> --json jobs` filtré sur `build (agent-gw)`, **puis** le manifeste au
 > registre avant de toucher au cluster.
 
-> ⚠️ **Le rappel croisé n'est PAS câblé.** `GW_PEER_MCP_URL/_TOKEN/_TOOL` restent vides : le code
-> est inerte sans eux et l'appelant interroge `ask_<agent>_status`. Le câblage suppose d'écrire le
-> jeton MCP du **pair** dans chaque manifeste (DR-via-git) — refusé par le garde-fou de
-> permissions, à poser sur décision explicite de Monsieur.
+**Rappel croisé CÂBLÉ en croix (2026-08-01)** : `GW_PEER_MCP_URL/_TOKEN/_TOOL` posés dans les
+**deux** manifestes. Chacun vise le `/mcp/` de l'autre par son **nom de service** (le Host est
+alors listé dans le `GW_MCP_ALLOWED_HOSTS` du pair, sinon FastMCP répond 421) et porte le jeton
+du **PAIR** — on s'authentifie chez lui, pas chez soi. **E2E prouvé en prod**, chronologie
+relevée dans les deux journaux :
+
+```
+ALFRED                              SKIPPY
+22:11:46  appel entrant (ask_alfred)
+22:12:02  tour démarre ───────────►
+                                    22:12:06  appel entrant + tour   ← le rappel, seul
+22:12:53  appel entrant (statut)              (AUCUN rappel en retour)
+```
+
+L'accusé de réception est revenu en **0,01 s**, le travail a rendu `done` + sa réponse, et
+`notify_error` est resté vide. ⚠️ **Le garde-fou anti-boucle tient en vrai** : le tour né du
+rappel porte `notify=false`, Skippy n'a pas rappelé Alfred — sans quoi les deux corps se
+renverraient des comptes rendus jusqu'à épuisement de l'abonnement.
+
+> 🔎 **Le contrat rompu a été porté aux DEUX cerveaux, pas seulement au corps.** Côté Skippy :
+> `context/homelab/mcp-oauth.md` (la fiche décrivait encore l'appel bloquant). Côté Alfred :
+> transmis **par son propre canal** (`ask_alfred`, `notify=false`) pour qu'il applique sa
+> discipline d'amélioration — il en a tiré **D41**, une section de `CLAUDE.md`, et la réécriture
+> d'une fiche mémoire devenue un contresens. Un corps qu'on déploie sans prévenir les cerveaux
+> laisse deux configs qui mentent.
 
 **`GW_FEATURES` — les capacités de la coque, désactivables par corps — DÉPLOYÉ (2026-07-31,
 agent-gw 0.46.0)** : `GW_APPS` disait où l'on peut **aller** (tuiles et routes) ; rien ne disait
