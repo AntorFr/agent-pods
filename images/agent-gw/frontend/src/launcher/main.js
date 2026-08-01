@@ -2253,6 +2253,11 @@ const VTYPE = {
   trajet: { ico: '🧭', c: '--proj', n: 'trajet' },
 };
 const vtypeOf = (t) => VTYPE[t] || { ico: '◆', c: '--voyage', n: t || 'carte' };
+// Le `type` CLASSE la carte (couleur, facettes du tray, calcul des nuits côté serveur) ;
+// le glyphe, lui, n'est que de l'affichage — Alfred peut le poser par carte (`ico`), un
+// marché n'étant pas un aviron. Vient d'un fichier et part en innerHTML → échappé ici,
+// une fois pour tous les rendus (même contrat que l'`ico` de frontmatter d'un domaine).
+const vicoOf = (i) => esc(i.ico || '') || vtypeOf(i.type).ico;
 const CRX = { matin: 0, midi: 1, 'apres-midi': 2, soir: 3 };
 const CRN = { matin: 'matin', midi: 'midi', 'apres-midi': 'après-midi', soir: 'soir' };
 // L'ordre des cartes EST le déroulé du jour : rang explicite (`ordre`, posé par le
@@ -2397,7 +2402,7 @@ function vitemHTML(it, extra) {
   if (it.duree) chips.push(`<span class="chip">◷ ${esc(it.duree)}</span>`);
   if (it.prix) chips.push(`<span class="chip">${esc(it.prix)}</span>`);
   if (it.gmail) chips.push('<span class="chip due">📧 résa</span>');
-  return `<div class="vcard" draggable="true" title="Clic : fiche · Glisser : déplacer" data-vi="${esc(it.id)}" style="--ic:var(${T.c})"><span class="vico">${it.ico || T.ico}</span><div class="bd"><div class="vt">${esc(it.titre || it.id)}</div>${chips.length ? `<div class="vmeta">${chips.join('')}</div>` : ''}</div>${extra || ''}</div>`;
+  return `<div class="vcard" draggable="true" title="Clic : fiche · Glisser : déplacer" data-vi="${esc(it.id)}" style="--ic:var(${T.c})"><span class="vico">${vicoOf(it)}</span><div class="bd"><div class="vt">${esc(it.titre || it.id)}</div>${chips.length ? `<div class="vmeta">${chips.join('')}</div>` : ''}</div>${extra || ''}</div>`;
 }
 
 function paintVoyage() {
@@ -2416,7 +2421,7 @@ function paintVoyage() {
     page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">Voyage à l’état d’idée — le tray vit, la timeline attend les dates.</div></div></div>${props}
       <div class="callout">🗓️ <b>Posez les dates pour composer</b> — dites-le à Alfred (« on part du 12 au 26 avril ») : sans début ni fin, la confirmation est impossible.</div>
       <div class="grouplabel">Suggestions <span class="hint">— par Alfred, en attendant</span></div>
-      <div class="cards">${allSug.map((i) => `<button class="card" data-open="${esc(i.id)}"><div class="ct">${vtypeOf(i.type).ico} ${esc(i.titre || i.id)}</div><div class="cmeta">${esc(i.hint || '')}</div><div class="foot"><span class="tag">${vtypeOf(i.type).n}</span></div></button>`).join('') || '<div class="empty">Aucune suggestion — demandez-en à Alfred.</div>'}</div></div>`;
+      <div class="cards">${allSug.map((i) => `<button class="card" data-open="${esc(i.id)}"><div class="ct">${vicoOf(i)} ${esc(i.titre || i.id)}</div><div class="cmeta">${esc(i.hint || '')}</div><div class="foot"><span class="tag">${vtypeOf(i.type).n}</span></div></button>`).join('') || '<div class="empty">Aucune suggestion — demandez-en à Alfred.</div>'}</div></div>`;
     page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
     return;
   }
@@ -2440,15 +2445,15 @@ function paintVoyage() {
       if (c.lat != null) prev = c;
     });
     if (!cards.length) flow = '<div class="vfree">— journée libre — déposez une carte</div>';
-    return `<div class="vday" data-day="${day}"><div class="vday-h"><span class="dn">${vfmtDay(day)}</span><span class="wx na" data-wx="${day}"></span></div>${band ? `<div class="vband" data-open="${esc(band.id)}">🏠 ${esc(band.titre || band.id)}<span class="fx">${band.debut === day ? 'arrivée' : ''}</span></div>` : ''}<div class="vflow">${flow}</div></div>`;
+    return `<div class="vday" data-day="${day}"><div class="vday-h"><span class="dn">${vfmtDay(day)}</span><span class="wx na" data-wx="${day}"></span></div>${band ? `<div class="vband" data-open="${esc(band.id)}">${vicoOf(band)} ${esc(band.titre || band.id)}<span class="fx">${band.debut === day ? 'arrivée' : ''}</span></div>` : ''}<div class="vflow">${flow}</div></div>`;
   }).join('');
 
   const types = [...new Set(allSug.map((i) => i.type))];
   const tray = `<aside class="vtray"><div class="th">Suggestions <span class="cnt">${allSug.length}</span></div>
     ${types.length > 1 ? `<div class="facets">${['', ...types].map((tp) => `<button class="pill ${(!tp && !voy.filter) || voy.filter === tp ? 'on' : ''}" data-tf="${esc(tp)}">${tp ? vtypeOf(tp).n : 'Tous'}</button>`).join('')}</div>` : ''}
-    <div class="traygrid">${sug.map((i) => `<div class="traycard" draggable="true" title="Clic : fiche · Glisser : confirmer" data-vi="${esc(i.id)}" style="--ic:var(${vtypeOf(i.type).c})"><button class="dis" data-dis="${esc(i.id)}" title="Écarter — conservée, jamais reproposée">✕</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}${i.prix ? `<div class="vmeta"><span class="chip">${esc(i.prix)}</span></div>` : ''}</div></div>`).join('') || '<div class="empty">Rien à trier — demandez des suggestions à Alfred.</div>'}</div>
+    <div class="traygrid">${sug.map((i) => `<div class="traycard" draggable="true" title="Clic : fiche · Glisser : confirmer" data-vi="${esc(i.id)}" style="--ic:var(${vtypeOf(i.type).c})"><button class="dis" data-dis="${esc(i.id)}" title="Écarter — conservée, jamais reproposée">✕</button><span class="vico">${vicoOf(i)}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}${i.prix ? `<div class="vmeta"><span class="chip">${esc(i.prix)}</span></div>` : ''}</div></div>`).join('') || '<div class="empty">Rien à trier — demandez des suggestions à Alfred.</div>'}</div>
     <div class="trayfoot">🖐 Une carte sur un jour = confirmée · une carte du planning ici = rendue aux suggestions${nEc ? ` · <button class="eclink" data-ectoggle>${nEc} écartée${nEc > 1 ? 's' : ''} ${voy.showEc ? '▾' : '▸'}</button>` : ''}</div>
-    ${voy.showEc && nEc ? `<div class="traygrid">${items.filter((i) => i.statut === 'ecartee').map((i) => `<div class="traycard ec" data-vi="${esc(i.id)}"><button class="dis" data-rest="${esc(i.id)}" title="Reprendre dans les suggestions" style="opacity:1">↺</button><span class="vico">${vtypeOf(i.type).ico}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}</div></div>`).join('')}</div>` : ''}</aside>`;
+    ${voy.showEc && nEc ? `<div class="traygrid">${items.filter((i) => i.statut === 'ecartee').map((i) => `<div class="traycard ec" data-vi="${esc(i.id)}"><button class="dis" data-rest="${esc(i.id)}" title="Reprendre dans les suggestions" style="opacity:1">↺</button><span class="vico">${vicoOf(i)}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}</div></div>`).join('')}</div>` : ''}</aside>`;
 
   page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div></div>`;
 
@@ -2555,7 +2560,7 @@ function openVFiche(id) {
     : it.place_id ? '<div class="vsrc">📍 Fiche maps — note, horaires, itinéraire via <span class="mono">place_id</span>.</div>' : '';
   const docs = (it.docs || []).map((doc) => `<a class="vdoc" href="/api/memory/raw/${esc(vDir() + doc.fichier)}?download=1"><span class="ext">${esc((doc.fichier.split('.').pop() || 'doc').toUpperCase())}</span><div><div class="fn">${esc(doc.titre || doc.fichier)}</div><div class="fs">${esc(doc.fichier)}</div></div></a>`).join('');
   const body = vModal.querySelector('#vfiche-body');
-  body.innerHTML = `<div class="vhead"><span class="vico">${it.ico || T.ico}</span><div><div class="vst">${esc(it.titre || it.id)}</div><div class="vsub">${T.n} · <span class="stat ${stCls}">${esc(stLbl)}</span> · ${cal}</div></div></div>
+  body.innerHTML = `<div class="vhead"><span class="vico">${vicoOf(it)}</span><div><div class="vst">${esc(it.titre || it.id)}</div><div class="vsub">${T.n} · <span class="stat ${stCls}">${esc(stLbl)}</span> · ${cal}</div></div></div>
     ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
     ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
     ${it.statut === 'confirme' && !it.debut ? `<div class="vhour"><span class="vby" style="margin:0">Heure</span><input type="time" id="vh-in" value="${esc(String(it.heure || '').replace('h', ':'))}"><button class="vopen" data-sethour>Poser</button>${it.heure ? '<button class="vopen" data-clearhour>Effacer</button>' : ''}<span class="vhint">optionnelle — l’ordre des cartes fait le déroulé, l’heure l’annote</span></div>` : ''}

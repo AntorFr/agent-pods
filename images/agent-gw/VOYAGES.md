@@ -108,6 +108,13 @@ domaines/voyages/
 - `lieu` : référence un `lieux[].id` du voyage (optionnel — rattache la carte à une étape,
   sert aussi à la météo). Les `lieux` sont géocodés une fois par Alfred à la création.
 - `prix`, `notes` : optionnels, texte libre.
+- **`ico` — le glyphe de la carte, au choix d'Alfred.** Le `type` **classe** (couleur de la
+  carte, facettes du tray, décompte des nuits côté serveur) mais ne doit pas dicter le
+  dessin : le vocabulaire des types est fermé et grossier, si bien qu'un marché provençal
+  atterrit en `activite` et s'affiche en aviron. `ico` (un emoji) **remplace le glyphe du
+  type** partout où la carte se rend — timeline, bandeau d'hébergement, tray, écartées,
+  fiche. Optionnel : sans lui, le glyphe du type sert de repli. Il vient d'un fichier et part
+  en `innerHTML` → **échappé au rendu** (`vicoOf`), comme l'`ico` de frontmatter d'un domaine.
 - **`desc` + `web` — la fiche de la carte.** `desc` : 2-3 phrases rédigées par Alfred au moment
   où il crée la carte (pourquoi c'est proposé, le conseil pratique). C'est un **jugement
   consigné, durable — donc stocké**, contrairement à la météo et aux liaisons qui, elles, se

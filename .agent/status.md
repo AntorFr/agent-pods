@@ -2,6 +2,15 @@
 
 > MàJ : 2026-08-01
 
+**Le glyphe d'une carte voyage se choisit — NON DÉPLOYÉ (attend un tag)** : signalé au doigt
+(« un marché en aviron ? »). L'icône était déduite du seul `type`, dont le vocabulaire est
+fermé et grossier (`hebergement|resto|activite|visite|trajet`) — tout ce qui n'est ni resto ni
+visite tombe en `activite`, donc en 🚣. Le champ `ico` par carte existait déjà… **à moitié** :
+honoré sur la carte de timeline et la fiche, ignoré au tray, aux écartées, au bandeau
+d'hébergement et à la vue « idée » — et **non échappé** alors qu'il part en `innerHTML`. Un
+seul `vicoOf()` (échappé, repli sur le type) désormais appelé aux six endroits. Le `type` reste
+la **classification** (couleur, facettes, décompte des nuits) ; il ne dicte plus le dessin.
+
 **Le lecteur de code-barres était MORT en production — DÉPLOYÉ (2026-08-01, agent-gw 0.47.0)** :
 signalé au doigt sur l'iPhone (« la caméra s'ouvre avec le cadre, mais rien ne se détecte »).
 La caméra n'y était pour rien : **le décodeur de repli ne pouvait mathématiquement rien lire**.
