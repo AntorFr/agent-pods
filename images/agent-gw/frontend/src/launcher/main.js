@@ -237,7 +237,7 @@ async function sendMessage(text, forceEph, atts) {
     let res;
     const deadline = Date.now() + 180000;
     while (true) {
-      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined, ephemeral: eph || undefined, ephemeral_session: (eph && ephSession) || undefined, attachments: attIds.length ? attIds : undefined }) });
+      res = await fetch('/api/chat', { method: 'POST', headers: headers(true), body: JSON.stringify({ message: text, model: modelSel.value || undefined, ephemeral: eph || undefined, ephemeral_session: (eph && ephSession) || undefined, attachments: attIds.length ? attIds : undefined, vue: currentView() }) });
       if (res.status !== 409) break;
       if (Date.now() > deadline) throw new Error('Alfred est occupé depuis un moment — réessayez.');
       await new Promise((r) => setTimeout(r, 1500));
@@ -1050,6 +1050,23 @@ function crumbs(parts) {
   const sc = document.querySelector('.scroll'); if (sc) sc.scrollTop = 0;
 }
 $('back').addEventListener('click', () => { if (CR.length > 1) location.hash = CR[CR.length - 2].hash; });
+
+// Contexte d'écran, joint à chaque message : sur desktop le canvas est ouvert À CÔTÉ
+// du chat, donc « ça » dans une phrase de Monsieur désigne le plus souvent ce qu'il a
+// sous les yeux. On envoie la route et son fil d'Ariane, JAMAIS le contenu de la page :
+// une carte de voyage ou une fiche produit porte du texte tiers (Gmail, Open Food
+// Facts) qui n'entre pas dans un prompt sans son étiquette « non fiable » (cf. D40).
+// Rien à joindre quand l'écran n'est pas réellement regardé — accueil (route vide) ou
+// mobile replié sur le chat : un instantané à l'envoi, jamais un sujet qui colle.
+function currentView() {
+  const route = currentRoute();
+  if (!route) return undefined;
+  if (mqMobile.matches && !document.body.classList.contains('canvas-open')) return undefined;
+  // 'Accueil' ouvre tous les fils : redondant. '…' est le libellé d'attente d'un
+  // rendu asynchrone — on ne l'envoie pas, la route dit déjà mieux.
+  const titre = CR.slice(1).map((c) => c.label).filter((l) => l && l !== '…').join(' › ');
+  return { route, titre: titre || route };
+}
 
 const page = $('view');
 function renderRoute() {

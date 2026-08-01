@@ -106,6 +106,30 @@ entrées de plus de `GW_INBOX_TTL` à chaque upload : les pièces jointes sont u
 tour, pas de la mémoire — si l'une doit survivre, c'est Alfred qui la classe dans
 `memory/` selon sa discipline.
 
+## Contexte d'écran
+
+Sur desktop, la PWA est un **split** : le chat à gauche, le canvas à droite. « Ça »,
+dans une phrase de Monsieur, désigne donc le plus souvent la page qu'il a sous les yeux
+— que le chat ignorait complètement. Chaque message porte désormais un champ
+`vue: {route, titre}` (`POST /api/chat`), dont le serveur **préfixe le prompt** d'une
+note d'une ligne : *« Écran ouvert à côté du chat : « Voyages › Baden 2026 »
+(#/voyage/baden-2026) »*.
+
+Trois bornes, qui sont le fond du dispositif :
+
+- **La route et son fil d'Ariane, jamais le contenu de la page.** Une carte de voyage ou
+  une fiche produit cite du texte tiers (Gmail, Open Food Facts) : le verser dans le
+  prompt le dépouillerait de son étiquette « non fiable », et le tour suivant le relirait
+  comme la parole d'Alfred (même piège que D40 côté planifications).
+- **Un indice, pas un sujet imposé.** La note le dit au modèle en toutes lettres : la
+  question de Monsieur prime, il peut parfaitement regarder une fiche et parler d'autre
+  chose. Le hash reste orientable par un lien qu'on fait cliquer, donc l'entrée est
+  bornée à 200 caractères et **aplatie sur une seule ligne** (un saut de ligne suffirait
+  à mimer une consigne du harnais).
+- **Instantané à l'envoi, et seulement si l'écran est regardé.** Rien n'est joint depuis
+  l'accueil (route vide) ni sur mobile replié sur le chat — on ne raconte pas un écran
+  que Monsieur ne regarde pas. Rien ne colle d'un message au suivant.
+
 ## Sessions : coût en tokens, sujets, mode éphémère
 
 Trois mécanismes bornent la consommation (chaque tour rejoue tout le transcript, cache

@@ -2,6 +2,19 @@
 
 > MàJ : 2026-08-01
 
+**Le chat sait ce que Monsieur regarde — NON DÉPLOYÉ (attend un tag)** : sur desktop la PWA est
+un split (chat à gauche, canvas à droite), et le chat ignorait totalement l'autre volet — « ça »
+ne désignait rien. Le front joint désormais `vue: {route, titre}` à chaque `POST /api/chat`
+(`currentView()`, bâti sur `currentRoute()` et le fil d'Ariane `CR`), que `_view_note()` préfixe
+au prompt en une ligne. **La route et le fil d'Ariane, jamais le contenu de la page** : les
+cartes citent du texte tiers (Gmail, OFF) qui perdrait son étiquette « non fiable » en entrant
+dans le prompt — c'est le piège de D40, par la porte de service. L'entrée est bornée à 200
+caractères et aplatie sur une ligne (un hash s'oriente par un lien qu'on fait cliquer ; un saut
+de ligne mimerait une consigne du harnais), et la note se dit **indice, pas sujet imposé** :
+regarder une fiche et parler d'autre chose reste gratuit. Rien n'est joint depuis l'accueil ni
+sur mobile replié sur le chat. `test/vue_test.py` couvre les 18 cas (absences, troncature,
+aplatissement, types tordus).
+
 **Le glyphe d'une carte voyage se choisit — DÉPLOYÉ (2026-08-01, agent-gw 0.48.0)** : signalé au doigt
 (« un marché en aviron ? »). L'icône était déduite du seul `type`, dont le vocabulaire est
 fermé et grossier (`hebergement|resto|activite|visite|trajet`) — tout ce qui n'est ni resto ni

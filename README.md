@@ -53,7 +53,7 @@ HTTP server (port 8000) serving a chat PWA (markdown rendering via vendored
 [marked](https://github.com/markedjs/marked) + [DOMPurify](https://github.com/cure53/DOMPurify),
 typing indicator, model picker) and an SSE API:
 
-- `POST /api/chat` — send a message (`{message, model?}`), stream the agent's reply (SSE)
+- `POST /api/chat` — send a message (`{message, model?, vue?}`), stream the agent's reply (SSE)
 - `POST /api/reset` — start a fresh session for the channel
 - `GET /api/models` — models offered in the PWA dropdown
 - `GET /api/version` — the running build (`GW_VERSION`, baked at image build time
