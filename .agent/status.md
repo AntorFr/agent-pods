@@ -2,7 +2,7 @@
 
 > MàJ : 2026-08-01
 
-**Le chat sait ce que Monsieur regarde — NON DÉPLOYÉ (attend un tag)** : sur desktop la PWA est
+**Le chat sait ce que Monsieur regarde — DÉPLOYÉ (2026-08-01, agent-gw 0.49.0)** : sur desktop la PWA est
 un split (chat à gauche, canvas à droite), et le chat ignorait totalement l'autre volet — « ça »
 ne désignait rien. Le front joint désormais `vue: {route, titre}` à chaque `POST /api/chat`
 (`currentView()`, bâti sur `currentRoute()` et le fil d'Ariane `CR`), que `_view_note()` préfixe
@@ -14,6 +14,14 @@ de ligne mimerait une consigne du harnais), et la note se dit **indice, pas suje
 regarder une fiche et parler d'autre chose reste gratuit. Rien n'est joint depuis l'accueil ni
 sur mobile replié sur le chat. `test/vue_test.py` couvre les 18 cas (absences, troncature,
 aplatissement, types tordus).
+
+> ✅ **Vérifié en prod** — image `0.49.0` contrôlée **au manifeste registry** (index OCI
+> `linux/amd64` + `linux/arm64`) AVANT de bumper, sans docker : jeton anonyme sur
+> `ghcr.io/token?scope=repository:antorfr/agent-gw:pull`, puis `GET /v2/.../manifests/0.49.0`
+> avec l'`Accept` de l'index. Les deux manifestes k8s bumpés (`alfred-helm.yml` **et**
+> `skippy-helm.yml` — l'image sert les deux corps), ArgoCD a fait tomber les deux pods, et
+> **`launcher.js` servi par `alfred` ET par `skippy` a le SHA-256 exact du build local**
+> (`4f769704…`, 116 350 octets) : les deux tournent sur les nouveaux octets.
 
 **Le glyphe d'une carte voyage se choisit — DÉPLOYÉ (2026-08-01, agent-gw 0.48.0)** : signalé au doigt
 (« un marché en aviron ? »). L'icône était déduite du seul `type`, dont le vocabulaire est
