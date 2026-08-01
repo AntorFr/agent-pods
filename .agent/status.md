@@ -2,14 +2,28 @@
 
 > MàJ : 2026-08-01
 
-**Le glyphe d'une carte voyage se choisit — NON DÉPLOYÉ (attend un tag)** : signalé au doigt
+**Le glyphe d'une carte voyage se choisit — DÉPLOYÉ (2026-08-01, agent-gw 0.48.0)** : signalé au doigt
 (« un marché en aviron ? »). L'icône était déduite du seul `type`, dont le vocabulaire est
 fermé et grossier (`hebergement|resto|activite|visite|trajet`) — tout ce qui n'est ni resto ni
 visite tombe en `activite`, donc en 🚣. Le champ `ico` par carte existait déjà… **à moitié** :
 honoré sur la carte de timeline et la fiche, ignoré au tray, aux écartées, au bandeau
 d'hébergement et à la vue « idée » — et **non échappé** alors qu'il part en `innerHTML`. Un
 seul `vicoOf()` (échappé, repli sur le type) désormais appelé aux six endroits. Le `type` reste
-la **classification** (couleur, facettes, décompte des nuits) ; il ne dicte plus le dessin.
+la **classification** (couleur, facettes, décompte des nuits) ; il ne dicte plus le dessin. Côté
+cerveau, la skill `voyages` d'Alfred lui dit désormais de **poser un `ico`** sur chaque carte
+qu'il crée.
+
+> ✅ **Vérifié de l'extérieur, sans kubectl** — j'étais **hors du domicile** : le VPN route bien
+> `192.168.10.11` (ping OK) mais le DNS LAN ne répond pas, donc `kubectl` (nom court `homenode`)
+> et `ssh` (port 22) sont restés injoignables. Le contrôle est passé par l'ingress en forçant la
+> résolution : `curl --resolve <host>:443:192.168.10.11`. **`launcher.js` servi par `alfred` ET
+> par `skippy` a le SHA-256 exact de mon build local** (`22b21b70…`, 116 136 octets) — preuve de
+> bout en bout que les deux corps tournent sur les nouveaux octets. `/api/version` répond **401**
+> sur les deux : la garde d'auth n'a pas bougé. Image GHCR **vérifiée au manifeste registry**
+> (index OCI `linux/amd64` + `linux/arm64`) AVANT de bumper.
+> 🔎 **`curl --resolve` est le contournement à retenir hors domicile** : il garde SNI et
+> validation de certificat entiers, là où `--server=https://homenode.berard.me:6443` échoue
+> (le cert du cluster ne porte ni FQDN ni IP).
 
 **Le lecteur de code-barres était MORT en production — DÉPLOYÉ (2026-08-01, agent-gw 0.47.0)** :
 signalé au doigt sur l'iPhone (« la caméra s'ouvre avec le cadre, mais rien ne se détecte »).
