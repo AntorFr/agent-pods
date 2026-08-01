@@ -40,9 +40,10 @@ zxing au lieu d'avaler l'erreur en boucle (`.catch(() => [])` laissait le scan m
 > caméra requise. **9 tests neufs** (`frontend/test/scan-decode-test.mjs`) qui bundlent le
 > fichier RÉELLEMENT livré et décodent EAN-13/EAN-8, contraste faible, trames vide/bruitée, deux
 > trames d'affilée — plus un **contre-exemple ITF** qui échouerait si les hints resautaient.
-> Suite JS complète au vert. Aucun Python touché. **Reste à taguer, construire et déployer.**
+> Suite JS complète au vert. Aucun Python touché. **DÉPLOYÉ en 0.47.0** (même tag que la
+> bascule MCP ci-dessous — les deux chantiers étaient non tagués au moment de la publication).
 
-**La surface MCP passe en ASYNCHRONE — code écrit, non taguée (2026-07-31)** : `ask_<agent>`
+**La surface MCP passe en ASYNCHRONE — DÉPLOYÉ (2026-08-01, agent-gw 0.47.0)** : `ask_<agent>`
 `await`ait un tour complet sous `_query_lock`. Derrière la PWA ou l'horloge, l'appel attendait
 donc **sans timeout, sans identifiant et sans un octet sur le fil** jusqu'au timeout HTTP de
 l'appelant — Alfred a perdu des demandes sans jamais pouvoir les reprendre, incapable même de
@@ -72,8 +73,29 @@ retransformé en `await` → FAIL).
 > ⚠️ **Contrat rompu à dessein, à annoncer aux deux cerveaux.** `ask_<agent>` ne rend plus
 > `{reply, task_id}`. La description de l'outil le dit en toutes lettres (« ASYNCHRONOUS: …
 > returns immediately with a job_id »), donc un agent appelant s'adapte à la lecture — mais un
-> code qui lirait `.reply` en dur ne verrait rien. Reste à livrer : tag + image + bump des **deux**
-> manifestes, puis câbler `GW_PEER_MCP_*` en croix.
+> code qui lirait `.reply` en dur ne verrait rien.
+
+**Déploiement** : tag `agent-gw-v0.47.0` → image GHCR **multi-arch vérifiée au manifeste
+registry** (`linux/amd64` + `linux/arm64`) → les **deux** manifestes bumpés 0.46.0 → 0.47.0 →
+pods `alfred` 3/3 et `skippy` 2/2 Running, 0 redémarrage, tous deux sur
+`ghcr.io/antorfr/agent-gw:0.47.0`, `GW_VERSION=0.47.0`. Surface servie vérifiée **dans le pod**
+(`tools/list` via le vrai endpoint) : `ask_alfred` **et** `ask_alfred_status`. **E2E prouvé en
+prod** : un `ask_alfred` par l'ingress a rendu `{job_id, status:"accepted", queued_behind:0,
+busy:true}` **instantanément**, puis `ask_alfred_status` a rendu `done` + la réponse ; un
+`job_id` inconnu est refusé proprement.
+
+> 🔎 **Piège d'attente d'un run multi-image — ne pas sonder `gh run list --limit 1`.** Le
+> workflow a une **matrice** (`agent-gw`, `claude-pod`, `alfred-voice`) et chaque image saute le
+> tag qui ne la concerne pas : deux jobs finissent en secondes, le troisième construit en ARM
+> émulé pendant ~7 min. Sonder la liste rend le run **le plus récent**, pas le nôtre → j'ai
+> annoncé « image construite » alors que 0.47.0 renvoyait encore 404 au registre. Le contrôle
+> juste : `gh run view <id> --json jobs` filtré sur `build (agent-gw)`, **puis** le manifeste au
+> registre avant de toucher au cluster.
+
+> ⚠️ **Le rappel croisé n'est PAS câblé.** `GW_PEER_MCP_URL/_TOKEN/_TOOL` restent vides : le code
+> est inerte sans eux et l'appelant interroge `ask_<agent>_status`. Le câblage suppose d'écrire le
+> jeton MCP du **pair** dans chaque manifeste (DR-via-git) — refusé par le garde-fou de
+> permissions, à poser sur décision explicite de Monsieur.
 
 **`GW_FEATURES` — les capacités de la coque, désactivables par corps — DÉPLOYÉ (2026-07-31,
 agent-gw 0.46.0)** : `GW_APPS` disait où l'on peut **aller** (tuiles et routes) ; rien ne disait
