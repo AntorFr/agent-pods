@@ -1,8 +1,8 @@
 # Status — agent-pods
 
-> MàJ : 2026-07-31
+> MàJ : 2026-08-01
 
-**Le lecteur de code-barres était MORT en production — corrigé, non taguée (2026-07-31)** :
+**Le lecteur de code-barres était MORT en production — DÉPLOYÉ (2026-08-01, agent-gw 0.47.0)** :
 signalé au doigt sur l'iPhone (« la caméra s'ouvre avec le cadre, mais rien ne se détecte »).
 La caméra n'y était pour rien : **le décodeur de repli ne pouvait mathématiquement rien lire**.
 `scan/main.js` passait le RGBA d'un canvas à `RGBLuminanceSource`, qui ne dépaquette QUE de
@@ -42,6 +42,14 @@ zxing au lieu d'avaler l'erreur en boucle (`.catch(() => [])` laissait le scan m
 > trames d'affilée — plus un **contre-exemple ITF** qui échouerait si les hints resautaient.
 > Suite JS complète au vert. Aucun Python touché. **DÉPLOYÉ en 0.47.0** (même tag que la
 > bascule MCP ci-dessous — les deux chantiers étaient non tagués au moment de la publication).
+
+> ✅ **Vérifié depuis l'extérieur et déconnecté**, comme l'exige le gotcha 0.40.1 :
+> `/static/scan.js` → **200 `text/javascript`, 141 392 octets** (c'était 459 077 en 0.44.0, donc
+> ce sont bien les nouveaux octets qui sont servis), `/` toujours **307** — la garde d'auth n'a
+> pas bougé. Les **deux** corps tournent sur `agent-gw:0.47.0`, tous conteneurs `ready`.
+> ⚠️ Le seul contrôle qui reste hors de portée d'un Mac est le même que la dernière fois : un
+> code-barres réel devant l'objectif de l'iPhone. Cette fois le décodage lui-même est sous test
+> (`scan-decode-test.mjs`), donc ce qui reste à éprouver est l'optique, pas l'algorithme.
 
 **La surface MCP passe en ASYNCHRONE — DÉPLOYÉ (2026-08-01, agent-gw 0.47.0)** : `ask_<agent>`
 `await`ait un tour complet sous `_query_lock`. Derrière la PWA ou l'horloge, l'appel attendait
