@@ -1,0 +1,5 @@
+{
+  "name": "voyages",
+  "description": "Contrat de donnees de l'app Voyages : le format de voyage.json, rendu en timeline et tray par la PWA. Livre par l'image avec le module qui le lit.",
+  "version": "1.0.0"
+}

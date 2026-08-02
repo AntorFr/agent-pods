@@ -3,9 +3,22 @@
 > **Destinataires : les agents qui rédigent la mémoire** (Alfred ; demain Nestor s'il alimente
 > une mémoire partagée). Ce guide est le pendant *écriture* du moteur de rendu
 > (`src/blocks.js`) : il décrit ce que tu peux écrire pour que le front l'affiche. Il reste
-> synchro avec le moteur — un bloc ici ⇔ un bloc dans `blocks.js`. **Source de vérité unique** :
-> en cas de doute sur le format, c'est ce fichier qui tranche, pas une fiche existante (une
-> fiche existante peut être une erreur pas encore corrigée).
+> synchro avec le moteur — un bloc ici ⇔ un bloc dans `blocks.js`.
+
+> ## ⚠️ Ce fichier n'est plus ce que lisent les AGENTS (2026-08-03)
+>
+> Le contrat de format leur est désormais **livré par l'image**, en plugin Claude Code :
+> **`plugins/fiches/skills/fiches-format/SKILL.md`**. C'est lui qui entre dans le contexte de
+> tout agent que ce corps fait tourner, et c'est donc lui qui fait foi.
+>
+> **Pourquoi.** Ce guide et la skill `redaction` du workspace d'Alfred décrivaient le même
+> contrat — 281 lignes contre 283, dans deux dépôts déployés séparément, chacun se déclarant
+> « source de vérité unique ». Rien ne détectait la dérive : un bloc ajouté dans `blocks.js`
+> n'obligeait personne à mettre l'autre à jour. Le contrat descend maintenant **avec le code
+> qui le lit**, dans le même tag d'image — ils ne peuvent plus diverger.
+>
+> Ce fichier reste pour les **humains** qui travaillent sur le moteur. Une évolution du format
+> s'amende **d'abord dans le plugin**, puis ici si le détail vaut d'être conservé.
 
 ## Règle d'or
 

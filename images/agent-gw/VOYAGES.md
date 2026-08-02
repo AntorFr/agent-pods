@@ -51,6 +51,13 @@ domaines/voyages/
 
 ## `voyage.json` — le contrat de données
 
+> ⚠️ **Ce que lisent les AGENTS vit désormais dans l'image** (2026-08-03) :
+> `plugins/voyages/skills/voyage-json/SKILL.md`, chargé en plugin Claude Code quand
+> `voyages` est dans `GW_APPS`. Un module éteint n'apporte pas son contrat ; un module
+> allumé l'apporte forcément à jour, puisque c'est le même tag d'image. La section
+> ci-dessous reste la référence de conception (le « pourquoi ») ; le plugin porte le
+> « comment écrire », et c'est lui qu'on amende en premier.
+
 ```json
 {
   "version": 1,

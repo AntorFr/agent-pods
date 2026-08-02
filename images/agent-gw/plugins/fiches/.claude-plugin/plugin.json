@@ -1,0 +1,5 @@
+{
+  "name": "fiches",
+  "description": "Contrat d'ecriture du contenu rendu par la PWA : frontmatter type et vocabulaire de blocs Markdoc. Livre par l'image avec le moteur qui le lit.",
+  "version": "1.0.0"
+}

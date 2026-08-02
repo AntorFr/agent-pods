@@ -64,6 +64,12 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+# Contrats de FORMAT livrés par l'image, un dossier de plugin Claude Code par
+# module (`--plugin-dir`, via ClaudeAgentOptions.plugins). Ils descendent avec le
+# code qui les lit, donc ils ne peuvent pas dériver de lui : c'est tout l'objet.
+# ⚠️ `app/main.py` les cherche en `<parent de app>/plugins` — cette copie n'est PAS
+# optionnelle, sans elle aucun contrat ne part et personne ne s'en plaint.
+COPY plugins ./plugins
 # Serveurs MCP stdio bundlés (maps/weather), lancés par le .mcp.json du workspace.
 # DEPRECATED : remplacés par le hub rosetta (via rosetta-bridge) — à retirer,
 # avec leurs clés d'API dans l'env du pod, une fois la bascule vérifiée en prod.

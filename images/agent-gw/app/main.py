@@ -762,6 +762,45 @@ async def reset():
 # un endroit où documenter comment on écrit un workbook.
 
 
+# ── Les contrats de format, livrés PAR L'IMAGE ───────────────────────────────
+# Un module n'est pas qu'une tuile et une route : c'est aussi un FORMAT de données
+# que l'agent doit produire pour que la vue sache l'afficher. Ce format vivait dans
+# le workspace de chaque agent (skill `redaction`, `voyages`, `menuiserie`), donc
+# recopié à la main depuis la doc du front — ~1000 lignes en double dans deux dépôts
+# qui se déploient séparément, chacun se déclarant source de vérité. Rien ne
+# détectait la dérive : un bloc ajouté dans `blocks.js` n'obligeait personne.
+#
+# Désormais le contrat DESCEND AVEC LE CODE QUI LE LIT, sous forme de plugins
+# Claude Code livrés dans l'image et activés selon `GW_APPS`. Un module éteint
+# n'apporte pas son contrat ; un module allumé l'apporte forcément à jour, puisque
+# c'est le même tag d'image.
+#
+# LA FRONTIÈRE, et elle seule rend la chose tenable : ici, le FORMAT (comment on
+# écrit un workbook). Dans le workspace, le MÉTIER (pourquoi on groupe les débits
+# par largeur). Le format ne change qu'avec le code, donc un build de toute façon ;
+# le métier se corrige au fil de l'usage, et n'a rien à faire dans une image.
+PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
+# Le socle : la mémoire (fiches, domaines) n'est PAS un module — tout agent qui
+# écrit dans memory/ produit du markdown que le moteur rend. Son contrat suit donc
+# le corps, pas la liste des apps.
+PLUGINS_ALWAYS = ("fiches",)
+
+
+def _module_plugins() -> list[dict]:
+    """Les plugins à charger : le socle + un par app active qui en fournit un.
+
+    Silencieux sur l'absence : un module sans dossier de plugin n'en a simplement
+    pas besoin (`todo`, `planif` n'ont pas de format propre). On ne réclame pas ce
+    qui n'existe pas.
+    """
+    out: list[dict] = []
+    for name in (*PLUGINS_ALWAYS, *APPS):
+        p = PLUGINS_DIR / name
+        if p.is_dir() and not any(x["path"] == str(p) for x in out):
+            out.append({"type": "local", "path": str(p)})
+    return out
+
+
 def _instance_facts() -> list[str]:
     """Les faits d'instance, un par axe de modularité.
 
@@ -815,6 +854,7 @@ async def _run_alfred(
         resume=resume,
         permission_mode=PERMISSION_MODE,
         system_prompt=_system_prompt(),
+        plugins=_module_plugins(),
         setting_sources=["project"],
         max_buffer_size=MAX_BUFFER_BYTES,
         env=env or {},
@@ -1239,6 +1279,7 @@ async def chat(request: Request):
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt=_system_prompt(),
+                plugins=_module_plugins(),
                 setting_sources=["project"],
                 max_buffer_size=MAX_BUFFER_BYTES,
             )

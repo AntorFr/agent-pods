@@ -159,6 +159,49 @@ check("aucun preset littéral hors de _system_prompt (sinon un canal reste aveug
 check("CHAQUE ClaudeAgentOptions reçoit l'état de l'instance",
       _PY.count("system_prompt=_system_prompt()") == _PY.count("ClaudeAgentOptions("))
 
+print("\n--- les contrats de format, livrés par l'image (plugins) ---")
+
+import json as _pj  # noqa: E402
+
+for var in ("GW_APPS", "GW_FEATURES"):
+    os.environ.pop(var, None)
+m = importlib.reload(main)
+
+_names = lambda mod: [os.path.basename(p["path"]) for p in mod._module_plugins()]
+
+check("le socle `fiches` est TOUJOURS chargé (la mémoire n'est pas un module)",
+      "fiches" in _names(m))
+check("chaque plugin est déclaré local (seul type supporté par le SDK)",
+      all(p["type"] == "local" for p in m._module_plugins()))
+check("les chemins existent vraiment (un --plugin-dir fantôme fait échouer le CLI)",
+      all(os.path.isdir(p["path"]) for p in m._module_plugins()))
+
+m = load("voyages,atelier")
+check("un module actif apporte son contrat",
+      {"voyages", "atelier"} <= set(_names(m)))
+
+m = load("todo")
+check("un module ÉTEINT n'apporte pas le sien (tout le point du chantier)",
+      "voyages" not in _names(m) and "atelier" not in _names(m))
+check("un module sans contrat propre ne réclame rien (`todo` n'a pas de format)",
+      _names(m) == ["fiches"])
+
+m = load("fiches,fiches")
+check("aucun doublon de chemin même si le socle est aussi listé dans GW_APPS",
+      len(_names(m)) == len(set(_names(m))))
+
+# Un plugin Claude Code est un DOSSIER portant un manifeste et des skills. Sans le
+# manifeste, le CLI ignore le dossier en silence : le contrat ne partirait pas, et
+# l'agent écrirait au jugé sans qu'aucune erreur ne le dise.
+_PLUG = Path(__file__).resolve().parents[1] / "plugins"
+for d in sorted(p for p in _PLUG.iterdir() if p.is_dir()):
+    manifest = d / ".claude-plugin" / "plugin.json"
+    check("%s : manifeste présent et valide" % d.name,
+          manifest.is_file() and _pj.loads(manifest.read_text())["name"] == d.name)
+    skills = sorted((d / "skills").glob("*/SKILL.md")) if (d / "skills").is_dir() else []
+    check("%s : au moins une skill, avec frontmatter" % d.name,
+          bool(skills) and all(s.read_text(encoding="utf-8").startswith("---") for s in skills))
+
 print("\n--- GW_THEME ---")
 
 os.environ.pop("GW_THEME", None)

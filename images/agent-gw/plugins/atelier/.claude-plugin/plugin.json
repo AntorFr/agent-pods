@@ -1,0 +1,5 @@
+{
+  "name": "atelier",
+  "description": "Contrat de donnees de l'app Atelier : le format de workbook.json (debit, prepas, assemblage, suivi), rendu en quatre vues liees par la PWA.",
+  "version": "1.0.0"
+}
