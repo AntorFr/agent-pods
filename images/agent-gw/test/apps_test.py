@@ -120,6 +120,45 @@ _wired = set(re.findall(r"featureOn\('([^']+)'\)", _apply.group(1))) if _apply e
 check("chaque capacité est réellement câblée dans applyFeatures",
       _wired == set(m.FEATURES))
 
+print("\n--- l'état de l'instance, dit à l'agent (system_prompt.append) ---")
+
+for var in ("GW_APPS", "GW_FEATURES"):
+    os.environ.pop(var, None)
+m = importlib.reload(main)
+sp = m._system_prompt()
+check("le preset claude_code est conservé (on AJOUTE, on ne remplace pas)",
+      sp["type"] == "preset" and sp["preset"] == "claude_code")
+check("les modules actifs sont annoncés à l'agent", "voyages" in sp["append"])
+check("les capacités de la coque aussi", "scan" in sp["append"])
+
+m = load("todo")
+check("un module éteint n'est PAS annoncé (tout le point du chantier)",
+      "voyages" not in m._system_prompt()["append"])
+
+m = load("")
+check("aucun module -> on le dit, plutôt qu'une énumération vide",
+      "aucun" in m._system_prompt()["append"])
+
+# L'état, et RIEN d'autre : le corps n'a pas à documenter un format ni un métier.
+# Un préambule qui se met à expliquer comment écrire une fiche est un préambule
+# qui vient de reprendre la place du workspace.
+check("le préambule reste court (c'est un état, pas un contrat)",
+      len(m._system_prompt()["append"]) < 400)
+
+for var in ("GW_APPS", "GW_FEATURES"):
+    os.environ.pop(var, None)
+m = importlib.reload(main)
+
+# LE piège de ce chantier, verrouillé par un test : les options du SDK se
+# construisent à DEUX endroits — `_run_alfred` (tours MCP et planifiés) et
+# `run_turn` (la PWA). N'en câbler qu'un laisse un canal entier aveugle, et ça ne
+# se voit sur AUCUN écran. On interdit donc le littéral.
+_PY = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
+check("aucun preset littéral hors de _system_prompt (sinon un canal reste aveugle)",
+      _PY.count('"preset": "claude_code"') == 1)
+check("CHAQUE ClaudeAgentOptions reçoit l'état de l'instance",
+      _PY.count("system_prompt=_system_prompt()") == _PY.count("ClaudeAgentOptions("))
+
 print("\n--- GW_THEME ---")
 
 os.environ.pop("GW_THEME", None)

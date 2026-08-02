@@ -2,6 +2,27 @@
 
 > MàJ : 2026-08-02
 
+**La modularité s'arrêtait au navigateur — EN COURS (branche `archi/lot1-modularite`)** : lot 1
+d'un chantier d'architecture décidé avec Monsieur le 2026-08-02 (dossier complet dans le dépôt
+d'Alfred, `memory/sujets/refonte-archi-alfred.md`). `GW_APPS` et `GW_FEATURES` ne franchissaient
+jamais la frontière du corps : `main.py` montait le preset claude_code avec
+`setting_sources=["project"]` et **rien d'autre**. La PWA masquait donc une tuile pendant que
+l'agent croyait toujours le module présent — il proposait des pages que ce pod ne sert pas et
+écrivait des fichiers que rien n'affiche. `_system_prompt()` ajoute désormais l'**état de
+l'instance** au preset (`append`, donc le `CLAUDE.md` du workspace gouverne tout le reste) :
+l'état, et jamais un contrat de format ni un savoir de métier — ceux-là appartiennent au
+workspace, pas à une variable d'environnement. `_instance_facts()` est un **assembleur** (une
+entrée par axe) et non une phrase câblée sur les deux axes du jour : les magasins mémoire du
+chantier multi-utilisateurs viendront s'y poser sans que les appelants bougent.
+
+> ⚠️ **Le piège s'est refermé sur moi en direct — il est verrouillé maintenant.** Les options se
+> construisent à **deux** endroits (`_run_alfred` pour les tours MCP et planifiés, `run_turn`
+> pour la PWA), à deux profondeurs d'indentation différentes : un remplacement global n'en
+> attrape qu'un. Le premier passage n'avait câblé que la PWA — les tours planifiés et MCP
+> seraient restés aveugles, **sans aucun symptôme visible**. Deux tests l'interdisent désormais :
+> aucun preset littéral hors de `_system_prompt`, et autant de `system_prompt=_system_prompt()`
+> que de `ClaudeAgentOptions(`.
+
 **Un rechargement ne perdait pas le tour, il perdait le TÉMOIN — DÉPLOYÉ (2026-08-02, agent-gw 0.51.0)** :
 signalé au doigt (« je fais un refresh, je ne vois plus qu'il travaille »). Normal et structurel : le flux
 SSE appartient à la requête `POST /api/chat`, F5 la tue, et `busy` n'est qu'une variable JS. Le tour, lui,

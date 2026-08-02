@@ -141,6 +141,23 @@ Environment:
 > ⚠️ The gateway exposes an agent that has shell access to its workspace.
 > Do not expose it to the public internet — keep it behind a VPN/SSO layer.
 
+### What the body tells the agent
+
+`GW_APPS` and `GW_FEATURES` used to reach the **browser only**. The launcher hid a
+tile while the agent kept believing the module was there — offering pages this pod
+does not serve, and writing files nothing would ever render.
+
+Both lists are now also appended to the agent's system prompt, at every turn and on
+every channel (`system_prompt: {preset: "claude_code", append: …}`, so the workspace
+`CLAUDE.md` still governs everything else). The append carries **state and nothing
+else** — which modules and capabilities exist here. It never carries a data contract
+or a piece of domain knowledge: those belong to the workspace, and an environment
+variable is no place to document how a workbook is written.
+
+> ⚠️ Options are built in **two** places (`_run_alfred` for MCP and scheduled turns,
+> `run_turn` for the PWA). Wiring only one leaves an entire channel blind, with no
+> visible symptom — `test/apps_test.py` forbids the literal preset to keep it that way.
+
 ## Local build
 
 ```sh

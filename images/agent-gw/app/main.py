@@ -748,6 +748,51 @@ async def reset():
     return {"status": "reset"}
 
 
+# ── Ce que le CORPS dit de lui-même à l'agent ────────────────────────────────
+# Le corps est agent-agnostique : identité, persona et consignes vivent dans le
+# CLAUDE.md du workspace monté. Mais le workspace ne peut PAS savoir ce que CE
+# pod expose — `GW_APPS` et `GW_FEATURES` sont des variables d'env, lues ici et
+# publiées au NAVIGATEUR, jamais à l'agent. D'où le trou comblé ici : la PWA
+# masquait une tuile que l'agent croyait toujours là, et il continuait d'écrire
+# pour des modules éteints.
+#
+# On lui dit donc l'ÉTAT de l'instance, et rien d'autre. Pas un contrat de
+# format, pas une consigne de métier : ceux-là appartiennent au workspace (ou,
+# demain, aux plugins livrés par module). Une variable d'environnement n'est pas
+# un endroit où documenter comment on écrit un workbook.
+
+
+def _instance_facts() -> list[str]:
+    """Les faits d'instance, un par axe de modularité.
+
+    Assembleur volontairement ouvert : chaque axe pose UNE entrée, le préambule
+    est leur somme. Les magasins mémoire (chantier multi-utilisateurs) viendront
+    s'y ajouter sans que les appelants bougent — d'où une liste plutôt qu'une
+    phrase câblée sur les deux axes du jour.
+    """
+    return [
+        "modules — " + (", ".join(APPS) or "aucun"),
+        "capacités du chat — " + (", ".join(FEATURES) or "aucune"),
+    ]
+
+
+def _system_prompt() -> dict:
+    """Preset Claude Code (donc le CLAUDE.md du workspace) + l'état de l'instance.
+
+    `append` conserve le preset entier et ajoute au bout : on ne remplace rien,
+    donc un pod dont l'agent ne s'occupe pas de modules ne perd rien.
+    """
+    return {
+        "type": "preset",
+        "preset": "claude_code",
+        "append": (
+            "[Ce corps expose : " + " ; ".join(_instance_facts()) + ". Ce qui n'y "
+            "figure pas n'existe pas ici — ni page, ni route, ni bouton : n'y "
+            "oriente pas ton interlocuteur, et n'écris pas pour un module absent.]"
+        ),
+    }
+
+
 async def _run_alfred(
     prompt: str, resume: str | None = None, env: dict[str, str] | None = None
 ) -> tuple[str, str | None]:
@@ -762,7 +807,7 @@ async def _run_alfred(
         cwd=WORKSPACE,
         resume=resume,
         permission_mode=PERMISSION_MODE,
-        system_prompt={"type": "preset", "preset": "claude_code"},
+        system_prompt=_system_prompt(),
         setting_sources=["project"],
         max_buffer_size=MAX_BUFFER_BYTES,
         env=env or {},
@@ -1186,7 +1231,7 @@ async def chat(request: Request):
                 env=turn_env,
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
-                system_prompt={"type": "preset", "preset": "claude_code"},
+                system_prompt=_system_prompt(),
                 setting_sources=["project"],
                 max_buffer_size=MAX_BUFFER_BYTES,
             )
