@@ -2,7 +2,7 @@
 
 > MàJ : 2026-08-02
 
-**La modularité s'arrêtait au navigateur — EN COURS (branche `archi/lot1-modularite`)** : lot 1
+**La modularité s'arrêtait au navigateur — DÉPLOYÉ (2026-08-03, agent-gw 0.52.0)** : lot 1
 d'un chantier d'architecture décidé avec Monsieur le 2026-08-02 (dossier complet dans le dépôt
 d'Alfred, `memory/sujets/refonte-archi-alfred.md`). `GW_APPS` et `GW_FEATURES` ne franchissaient
 jamais la frontière du corps : `main.py` montait le preset claude_code avec
@@ -25,6 +25,13 @@ serait reproduit au corps suivant. `home` reste au skin, et c'est délibéré : 
 unidirectionnel (le HUD teste déjà `appOn('repos')` et se replie proprement), et l'accueil est le
 seul écran dont la forme EST l'identité du corps — l'en sortir coûterait un quatrième axe de
 configuration pour un besoin que personne n'a.
+
+> ✅ **Déployé et vérifié** — image `0.52.0` (index OCI amd64 + arm64) contrôlée **au manifeste
+> registry** avant de bumper, les **deux** manifestes poussés (`alfred-helm.yml` ET
+> `skippy-helm.yml`), refresh ArgoCD forcé, pods `alfred` 3/3 et `skippy` 2/2 Running, 0
+> redémarrage. `launcher.js` servi par les deux corps au **SHA-256 exact du build local**
+> (`b17d805d…`). Les deux écrans avaient été regardés à l'œil avant tag, PWA montée en local
+> sur les 24 dépôts du Mac.
 
 > ☠️ **La vue s'est rendue DANS LE VIDE, et rien ne l'a vu — sauf une capture d'écran.**
 > `page` est un **getter** de l'API du lanceur (`get page() { return page; }`), parce que le nœud
