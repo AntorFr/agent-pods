@@ -327,7 +327,18 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "channel": CHANNEL, "busy": _query_lock.locked()}
+    """`busy` est le verrou GLOBAL : vrai aussi pendant une planification ou un
+    travail déposé par un autre agent. `chat_busy` est plus étroit — un tour de
+    CHAT, celui qui a une conversation et quelqu'un devant. Le front s'en sert
+    pour reprendre son témoin après un rechargement : afficher une bulle de
+    frappe dans la conversation de Monsieur pour le briefing de 7 h serait faux.
+    Public (cf. _PUBLIC_PATHS) et sans donnée : deux booléens et un nom de canal."""
+    return {
+        "status": "ok",
+        "channel": CHANNEL,
+        "busy": _query_lock.locked(),
+        "chat_busy": _current_client is not None,
+    }
 
 
 @app.get("/api/models")

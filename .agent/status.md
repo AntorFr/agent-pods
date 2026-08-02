@@ -2,6 +2,21 @@
 
 > MàJ : 2026-08-02
 
+**Un rechargement ne perdait pas le tour, il perdait le TÉMOIN — EN COURS (2026-08-02, agent-gw 0.51.0)** :
+signalé au doigt (« je fais un refresh, je ne vois plus qu'il travaille »). Normal et structurel : le flux
+SSE appartient à la requête `POST /api/chat`, F5 la tue, et `busy` n'est qu'une variable JS. Le tour, lui,
+survit — c'est tout l'objet de la tâche détachée. **Mais le défaut réel était pire que le symptôme** : la
+réponse arrivait au transcript et la page restait muette, parce que `resyncHistory()` n'est branché que sur
+`visibilitychange`/`online`, jamais sur un simple rechargement. Il fallait changer d'onglet ou recharger une
+seconde fois pour voir une réponse déjà écrite sur le disque. `adoptRunningTurn()` interroge donc le corps au
+boot (après le rendu de l'historique, pour que `historyLen` soit posé), remet le témoin et l'indicateur de
+frappe, sonde toutes les 2 s, puis pose la réponse et vide la file. **Le discriminant est `chat_busy`, pas
+`busy`** : ce dernier est le verrou global, vrai aussi pour une planification ou un travail déposé par un
+autre agent — une bulle de frappe dans la conversation de Monsieur pour le briefing de 7 h serait un
+mensonge. `chat_busy` est exactement `_current_client is not None`, donc offert par le registre de 0.50.0.
+Effet de bord heureux : un tour repris après rechargement est un tour qu'on peut **arrêter**. Un corps
+injoignable ne conclut rien (on retente, on ne déclare pas la fin). `test/stop_test.py` monte à 19 cas.
+
 **On peut enfin arrêter un tour — DÉPLOYÉ (2026-08-02, agent-gw 0.50.0)** : signalé au doigt (« pas moyen
 d'arrêter un tour en cours »). Exact, et ce n'était pas un oubli : `run_turn()` est **délibérément
 détachée** de la réponse HTTP depuis qu'un écran mobile verrouillé tuait le tour en plein vol. Restait

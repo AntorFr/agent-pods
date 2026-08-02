@@ -303,17 +303,22 @@ async function sendMessage(text, forceEph, atts) {
     busy = false;
     syncSend();
     syncConfirm();
-    // Rattrapage groupé : les messages tapés pendant qu'Alfred travaillait sont
-    // fusionnés en UN seul tour (au lieu d'un tour par message) — les textes se
-    // recollent en paragraphes, les pièces jointes se concatènent, dans l'ordre.
-    if (queue.length) {
-      const batch = queue.splice(0);
-      renderQueued();
-      const text = batch.map((q) => q.text).filter(Boolean).join('\n\n');
-      const atts = batch.flatMap((q) => q.atts);
-      sendMessage(text, undefined, atts);
-    }
+    flushQueue();
   }
+}
+
+// Rattrapage groupé : les messages tapés pendant qu'Alfred travaillait sont
+// fusionnés en UN seul tour (au lieu d'un tour par message) — les textes se
+// recollent en paragraphes, les pièces jointes se concatènent, dans l'ordre.
+// Appelé à la fin d'un tour QU'ON A MENÉ, mais aussi à la fin d'un tour repris
+// après rechargement (adoptRunningTurn) : dans les deux cas la file doit partir.
+function flushQueue() {
+  if (!queue.length) return;
+  const batch = queue.splice(0);
+  renderQueued();
+  const text = batch.map((q) => q.text).filter(Boolean).join('\n\n');
+  const atts = batch.flatMap((q) => q.atts);
+  sendMessage(text, undefined, atts);
 }
 $('composer').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -586,6 +591,49 @@ async function pollResyncHistory() {      // après coupure : la réponse peut e
 }
 window.addEventListener('online', resyncHistory);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) resyncHistory(); });
+
+/* ── Reprendre un tour en cours après un rechargement ────────────────
+   Le flux SSE appartient à la requête POST /api/chat : F5 le tue, et `busy`
+   n'est qu'une variable JS. Le TOUR, lui, survit — run_turn() est détachée à
+   dessein. On ne perdait donc que le témoin… et accessoirement la réponse :
+   resyncHistory() n'est branché que sur `visibilitychange`/`online`, jamais sur
+   un simple rechargement, si bien que la page restait muette alors que la
+   réponse était déjà écrite au transcript.
+   On redemande l'état au corps. `chat_busy` et NON `busy` : ce dernier est le
+   verrou global, vrai aussi pendant une planification ou un travail déposé par
+   un autre agent — une bulle de frappe pour le briefing de 7 h serait fausse. */
+async function health() {
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function adoptRunningTurn() {
+  const h = await health();
+  if (!h || !h.chat_busy) return;
+  busy = true;
+  const pending = addTyping();
+  status.classList.add('busy'); status.title = 'Alfred travaille…';
+  syncSend();   // un tour repris est un tour qu'on peut arrêter
+  try {
+    // Pas de limite haute : un tour long est un tour long. La sonde est un GET
+    // public et sans état, la laisser tourner ne coûte rien au corps. Un corps
+    // injoignable ne conclut RIEN — on retente, on ne déclare pas la fin.
+    while (true) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const s = await health();
+      if (s && !s.chat_busy) break;
+    }
+  } finally {
+    pending.remove();
+    status.classList.remove('busy'); status.title = 'Alfred est au repos';
+    busy = false;
+    syncSend();
+    await resyncHistory();   // la réponse est au transcript : on la pose
+    refreshSession();
+    flushQueue();
+  }
+}
 
 /* ── Mode éphémère ⚡ ─────────────────────────────────────────────── */
 const ephBtn = $('eph');
@@ -2729,5 +2777,8 @@ window.addEventListener('hashchange', renderRoute);
     if (r.status === 401) { onUnauthorized(); return; }
     if (r.ok) renderHistory((await r.json()).messages);
   } catch {}
+  // APRÈS le rendu de l'historique, jamais avant : `historyLen` doit être posé
+  // pour que le resync de fin de tour sache que le transcript a grandi.
+  adoptRunningTurn();
 })();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

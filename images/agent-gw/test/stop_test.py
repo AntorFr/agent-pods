@@ -97,6 +97,34 @@ main._turn_started(FauxClient())
 check("_turn_started rabaisse `_stop_asked`", main._stop_asked is False)
 main._turn_ended()
 
+print("\n--- /api/health : `chat_busy` n'est PAS `busy` ---")
+# `busy` est le verrou global (planif, MCP…) ; `chat_busy` ne parle que du tour
+# de chat. Les confondre ferait afficher une bulle de frappe dans la
+# conversation de Monsieur pour le briefing de 7 h.
+
+reset()
+h = asyncio.run(main.health())
+check("au repos : les deux à faux", h["busy"] is False and h["chat_busy"] is False)
+check("porte toujours le canal", "channel" in h)
+
+
+async def verrou_sans_chat():
+    """Un tour NON-chat (planif/MCP) tient le verrou sans passer par _turn_started."""
+    async with main._query_lock:
+        return await main.health()
+
+
+h = asyncio.run(verrou_sans_chat())
+check("tour planifié : `busy` vrai", h["busy"] is True)
+check("tour planifié : `chat_busy` FAUX", h["chat_busy"] is False)
+
+main._turn_started(FauxClient())
+h = asyncio.run(main.health())
+check("tour de chat : `chat_busy` vrai", h["chat_busy"] is True)
+main._turn_ended()
+h = asyncio.run(main.health())
+check("tour fini : `chat_busy` retombe", h["chat_busy"] is False)
+
 print()
 if FAILS:
     print("ÉCHECS : " + ", ".join(FAILS))
