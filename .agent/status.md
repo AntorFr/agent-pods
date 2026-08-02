@@ -15,6 +15,26 @@ workspace, pas à une variable d'environnement. `_instance_facts()` est un **ass
 entrée par axe) et non une phrase câblée sur les deux axes du jour : les magasins mémoire du
 chantier multi-utilisateurs viendront s'y poser sans que les appelants bougent.
 
+**Une app était enfermée dans un thème (même branche)** : la vue `repos` vivait dans
+`skins/skippy.js` (`routes: { repos }`) alors que `repos` était **déjà** un module déclarable et
+que `/api/repos` répond quel que soit le thème — `GW_APPS=repos` sur un pod en livrée neutre
+donnait donc une **route morte**. C'est une app comme les autres désormais : `renderRepos()` dans
+la coque sous `appOn('repos')`, une entrée dans `APP_META` (tuile 🛰️ « La flotte ») et sa tuile
+d'accueil. Le contrat de skin **perd `routes`** — tant qu'il les autorisait, le mélange se
+serait reproduit au corps suivant. `home` reste au skin, et c'est délibéré : le défaut était
+unidirectionnel (le HUD teste déjà `appOn('repos')` et se replie proprement), et l'accueil est le
+seul écran dont la forme EST l'identité du corps — l'en sortir coûterait un quatrième axe de
+configuration pour un besoin que personne n'a.
+
+> 🔎 **Le CSS a suivi, et il révèle une entorse ancienne.** Les surfaces HUD (`.hud`, `.panel`,
+> `.fleet`, `.repo`, les tuiles…) vivaient dans `skippy.css` : le contrôle 3 du lint ne les
+> tolérait que parce que la coque **ignorait** ces classes. Faire de `repos` une app les lui fait
+> connaître, donc elles montent dans `launcher.css` — où elles auraient dû être depuis le début.
+> Ce sont des composants, et un thème déclare des jetons, il ne dessine pas. Bonus : le
+> `content:"SKIPPY"` du calque fantôme passe par `var(--ghosttag)`, jeton qui existait déjà et
+> valait la même chaîne. `skippy.css` ne garde que `.console`. **Zéro renommage, donc zéro
+> régression visuelle attendue chez Skippy** — mais ça reste à voir à l'œil.
+
 > ⚠️ **Le piège s'est refermé sur moi en direct — il est verrouillé maintenant.** Les options se
 > construisent à **deux** endroits (`_run_alfred` pour les tours MCP et planifiés, `run_turn`
 > pour la PWA), à deux profondeurs d'indentation différentes : un remplacement global n'en

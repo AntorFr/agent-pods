@@ -37,10 +37,14 @@
      console       (api, info) => Node|null   bandeau d'état, inséré en tête de la
                              colonne apps ; `info` = la réponse de /api/version
      home          () => void        rendu de la racine ; absent ⇒ accueil d'Alfred
-     routes        { [préfixe]: (reste) => void }   routes propres au skin, testées
-                             AVANT les routes communes. Une clé « repos » attrape
-                             `#/repos` ; une clé « repo/ » attrape `#/repo/<x>` et
-                             reçoit `<x>`.
+
+   PAS DE `routes`, et c'est délibéré (2026-08-02). Le contrat en acceptait, ce
+   qui revenait à loger une APP dans un habillage : la vue `repos` n'existait que
+   sous la livrée Skippy, alors que `/api/repos` répond quel que soit le thème et
+   que `repos` était déjà un module déclarable. Poser `GW_APPS=repos` sur un pod
+   en livrée neutre donnait donc une route morte. Une route est une app : elle
+   vit dans la coque, sous `appOn()`. L'accueil reste la seule vue qu'un thème
+   fournisse — c'est le seul écran dont la forme EST l'identité du corps.
 */
 
 import createSkippy from './skippy.js';
