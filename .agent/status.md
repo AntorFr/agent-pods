@@ -26,6 +26,17 @@ unidirectionnel (le HUD teste déjà `appOn('repos')` et se replie proprement), 
 seul écran dont la forme EST l'identité du corps — l'en sortir coûterait un quatrième axe de
 configuration pour un besoin que personne n'a.
 
+> ☠️ **La vue s'est rendue DANS LE VIDE, et rien ne l'a vu — sauf une capture d'écran.**
+> `page` est un **getter** de l'API du lanceur (`get page() { return page; }`), parce que le nœud
+> n'existe pas encore quand les extensions sont instanciées : `const page = $('view')` vient
+> soixante lignes plus bas. L'app le **destructurait** (`const { page } = api`), figeant donc
+> `undefined` — fil d'Ariane correct, écran blanc, `TypeError` avalé dans une promesse. Les
+> **skins y échappent par accident** : ils sont re-résolus au boot (`loadApps`), les apps le sont
+> à l'import. Build vert, `npm test` vert, sonde de mangling verte, lint vert : **cinq contrôles
+> au vert sur un écran mort**. Le seul qui a mordu est le navigateur — PWA montée en local sur
+> les 24 dépôts de ce Mac, capture Chrome headless, regardée. Même leçon qu'en 0.47.0 avec le
+> décodeur de code-barres, apprise deux fois.
+
 > 🔎 **Un registre `launcher/apps/`, symétrique de celui des skins.** `repos` n'est pas posé en
 > vrac dans un `main.js` de 2 800 lignes : il a son dossier (`apps/repos.js` + `apps/repos.css`,
 > la feuille importée par le JS donc agrégée au bundle), et `apps/index.js` porte le contrat —
