@@ -199,6 +199,7 @@ function renderAtts() {
     c.querySelector('.ax').addEventListener('click', () => { if (a.url) URL.revokeObjectURL(a.url); pendingAtts.splice(i, 1); renderAtts(); });
     attsEl.appendChild(c);
   });
+  syncSend();   // une pièce jointe en attente rend son rôle d'envoi au bouton
 }
 // Bulle utilisateur avec, optionnellement, une rangée de vignettes jointes.
 function addUser(text, eph, atts) {
@@ -217,9 +218,38 @@ function addUser(text, eph, atts) {
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight; return el;
 }
 
+/* ── Envoyer / Arrêter — un seul bouton ──────────────────────────────
+   Usage établi : pendant qu'un tour tourne ET que le composer est vide, le
+   bouton d'envoi devient un bouton d'arrêt. La condition « composer vide » est
+   ce qui rend la bascule sans risque — dès qu'il y a du texte ou une pièce
+   jointe, l'envoi reprend la main et rien n'est jamais avalé.
+   La file d'attente, elle, n'est PAS vidée : arrêter le tour en cours n'annule
+   pas ce qu'on a demandé ensuite. */
+const sendBtn = $('send');
+const stopMode = () => busy && !input.value.trim() && !pendingAtts.length;
+function syncSend() {
+  const stop = stopMode();
+  sendBtn.classList.toggle('stop', stop);
+  sendBtn.textContent = stop ? '■' : '↑';
+  sendBtn.title = stop ? 'Arrêter le tour en cours' : 'Envoyer';
+  sendBtn.setAttribute('aria-label', sendBtn.title);
+}
+// Le clic précède le submit : preventDefault ici suffit à ne pas envoyer.
+sendBtn.addEventListener('click', (e) => {
+  if (!stopMode()) return;
+  e.preventDefault();
+  sendBtn.disabled = true;
+  // Le tour se termine de lui-même après le signal (avec son `done`) : c'est
+  // `finally` dans sendMessage qui rendra la main, pas cet appel.
+  fetch('/api/chat/stop', { method: 'POST', headers: headers(false) })
+    .catch(() => {})
+    .finally(() => { sendBtn.disabled = false; });
+});
+
 async function sendMessage(text, forceEph, atts) {
   const eph = forceEph !== undefined ? forceEph : ephOn;
   busy = true;
+  syncSend();
   addUser(text, eph, atts);
   const pending = addTyping();
   status.classList.add('busy'); status.title = 'Alfred travaille…';
@@ -271,6 +301,7 @@ async function sendMessage(text, forceEph, atts) {
     curTrace = null;   // le tour est clos : le prochain appel d'outil ouvre un groupe neuf
     status.classList.remove('busy'); status.title = 'Alfred est au repos';
     busy = false;
+    syncSend();
     syncConfirm();
     // Rattrapage groupé : les messages tapés pendant qu'Alfred travaillait sont
     // fusionnés en UN seul tour (au lieu d'un tour par message) — les textes se
@@ -300,6 +331,7 @@ input.addEventListener('input', () => {
   // `.filled` masque le curseur-bloc du thème dès qu'il y a du texte : sinon il
   // doublerait le vrai caret du système. Le focus, lui, est géré en CSS (:focus-within).
   $('composer').classList.toggle('filled', input.value.length > 0);
+  syncSend();   // taper pendant un tour rend son rôle d'envoi au bouton
 });
 
 /* ── Joindre : picker 📎, coller, glisser-déposer ────────────────── */

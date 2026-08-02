@@ -2,7 +2,23 @@
 
 > MàJ : 2026-08-02
 
-**Le fil d'Ariane envoyait les fiches hors-domaine dans le vide — CORRIGÉ (2026-08-02, agent-gw 0.49.1)** :
+**On peut enfin arrêter un tour — EN COURS (2026-08-02, agent-gw 0.50.0)** : signalé au doigt (« pas moyen
+d'arrêter un tour en cours »). Exact, et ce n'était pas un oubli : `run_turn()` est **délibérément
+détachée** de la réponse HTTP depuis qu'un écran mobile verrouillé tuait le tour en plein vol. Restait
+l'arrêt volontaire, jamais recâblé par-dessus. **`task.cancel()` était le piège** — il rejouait
+exactement cette panne (transcript laissé ouvert, « Continue from where you left off. » au tour
+suivant). Le vrai mécanisme est le signal d'arrêt du CLI, et il n'existe **que** sur `ClaudeSDKClient`,
+pas sur le `query()` one-shot : la boucle du chat passe donc au client persistant
+(`client.query()` + `receive_response()`), `POST /api/chat/stop` appelle `interrupt()`, et le tour se
+termine proprement avec son `ResultMessage` — le pointeur de session reste sain. L'endpoint **ne prend
+pas `_query_lock`** (l'attendre serait attendre la fin du tour qu'on interrompt). Le chemin
+planifié/MCP (`_run_alfred`) reste sur `query()` : personne n'est devant pour cliquer. Côté front, le
+bouton d'envoi devient un bouton d'arrêt quand un tour tourne **et** que le composer est vide — la
+condition « vide » est ce qui rend la bascule sans risque. La file d'attente n'est pas vidée : arrêter
+le tour en cours n'annule pas ce qu'on a demandé ensuite. `test/stop_test.py` couvre les 13 cas
+(idle, idempotence, verrou tenu, drapeau qui se rabaisse au tour suivant).
+
+**Le fil d'Ariane envoyait les fiches hors-domaine dans le vide — DÉPLOYÉ (2026-08-02, agent-gw 0.49.1)** :
 signalé au doigt depuis `#/mem/planif/briefing.md`, dont le maillon « Planifications » menait à
 `#/dom/planif` — une page à titre seul, alors que l'accueil, lui, pointe `#/planif`. La cause est
 structurelle, pas locale : `renderFiche()` fabriquait `#/dom/<seg>` pour **tout** premier segment,
@@ -14,6 +30,11 @@ seulement s'il est allumé, `appOn`) ; un maillon de fil d'Ariane peut désormai
 remonte au dernier maillon qui mène quelque part) ; et `renderDomain()` **redirige** `#/dom/todo`
 / `#/dom/planif` vers le module, ce qui neutralise aussi les marque-pages et une `cible` de type
 domaine écrite par l'agent dans `brief.json`.
+
+> ✅ **Vérifié en prod** — image `0.49.1` (index OCI amd64 + arm64) contrôlée au manifeste registry avant
+> de bumper, les deux manifestes k8s poussés (`alfred-helm.yml` **et** `skippy-helm.yml`), et
+> `launcher.js` servi par **alfred ET skippy** au SHA-256 exact du build local (`95c473df…`,
+> 116 604 octets) 200 s après le push.
 
 **Le chat sait ce que Monsieur regarde — DÉPLOYÉ (2026-08-01, agent-gw 0.49.0)** : sur desktop la PWA est
 un split (chat à gauche, canvas à droite), et le chat ignorait totalement l'autre volet — « ça »

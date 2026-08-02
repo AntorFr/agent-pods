@@ -18,6 +18,7 @@ from pathlib import Path
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    ClaudeSDKClient,
     ResultMessage,
     TextBlock,
     ToolUseBlock,
@@ -1047,6 +1048,46 @@ async def upload(files: list[UploadFile] = File(...)):
     return {"files": saved}
 
 
+# --- Arrêter un tour en cours ------------------------------------------------
+# Le tour du chat tourne DÉTACHÉ de la réponse HTTP (cf. /api/chat) : décrocher
+# ne l'arrête pas, et c'est voulu — un écran mobile verrouillé tuait le tour en
+# plein vol. Restait l'arrêt VOLONTAIRE, qui n'existait pas.
+#
+# Il ne se fait pas en annulant la tâche : ça rejouerait exactement la panne
+# qu'on a fuie (transcript laissé ouvert, « Continue from where you left off. »
+# au tour suivant). On passe par le signal d'arrêt du CLI, que seul
+# ClaudeSDKClient sait envoyer — le tour se termine proprement, avec son
+# ResultMessage, et le pointeur de session reste sain.
+#
+# Un seul tour à la fois (_query_lock le garantit), donc un seul emplacement.
+_current_client: ClaudeSDKClient | None = None
+_stop_asked = False
+
+
+def _turn_started(client: ClaudeSDKClient) -> None:
+    global _current_client, _stop_asked
+    _current_client, _stop_asked = client, False
+
+
+def _turn_ended() -> None:
+    global _current_client
+    _current_client = None
+
+
+@app.post("/api/chat/stop")
+async def chat_stop():
+    """Arrête le tour en cours. Idempotent : sans tour, on le dit et on s'arrête.
+    NE PREND PAS `_query_lock` — l'attendre reviendrait à attendre la fin du tour
+    qu'on cherche justement à interrompre."""
+    global _stop_asked
+    client = _current_client
+    if client is None:
+        return {"status": "idle"}
+    _stop_asked = True
+    await client.interrupt()
+    return {"status": "interrupting"}
+
+
 @app.post("/api/chat")
 async def chat(request: Request):
     body = await request.json()
@@ -1139,43 +1180,55 @@ async def chat(request: Request):
                 max_buffer_size=MAX_BUFFER_BYTES,
             )
             try:
-                async for msg in query(prompt=prompt, options=options):
-                    if isinstance(msg, AssistantMessage):
-                        for block in msg.content:
-                            # « No response requested. » est un artefact du
-                            # harnais (réparation de tour interrompu), pas une
-                            # parole d'Alfred — jamais montré.
-                            if (
-                                isinstance(block, TextBlock)
-                                and block.text
-                                and block.text.strip() != "No response requested."
-                            ):
-                                await out.put(_sse("text", {"text": block.text}))
-                            elif TRACE and isinstance(block, ToolUseBlock):
-                                # Live seulement : /api/history ne rejoue pas la
-                                # trace (le transcript ne garde que le texte), donc
-                                # elle disparaît au rechargement. Assumé — c'est un
-                                # témoin d'exécution, pas une archive.
-                                await out.put(_sse("tool", {
-                                    "name": block.name,
-                                    "target": _trace_target(block.input),
-                                }))
-                    elif isinstance(msg, ResultMessage):
-                        if not ephemeral:  # la parenthèse ⚡ ne touche pas le pointeur
-                            _save_session_id(msg.session_id)
-                        await out.put(
-                            _sse(
-                                "done",
-                                {
-                                    "session_id": msg.session_id,
-                                    "duration_ms": msg.duration_ms,
-                                    "ephemeral": ephemeral,
-                                },
+                # ClaudeSDKClient et NON query() : c'est le seul des deux qui
+                # parle au CLI en mode streaming, donc le seul qui sache lui
+                # envoyer un signal d'arrêt (cf. _current_client / /api/chat/stop).
+                # Le tour reste identique par ailleurs — mêmes options, mêmes
+                # messages, même `done`.
+                async with ClaudeSDKClient(options=options) as client:
+                    _turn_started(client)
+                    await client.query(prompt)
+                    async for msg in client.receive_response():
+                        if isinstance(msg, AssistantMessage):
+                            for block in msg.content:
+                                # « No response requested. » est un artefact du
+                                # harnais (réparation de tour interrompu), pas une
+                                # parole d'Alfred — jamais montré.
+                                if (
+                                    isinstance(block, TextBlock)
+                                    and block.text
+                                    and block.text.strip() != "No response requested."
+                                ):
+                                    await out.put(_sse("text", {"text": block.text}))
+                                elif TRACE and isinstance(block, ToolUseBlock):
+                                    # Live seulement : /api/history ne rejoue pas la
+                                    # trace (le transcript ne garde que le texte), donc
+                                    # elle disparaît au rechargement. Assumé — c'est un
+                                    # témoin d'exécution, pas une archive.
+                                    await out.put(_sse("tool", {
+                                        "name": block.name,
+                                        "target": _trace_target(block.input),
+                                    }))
+                        elif isinstance(msg, ResultMessage):
+                            if not ephemeral:  # la parenthèse ⚡ ne touche pas le pointeur
+                                _save_session_id(msg.session_id)
+                            await out.put(
+                                _sse(
+                                    "done",
+                                    {
+                                        "session_id": msg.session_id,
+                                        "duration_ms": msg.duration_ms,
+                                        "ephemeral": ephemeral,
+                                        # Le front n'en fait rien aujourd'hui ; c'est
+                                        # la trace qui distingue « fini » d'« arrêté ».
+                                        "stopped": _stop_asked,
+                                    },
+                                )
                             )
-                        )
             except Exception as exc:  # surfaced to the client, not swallowed
                 await out.put(_sse("error", {"message": str(exc)}))
             finally:
+                _turn_ended()
                 await out.put(None)
 
     asyncio.create_task(run_turn())

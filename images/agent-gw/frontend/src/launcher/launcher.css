@@ -202,6 +202,10 @@ button{ font:inherit; color:inherit; cursor:pointer; background:none; border:non
 .compose .shield{ width:36px; height:36px; flex:0 0 auto; border-radius:var(--r-ctl); border:1px solid var(--line); background:var(--surface2); font-size:15px; } .compose .shield.armed{ border-color:var(--warn); color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); font:700 13px var(--f-mono); }
 #eph{ filter:grayscale(1); opacity:.6; } #eph.on{ filter:none; opacity:1; border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,transparent); }
 .compose .snd{ width:36px; height:36px; flex:0 0 auto; border-radius:var(--r-round); background:var(--accent); color:var(--on-accent); font-size:16px; }
+/* Le même bouton en mode ARRÊT (tour en cours, composer vide) : même place, même
+   taille — seule la livrée change, pour qu'on ne clique pas « envoyer » par réflexe. */
+.compose .snd.stop{ background:var(--todo); font-size:12px; }
+.compose .snd:disabled{ opacity:.55; }
 
 /* ── Curseur-bloc des invites ─────────────────────────────────────────────
    Le clignotant d'un terminal. Masqué par défaut (`--caret-display:none`) : c'est
