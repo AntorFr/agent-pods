@@ -2,7 +2,7 @@
 
 > MàJ : 2026-08-02
 
-**Un rechargement ne perdait pas le tour, il perdait le TÉMOIN — EN COURS (2026-08-02, agent-gw 0.51.0)** :
+**Un rechargement ne perdait pas le tour, il perdait le TÉMOIN — DÉPLOYÉ (2026-08-02, agent-gw 0.51.0)** :
 signalé au doigt (« je fais un refresh, je ne vois plus qu'il travaille »). Normal et structurel : le flux
 SSE appartient à la requête `POST /api/chat`, F5 la tue, et `busy` n'est qu'une variable JS. Le tour, lui,
 survit — c'est tout l'objet de la tâche détachée. **Mais le défaut réel était pire que le symptôme** : la
@@ -16,6 +16,18 @@ autre agent — une bulle de frappe dans la conversation de Monsieur pour le bri
 mensonge. `chat_busy` est exactement `_current_client is not None`, donc offert par le registre de 0.50.0.
 Effet de bord heureux : un tour repris après rechargement est un tour qu'on peut **arrêter**. Un corps
 injoignable ne conclut rien (on retente, on ne déclare pas la fin). `test/stop_test.py` monte à 19 cas.
+
+> ✅ **Déployé et sondé** — image `0.51.0` (index OCI amd64 + arm64) contrôlée au manifeste registry avant
+> de bumper ; le push k8s a été **rejeté** (Renovate venait de passer sur `ha-mcp` v8) → rebase, pas de
+> force, et vérification que le diff amont ne touchait pas `assist/`. `launcher.js` servi par **alfred ET
+> skippy** au SHA-256 du build local (`3bd5c26e…`, 117 541 octets) 60 s après le push, et `/api/health`
+> rend bien `chat_busy` sur les deux corps — la preuve la plus directe que c'est 0.51.0 qui tourne.
+>
+> ⚠️ **Reste à voir à l'usage** : `chat_busy` retombe quand `_current_client` se vide, c'est-à-dire à la
+> sortie du `async with ClaudeSDKClient(...)`. La sonde du front peut donc conclure la fin du tour une
+> fraction de seconde avant que le transcript ne soit relu — `resyncHistory()` est appelé juste après, et
+> `visibilitychange`/`online` restent en filet. Si une réponse manquait après un rechargement, c'est là
+> qu'il faudrait regarder (ordre `_turn_ended()` / écriture du transcript), pas ailleurs.
 
 **On peut enfin arrêter un tour — DÉPLOYÉ (2026-08-02, agent-gw 0.50.0)** : signalé au doigt (« pas moyen
 d'arrêter un tour en cours »). Exact, et ce n'était pas un oubli : `run_turn()` est **délibérément
