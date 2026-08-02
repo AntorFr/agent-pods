@@ -2,7 +2,7 @@
 
 > MàJ : 2026-08-02
 
-**On peut enfin arrêter un tour — EN COURS (2026-08-02, agent-gw 0.50.0)** : signalé au doigt (« pas moyen
+**On peut enfin arrêter un tour — DÉPLOYÉ (2026-08-02, agent-gw 0.50.0)** : signalé au doigt (« pas moyen
 d'arrêter un tour en cours »). Exact, et ce n'était pas un oubli : `run_turn()` est **délibérément
 détachée** de la réponse HTTP depuis qu'un écran mobile verrouillé tuait le tour en plein vol. Restait
 l'arrêt volontaire, jamais recâblé par-dessus. **`task.cancel()` était le piège** — il rejouait
@@ -17,6 +17,18 @@ bouton d'envoi devient un bouton d'arrêt quand un tour tourne **et** que le com
 condition « vide » est ce qui rend la bascule sans risque. La file d'attente n'est pas vidée : arrêter
 le tour en cours n'annule pas ce qu'on a demandé ensuite. `test/stop_test.py` couvre les 13 cas
 (idle, idempotence, verrou tenu, drapeau qui se rabaisse au tour suivant).
+
+> ✅ **Déployé et sondé** — image `0.50.0` (index OCI amd64 + arm64) contrôlée au manifeste registry
+> avant de bumper, les deux manifestes k8s poussés, et `launcher.js` servi par **alfred ET skippy** au
+> SHA-256 exact du build local (`5401e94f…`, 117 034 octets) 200 s après le push. `POST /api/chat/stop`
+> répond **401** sans session sur les deux corps : la route existe et elle est bien derrière la garde
+> (un 404 aurait dit l'inverse).
+>
+> ⚠️ **Ce que la sonde ne prouve PAS** : que `interrupt()` referme le transcript aussi proprement que
+> la doc du SDK l'annonce. Le refactor `query()` → `ClaudeSDKClient` n'a pas de face en test — il faut
+> le vrai CLI. Le contrôle est un geste humain : arrêter un tour long, puis envoyer un message et
+> vérifier qu'**aucune bulle parasite** ne le précède. Si elle réapparaît, c'est là qu'il faut
+> chercher, pas ailleurs.
 
 **Le fil d'Ariane envoyait les fiches hors-domaine dans le vide — DÉPLOYÉ (2026-08-02, agent-gw 0.49.1)** :
 signalé au doigt depuis `#/mem/planif/briefing.md`, dont le maillon « Planifications » menait à
