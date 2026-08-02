@@ -843,6 +843,15 @@ const APPS_FALLBACK = ['todo', 'projets', 'atelier', 'planif', 'voyages'];
 let APPS = new Set(APPS_FALLBACK);
 function appOn(id) { return APPS.has(id); }
 
+/* ── Racines de mémoire qui ne sont PAS des domaines ─────────────────
+   `#/dom/<x>` se résout sous `domaines/<x>/` (cf. memPrefix). Or `todo/`,
+   `planif/` et `home/` vivent à la RACINE de memory/ : un fil d'Ariane qui les
+   envoyait sur `#/dom/…` menait à un domaine inexistant — page vide, titre seul.
+   Celles qu'un module représente suivent SA route ; les autres n'ont pas de page,
+   donc pas de lien du tout (un libellé inerte vaut mieux qu'un lien mort). */
+const ROOT_ROUTE = { todo: '#/todo', planif: '#/planif' };
+const rootHash = (seg) => (appOn(seg) && ROOT_ROUTE[seg]) || null;
+
 /* ── Capacités de la coque (GW_FEATURES) ─────────────────────────────
    Le second axe : `apps` dit où l'on peut ALLER, `features` dit ce que le chat
    sait FAIRE. Un lecteur de code-barres n'a rien à faire chez un agent de code.
@@ -1041,15 +1050,23 @@ $('home').addEventListener('click', () => { location.hash = '#/'; });
 $('home2') && $('home2').addEventListener('click', () => { location.hash = '#/'; });
 
 let CR = [];
+// Un maillon sans `hash` est INERTE (libellé seul) : tous les niveaux d'un chemin
+// n'ont pas d'écran à eux, et fabriquer un lien pour les aligner, c'est le bug que
+// ça corrige. Il reste dans CR — donc dans `titre` du contexte d'écran, où le
+// libellé compte —, il n'est simplement jamais cliquable.
 function crumbs(parts) {
   CR = parts;
   $('crumbs').innerHTML = parts.map((p, i) => i === parts.length - 1
     ? `<span class="c">${esc(p.label)}</span>`
-    : `<a class="cb" href="${p.hash}">${esc(p.label)}</a><span class="s">›</span>`).join('');
+    : `${p.hash ? `<a class="cb" href="${p.hash}">${esc(p.label)}</a>` : `<span class="cb off">${esc(p.label)}</span>`}<span class="s">›</span>`).join('');
   $('back').style.display = parts.length > 1 ? 'flex' : 'none';
   const sc = document.querySelector('.scroll'); if (sc) sc.scrollTop = 0;
 }
-$('back').addEventListener('click', () => { if (CR.length > 1) location.hash = CR[CR.length - 2].hash; });
+// « Retour » remonte au dernier maillon qui MÈNE quelque part, pas au précédent :
+// l'avant-dernier peut être inerte.
+$('back').addEventListener('click', () => {
+  for (let i = CR.length - 2; i >= 0; i--) if (CR[i].hash) { location.hash = CR[i].hash; return; }
+});
 
 // Contexte d'écran, joint à chaque message : sur desktop le canvas est ouvert À CÔTÉ
 // du chat, donc « ça » dans une phrase de Monsieur désigne le plus souvent ce qu'il a
@@ -1215,6 +1232,11 @@ const GROUPED = {
 async function renderDomain(rawSubpath) {
   await loadIndex();
   const [subpath, qs] = rawSubpath.split('?');
+  // `#/dom/todo`, `#/dom/planif` : une racine de mémoire prise pour un domaine
+  // (marque-page, ou `cible` de type domaine écrite par l'agent dans brief.json).
+  // On renvoie sur le module plutôt que d'afficher sa page vide.
+  const rh = rootHash(subpath);
+  if (rh) { location.replace(rh); return; }
   const groupSel = new URLSearchParams(qs || '').get('g');
   const segs = subpath.split('/');
   const m = metaFor(segs[0]);
@@ -1348,13 +1370,23 @@ async function renderFiche(path) {
   }
   const parts = path.split('/');
   const file = parts.at(-1);
+  // Sous `domaines/` (et le pseudo-domaine `sujets`), chaque dossier traversé EST un
+  // domaine : il a sa page `#/dom/…`. Ailleurs — `todo/`, `planif/`, `home/` — non :
+  // seule la racine peut être cliquable, vers son module (cf. ROOT_ROUTE).
+  const isDom = parts[0] === 'domaines' || parts[0] === 'sujets';
   let domSegs;
   if (parts[0] === 'domaines') domSegs = parts.slice(1, -1);
   else if (parts[0] === 'sujets') domSegs = ['sujets', ...parts.slice(1, -1)];
   else domSegs = parts.slice(0, -1);
   const cr = [{ label: 'Accueil', hash: '#/' }];
   let acc = '';
-  domSegs.forEach((s, i) => { acc = i ? acc + '/' + s : s; cr.push({ label: i === 0 ? metaFor(s).label : prettify(s), hash: '#/dom/' + acc }); });
+  domSegs.forEach((s, i) => {
+    acc = i ? acc + '/' + s : s;
+    cr.push({
+      label: i === 0 ? metaFor(s).label : prettify(s),
+      hash: isDom ? '#/dom/' + acc : (i === 0 ? rootHash(s) : null),
+    });
+  });
   cr.push({ label: file.replace(MD_EXT, ''), hash: '#/mem/' + path });
   crumbs(cr);
   page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';

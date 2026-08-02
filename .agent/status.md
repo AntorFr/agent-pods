@@ -1,6 +1,19 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-01
+> MàJ : 2026-08-02
+
+**Le fil d'Ariane envoyait les fiches hors-domaine dans le vide — CORRIGÉ (2026-08-02, agent-gw 0.49.1)** :
+signalé au doigt depuis `#/mem/planif/briefing.md`, dont le maillon « Planifications » menait à
+`#/dom/planif` — une page à titre seul, alors que l'accueil, lui, pointe `#/planif`. La cause est
+structurelle, pas locale : `renderFiche()` fabriquait `#/dom/<seg>` pour **tout** premier segment,
+or `#/dom/x` se résout sous `domaines/x/` (`memPrefix()`). Les racines qui ne sont pas des domaines
+— `todo/`, `planif/`, `home/` — n'existent donc pas là-bas, et **toute** fiche de todo portait le
+même lien mort. Trois pièces : `ROOT_ROUTE` mappe une racine sur la route de son module (et
+seulement s'il est allumé, `appOn`) ; un maillon de fil d'Ariane peut désormais être **inerte**
+(libellé sans lien — il reste dans `CR`, donc dans le `titre` du contexte d'écran, et « Retour »
+remonte au dernier maillon qui mène quelque part) ; et `renderDomain()` **redirige** `#/dom/todo`
+/ `#/dom/planif` vers le module, ce qui neutralise aussi les marque-pages et une `cible` de type
+domaine écrite par l'agent dans `brief.json`.
 
 **Le chat sait ce que Monsieur regarde — DÉPLOYÉ (2026-08-01, agent-gw 0.49.0)** : sur desktop la PWA est
 un split (chat à gauche, canvas à droite), et le chat ignorait totalement l'autre volet — « ça »

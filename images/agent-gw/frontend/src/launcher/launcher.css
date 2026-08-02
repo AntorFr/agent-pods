@@ -242,7 +242,9 @@ button{ font:inherit; color:inherit; cursor:pointer; background:none; border:non
 .top{ display:flex; align-items:center; gap:10px; padding:11px 24px; border-bottom:1px solid var(--line-soft); min-height:52px; background:color-mix(in srgb,var(--bg) 82%,transparent); backdrop-filter:blur(6px); }
 .back{ display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-soft); padding:6px 9px 6px 6px; border-radius:var(--r-sm); flex-shrink:0; } .back:hover{ background:var(--surface); color:var(--ink); } .back svg{ width:15px; height:15px; }
 .crumbline{ font:13px var(--f-mono); color:var(--ink-soft); display:flex; align-items:center; gap:6px; flex-wrap:wrap; flex:1; min-width:0; }
-.crumbline .cb{ color:var(--ink-soft); text-decoration:none; } .crumbline .cb:hover{ color:var(--accent); text-decoration:underline; } .crumbline .s{ color:var(--ink-faint); } .crumbline .c{ color:var(--ink); font-weight:600; }
+.crumbline .cb{ color:var(--ink-soft); text-decoration:none; } .crumbline a.cb:hover{ color:var(--accent); text-decoration:underline; } .crumbline .s{ color:var(--ink-faint); } .crumbline .c{ color:var(--ink); font-weight:600; }
+/* Maillon INERTE (pas d'écran derrière) : même livrée, mais rien ne promet un clic. */
+.crumbline .cb.off{ cursor:default; }
 .ib{ width:33px; height:31px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface); color:var(--ink-soft); display:grid; place-items:center; font-size:15px; flex-shrink:0; } .ib:hover{ border-color:var(--accent); color:var(--accent); } .ib.pending{ color:var(--warn); border-color:var(--warn); }
 .scroll{ flex:1; overflow-y:auto; } .view{ animation:fade .2s ease; } @keyframes fade{ from{ opacity:0; transform:translateY(4px); } }
 .wrap{ max-width:940px; margin:0 auto; padding:26px 30px 100px; } .wrap.narrow{ max-width:760px; }
