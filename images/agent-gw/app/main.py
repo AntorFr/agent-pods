@@ -769,6 +769,13 @@ def _instance_facts() -> list[str]:
     est leur somme. Les magasins mémoire (chantier multi-utilisateurs) viendront
     s'y ajouter sans que les appelants bougent — d'où une liste plutôt qu'une
     phrase câblée sur les deux axes du jour.
+
+    ⚠️ Le CANAL n'est délibérément PAS de la liste. `GW_CHANNEL` est lu à l'import,
+    donc depuis l'env du PROCESS — or un tour planifié retague son canal par l'env
+    du SPAWN (cf. `_run_alfred(env=…)`, D30). L'annoncer ici ferait dire « pwa » à
+    l'horloge, sur le seul canal où la méprise coûte cher : c'est lui qui ferme la
+    surface Google. Mieux vaut ne rien dire que dire faux — le hook, lui, lit la
+    bonne valeur au bon moment.
     """
     return [
         "modules — " + (", ".join(APPS) or "aucun"),

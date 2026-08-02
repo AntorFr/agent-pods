@@ -26,6 +26,20 @@ unidirectionnel (le HUD teste déjà `appOn('repos')` et se replie proprement), 
 seul écran dont la forme EST l'identité du corps — l'en sortir coûterait un quatrième axe de
 configuration pour un besoin que personne n'a.
 
+> 🔎 **Un registre `launcher/apps/`, symétrique de celui des skins.** `repos` n'est pas posé en
+> vrac dans un `main.js` de 2 800 lignes : il a son dossier (`apps/repos.js` + `apps/repos.css`,
+> la feuille importée par le JS donc agrégée au bundle), et `apps/index.js` porte le contrat —
+> une fabrique `(api) => { routes }`, injection explicite comme pour les skins, une app qui jette
+> n'emporte pas les autres. Les quatre autres modules restent dans `main.js` : on les déplacera
+> quand on y touchera de toute façon, pas pour la symétrie. **Et `resolveSkin` filtre désormais
+> sur liste blanche en signalant ce qu'il jette** — la frontière « un thème habille, il ne route
+> pas » était déjà écrite et elle a dérivé quand même ; une convention que rien ne vérifie n'en
+> est pas une. `theme-lint` gagne un contrôle **1 bis** : une feuille d'app suit le contrat de la
+> COQUE (aucune couleur littérale, aucun rayon en pixels, et **aucune déclaration de jeton** —
+> une app consomme la charte, elle ne la définit pas), et ses classes entrent dans
+> `shellClasses`, sinon un thème pourrait repeindre `.repo` sans scope. Éprouvé à l'envers :
+> violation introduite → 3 échecs, restauration → vert.
+
 > 🔎 **Le CSS a suivi, et il révèle une entorse ancienne.** Les surfaces HUD (`.hud`, `.panel`,
 > `.fleet`, `.repo`, les tuiles…) vivaient dans `skippy.css` : le contrôle 3 du lint ne les
 > tolérait que parce que la coque **ignorait** ces classes. Faire de `repos` une app les lui fait

@@ -1,0 +1,42 @@
+/* App `repos` — le tableau de flotte.
+   ═══════════════════════════════════════════════════════════════════════════
+   Importée par `repos.js`, donc agrégée dans `launcher.css` au bundle. Soumise
+   au MÊME contrat que la coque (`theme-lint`, contrôle 1) : aucune couleur
+   littérale, aucun rayon en pixels — que des jetons. Une app est du code
+   partagé, pas un thème : elle doit suivre la charte du corps qui l'affiche,
+   quel qu'il soit.
+
+   Les surfaces qu'elle EMPRUNTE — `.hud`, `.panel`, `.ruler`, `.hudh2`,
+   `.hudlede`, `.hudempty`, `.pc` — restent dans `launcher.css` : ce sont des
+   primitives partagées avec la passerelle du skin, pas la propriété de cette
+   vue-ci. */
+
+.fleetbar{ display:flex; align-items:baseline; gap:20px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--line); }
+.metric{ display:flex; align-items:baseline; gap:7px; }
+.metric b{ font:600 20px var(--f-mono); font-variant-numeric:tabular-nums; letter-spacing:var(--title-track); }
+.metric span{ font:600 9.5px var(--f-mono); letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); }
+.metric.attn b{ color:var(--accent); }
+.fleet{ display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1px; background:var(--line); }
+.repo{ background:var(--surface); padding:16px 18px 15px; display:flex; flex-direction:column; gap:10px; transition:background .18s; }
+.repo:hover{ background:var(--surface2); }
+.repo header{ display:flex; align-items:center; gap:10px; }
+.repo h3{ margin:0; font:600 13.5px var(--f-mono); letter-spacing:var(--title-track); }
+.repo .age{ margin-left:auto; font:10px var(--f-mono); color:var(--ink-faint); letter-spacing:.06em; }
+.repo .etat{ margin:0; font-size:12.5px; line-height:1.5; color:var(--ink-soft); }
+.repo.void{ opacity:.55; } .repo.void .etat{ font-style:italic; }
+
+/* `.dot` existe dans la coque avec un autre sens : scoper sous `.hud` est
+   obligatoire, sans quoi cette règle repeint les pastilles d'Alfred. */
+.hud .dot{ width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.hud .dot.live{ background:var(--accent); box-shadow:0 0 0 3px var(--accent-lo); }
+.hud .dot.calm{ background:var(--good); }
+.hud .dot.off{ background:transparent; border:1px solid var(--ink-faint); }
+
+.telemetry{ display:flex; align-items:flex-end; gap:16px; }
+.metalab{ font:600 9.5px/1 var(--f-mono); letter-spacing:.15em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:5px; }
+.spark{ display:block; }
+.repo .next{ margin:0; padding:10px 0 0; list-style:none; display:flex; flex-direction:column; gap:6px; border-top:1px dashed var(--line); }
+.repo .next li{ font:11px/1.45 var(--f-mono); color:var(--ink-faint); display:flex; gap:9px; }
+.repo .next li::before{ content:"▸"; color:var(--accent); opacity:.7; flex-shrink:0; }
+.repo .next li.more{ opacity:.65; } .repo .next li.more::before{ content:"…"; }
+.repo footer{ display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; padding-top:4px; }

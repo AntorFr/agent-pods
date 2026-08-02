@@ -8,6 +8,10 @@ import './launcher.css';
 // avec les règles `:root[data-theme]` du socle.
 import './skins/themes.css';
 import { resolveSkin } from './skins/index.js';
+// Les app-modules qui ont déjà quitté ce fichier. Chaque app importe SA feuille,
+// donc leur CSS arrive après `launcher.css` : une app s'appuie sur les
+// primitives de la coque, jamais l'inverse.
+import { resolveApps } from './apps/index.js';
 import { FORMATS, addCode, composeMessage } from '../scan/codes.js';
 
 const $ = (id) => document.getElementById(id);
@@ -973,7 +977,7 @@ async function loadApps() {
     // boot), sinon on verrait passer la livrée du socle. `alfred` reste
     // implicite : aucun attribut, aucune surcharge, rien ne bouge.
     if (d.theme && d.theme !== 'alfred') document.documentElement.dataset.agent = d.theme;
-    SKIN = resolveSkin(d.theme, SKIN_API);
+    SKIN = resolveSkin(d.theme, EXT_API);
     applySkinChrome(d);
   } catch {}
 }
@@ -1096,12 +1100,16 @@ function ficheCount(prefix) {
    comportements par défaut. Un skin ne peut qu'ajouter, jamais retrancher — d'où
    l'impossibilité qu'un thème neuf casse un corps existant.
    Les primitives du lanceur sont injectées : voir `skins/index.js`. */
-const SKIN_API = {
+const EXT_API = {
   $, esc, crumbs, headers,
   get page() { return page; },
   appOn: (id) => appOn(id),
 };
-let SKIN = resolveSkin(null, SKIN_API);
+let SKIN = resolveSkin(null, EXT_API);
+// Les apps sont instanciées UNE fois, au chargement du module : elles ne
+// dépendent que des primitives ci-dessus, jamais de `apps`/`features` (qui
+// arrivent plus tard, au boot). C'est `renderRoute` qui les filtre par `appOn`.
+const APP_VIEWS = resolveApps(EXT_API);
 
 /** Habillage de la coque : le nom du corps est écrit en dur dans app.html, et la
     barre d'état n'existe que si le skin en fournit une. */
@@ -1121,7 +1129,7 @@ function applySkinChrome(info) {
 
   const main = document.querySelector('main.main');
   if (!SKIN.console || !main || main.querySelector(':scope > .console')) return;
-  const bar = SKIN.console(SKIN_API, info || {});
+  const bar = SKIN.console(EXT_API, info || {});
   if (bar) main.insertBefore(bar, main.firstChild);
 }
 
@@ -1167,101 +1175,6 @@ function currentView() {
 }
 
 const page = $('view');
-/* ── App Flotte (`repos`) ─────────────────────────────────────────────────
-   Un scan des `.agent/status.md` des clones locaux, servi par `/api/repos`.
-   Cette vue vivait dans `skins/skippy.js` : elle n'existait donc que sous la
-   livrée Skippy, alors que `repos` était déjà un module déclarable et que
-   `/api/repos` répond quel que soit le thème — `GW_APPS=repos` sur un pod en
-   livrée neutre donnait une route morte. C'est une app comme les autres. */
-const SPARK_W = 118, SPARK_H = 30;
-
-function spark(days) {
-  const max = Math.max(1, ...days), n = days.length;
-  const pt = (i) => [2 + (i * (SPARK_W - 4)) / (n - 1), SPARK_H - 3 - (days[i] / max) * (SPARK_H - 8)];
-  const line = days.map((_, i) => pt(i).map((v) => v.toFixed(1)).join(' ')).join(' L ');
-  const [lx, ly] = pt(n - 1);
-  return `<svg class="spark" width="${SPARK_W}" height="${SPARK_H}" viewBox="0 0 ${SPARK_W} ${SPARK_H}"
-    role="img" aria-label="Activité des commits sur ${n} jours, maximum ${max} par jour">
-    <path d="M ${line} L ${lx.toFixed(1)} ${SPARK_H} L 2 ${SPARK_H} Z" fill="var(--accent-lo)"/>
-    <path d="M ${line}" fill="none" stroke="var(--accent)" stroke-width="2"
-      stroke-linecap="round" stroke-linejoin="round" opacity=".75"/>
-    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3" fill="var(--accent)"/>
-  </svg>`;
-}
-
-function ageFr(iso) {
-  if (!iso) return '—';
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (d <= 0) return "aujourd'hui";
-  if (d === 1) return 'hier';
-  if (d < 31) return `il y a ${d} j`;
-  return `il y a ${Math.round(d / 30)} mois`;
-}
-
-async function renderRepos() {
-  crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'La flotte', hash: '#/repos' }]);
-  page.innerHTML = '<div class="hud"><div class="hudempty">Scan de la flotte…</div></div>';
-  let d;
-  try {
-    const r = await fetch('/api/repos', { headers: headers(false), cache: 'no-store' });
-    if (!r.ok) throw new Error(r.status);
-    d = await r.json();
-  } catch (e) {
-    page.innerHTML = `<div class="hud"><div class="hudempty">Flotte injoignable (${esc(String(e))}).</div></div>`;
-    return;
-  }
-  if (!d.total) {
-    page.innerHTML = `<div class="hud"><div class="hudempty">Aucun dépôt cloné sous
-      <code>${esc(d.racine)}</code>. La flotte se peuple à la demande — dites-le-moi et je clone
-      ce que décrit <code>repos.yml</code>.</div></div>`;
-    return;
-  }
-
-  const cards = d.repos.map((c) => {
-    const shown = c.etapes.slice(0, 3).map((s) => `<li>${esc(s)}</li>`).join('');
-    const rest = c.etapes.length > 3
-      ? `<li class="more">+ ${c.etapes.length - 3} autre${c.etapes.length - 3 > 1 ? 's' : ''}</li>` : '';
-    const dot = !c.fiche ? 'off' : c.etapes.length ? 'live' : 'calm';
-    // La couleur ne dit JAMAIS l'information seule : amber↔vert tombe à ΔE 8
-    // en protanopie, donc chaque pastille porte son libellé écrit.
-    const pills = [
-      c.cockpit ? '<span class="pc amb">cockpit</span>' : '',
-      c.etapes.length ? `<span class="pc hot">${c.etapes.length} à traiter</span>` : '',
-      c.fiche ? '' : '<span class="pc">sans fiche</span>',
-      c.sale ? '<span class="pc amb">clone modifié</span>' : '',
-      c.branche && c.branche !== 'main' ? `<span class="pc">${esc(c.branche)}</span>` : '',
-    ].filter(Boolean).join('');
-    return `<article class="repo${c.fiche ? '' : ' void'}">
-      <header><span class="dot ${dot}"></span><h3>${esc(c.nom)}</h3>
-        <span class="age">${esc(ageFr(c.dernier))}</span></header>
-      <p class="etat">${c.fiche
-        ? esc(c.etat.slice(0, 240))
-        : "Aucune fiche de statut. Jamais touché depuis que la norme existe — pas de rétro-doc, "
-          + "donc rien à afficher, et rien à reprocher."}</p>
-      <div class="telemetry"><div><div class="metalab">Activité · 30 j</div>${spark(c.activite)}</div></div>
-      ${shown ? `<ul class="next">${shown}${rest}</ul>` : ''}
-      <footer>${pills}</footer>
-    </article>`;
-  }).join('');
-
-  page.innerHTML = `<div class="hud">
-    <h2 class="hudh2">Le tableau de bord</h2>
-    <p class="hudlede">Un scan des <code>.agent/status.md</code> des clones locaux : l'état en une
-      ligne, l'activité des trente derniers jours, et ce qui attend un geste. Les dépôts sans fiche
-      ne sont pas en retard — ils n'ont jamais été touchés, et la grille le dit au lieu de le taire.</p>
-    <section class="panel">
-      <div class="ruler"></div>
-      <div class="fleetbar">
-        <span class="metric"><b>${d.total}</b><span>dépôts</span></span>
-        <span class="metric"><b>${d.avec_fiche}</b><span>fiches</span></span>
-        <span class="metric attn"><b>${d.en_attente}</b><span>attendent un geste</span></span>
-        <span class="metric"><b>${d.total - d.avec_fiche}</b><span>jamais touchés</span></span>
-      </div>
-      <div class="fleet">${cards}</div>
-    </section>
-  </div>`;
-}
-
 function renderRoute() {
   const route = currentRoute();
   // Mobile deux-écrans : le CHAT est l'écran par défaut. Naviguer vers une app révèle
@@ -1291,7 +1204,17 @@ function renderRoute() {
     if (route === 'todo') return renderTodo();
   }
   if (route === 'planif' && appOn('planif')) return renderPlanif();
-  if (route === 'repos' && appOn('repos')) return renderRepos();
+  // Les apps du registre (`apps/index.js`) — celles qui ont déjà quitté ce
+  // fichier. Testées SOUS `appOn` comme les autres : une route ne survit pas à
+  // l'extinction de son module, marque-page compris.
+  for (const [id, app] of Object.entries(APP_VIEWS)) {
+    if (!appOn(id) || !app.routes) continue;
+    for (const [prefix, render] of Object.entries(app.routes)) {
+      if (prefix.endsWith('/')) {
+        if (route.startsWith(prefix)) return render(decodeURIComponent(route.slice(prefix.length)));
+      } else if (route === prefix) return render('');
+    }
+  }
   if (appOn('atelier')) {
     if (route === 'atelier') return renderAtelierHub();
     if (route.startsWith('atelier/')) return renderWorkbook(decodeURIComponent(route.slice(8)));

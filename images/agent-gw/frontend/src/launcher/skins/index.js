@@ -58,11 +58,35 @@ const FACTORIES = {
     le garder implicite garantit qu'un pod existant ne bouge pas d'un pixel. */
 const NEUTRAL = { id: 'alfred' };
 
+/* Le contrat, en liste BLANCHE — pas en prose seulement.
+   La frontière « un thème habille, il ne route pas » était déjà écrite plus haut,
+   et elle a dérivé quand même : le skin `skippy` déclarait `routes`, et la vue de
+   la flotte s'est retrouvée prisonnière d'une livrée pendant des semaines. Une
+   convention que rien ne vérifie n'est pas une convention. On jette donc ce qui
+   n'est pas au contrat, et — surtout — on le DIT : un champ silencieusement
+   ignoré est une heure perdue à chercher pourquoi « ça ne marche pas ». */
+const FIELDS = [
+  'brand', 'crest', 'title', 'placeholder',
+  'idleLabel', 'busyLabel', 'busyNode', 'console', 'home',
+];
+
 export function resolveSkin(id, api) {
   const make = FACTORIES[id];
   if (!make) return NEUTRAL;
   try {
-    return { ...NEUTRAL, ...make(api), id };
+    const declared = make(api) || {};
+    const kept = {}, dropped = [];
+    for (const [k, v] of Object.entries(declared)) {
+      if (FIELDS.includes(k)) kept[k] = v;
+      else dropped.push(k);
+    }
+    if (dropped.length) {
+      console.warn(
+        'skin « ' + id + ' » : hors contrat, ignoré(s) — ' + dropped.join(', ')
+        + '. Une route est une app, pas un habillage : voir apps/index.js.',
+      );
+    }
+    return { ...NEUTRAL, ...kept, id };
   } catch (e) {
     // Un skin cassé ne doit jamais rendre la PWA inutilisable : on retombe sur
     // le socle et on le dit dans la console du navigateur.
