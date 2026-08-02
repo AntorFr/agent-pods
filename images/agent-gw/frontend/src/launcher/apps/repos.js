@@ -14,7 +14,15 @@ import './repos.css';
 const SPARK_W = 118, SPARK_H = 30;
 
 export default function createReposApp(api) {
-  const { esc, page, crumbs, headers } = api;
+  // ⚠️ `page` n'est PAS destructuré, et ce n'est pas un oubli : c'est un GETTER
+  // de l'API du lanceur (`get page() { return page; }`), parce que le nœud
+  // n'existe pas encore quand les apps sont instanciées — `const page =
+  // $('view')` vient soixante lignes plus bas dans `main.js`. Le destructurer
+  // fige la valeur du moment, c'est-à-dire `undefined`, et la vue se rend dans
+  // le vide : fil d'Ariane correct, écran blanc, aucune erreur au build ni aux
+  // tests. Vécu le 2026-08-02, attrapé par une capture d'écran, par rien d'autre.
+  // Les skins y échappent en étant RÉSOLUS au boot ; les apps le sont à l'import.
+  const { esc, crumbs, headers } = api;
 
   /* Trente jours de commits en une courbe de 118 px. Les couleurs sont des
      jetons : la courbe suit la charte du corps sans rien savoir de lui. */
@@ -43,18 +51,18 @@ export default function createReposApp(api) {
 
   async function render() {
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'La flotte', hash: '#/repos' }]);
-    page.innerHTML = '<div class="hud"><div class="hudempty">Scan de la flotte…</div></div>';
+    api.page.innerHTML = '<div class="hud"><div class="hudempty">Scan de la flotte…</div></div>';
     let d;
     try {
       const r = await fetch('/api/repos', { headers: headers(false), cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
       d = await r.json();
     } catch (e) {
-      page.innerHTML = `<div class="hud"><div class="hudempty">Flotte injoignable (${esc(String(e))}).</div></div>`;
+      api.page.innerHTML = `<div class="hud"><div class="hudempty">Flotte injoignable (${esc(String(e))}).</div></div>`;
       return;
     }
     if (!d.total) {
-      page.innerHTML = `<div class="hud"><div class="hudempty">Aucun dépôt cloné sous
+      api.page.innerHTML = `<div class="hud"><div class="hudempty">Aucun dépôt cloné sous
         <code>${esc(d.racine)}</code>. La flotte se peuple à la demande — dites-le-moi et je clone
         ce que décrit <code>repos.yml</code>.</div></div>`;
       return;
@@ -87,7 +95,7 @@ export default function createReposApp(api) {
       </article>`;
     }).join('');
 
-    page.innerHTML = `<div class="hud">
+    api.page.innerHTML = `<div class="hud">
       <h2 class="hudh2">Le tableau de bord</h2>
       <p class="hudlede">Un scan des <code>.agent/status.md</code> des clones locaux : l'état en une
         ligne, l'activité des trente derniers jours, et ce qui attend un geste. Les dépôts sans fiche
