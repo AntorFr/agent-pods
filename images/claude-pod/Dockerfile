@@ -74,6 +74,17 @@ RUN usermod -l agent -d /home/agent -m node \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# ⚠️ HOME EXPLICITE — pas une redondance.
+# Le compte `agent` porte l'uid 1000, mais un pod peut tourner sous un TOUT AUTRE
+# uid (`runAsUser`) : celui d'une personne réelle, venu d'un annuaire, absent de
+# l'/etc/passwd de cette image. Sans entrée passwd, $HOME n'est pas résolu et vaut
+# « / » — tout ce qui écrit sous le home part alors à la racine, en lecture seule.
+# Vécu le 2026-08-03 : `could not lock config file //.gitconfig` (le double slash
+# est la signature), et surtout une gateway qui démarre NORMALEMENT pour ne casser
+# qu'au premier tour d'agent, sur ~/.claude. Une ligne ici évite de devoir y penser
+# dans chaque manifeste.
+ENV HOME=/home/agent
+
 USER agent
 WORKDIR /workspace
 

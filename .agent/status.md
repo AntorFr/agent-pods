@@ -2,6 +2,21 @@
 
 > MàJ : 2026-08-02
 
+**`ENV HOME` remonté dans les TROIS images — À TAGUER (2026-08-03)** : découvert en basculant
+Alfred sous `runAsUser: 3000` (uid d'une personne réelle, venu de holocron, absent de
+l'`/etc/passwd` des images). Sans entrée passwd, **`$HOME` n'est pas résolu et vaut `/`** : tout
+ce qui écrit sous le home part à la racine, en lecture seule.
+
+- **Tunnel** : mort tout de suite — `could not lock config file //.gitconfig`. *Le double slash
+  est la signature du diagnostic.*
+- **Gateway** : démarre **normalement**, `2/3 Running` — elle n'écrit sous le home qu'au premier
+  tour d'agent (`~/.claude`). C'est le cas dangereux : un pod qui a l'air de marcher.
+
+Corrigé d'abord dans le manifeste (les trois conteneurs), puis **remonté dans les Dockerfiles** :
+c'est une propriété de l'IMAGE (où vit le home), pas du déploiement. Une ligne ici évite d'y
+penser dans chaque manifeste, et le prochain pod tournant sous un uid d'annuaire ne tombera pas
+dessus. Gotcha consigné côté Skippy (`k8s-config.md`).
+
 **Les contrats de format descendent dans l'image, et la mémoire devient composable — À TAGUER
 (2026-08-03)** : suite directe du lot 1, mêmes décisions (dossier `memory/sujets/refonte-archi-alfred.md`
 chez Alfred).
