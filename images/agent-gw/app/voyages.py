@@ -42,16 +42,33 @@ _HEURE = re.compile(r"^\d{1,2}[:h]\d{2}$")
 _LATLNG = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
 
+def _memory_roots() -> list[Path]:
+    """Les racines de mémoire, dans l'ordre de précédence.
+
+    Importé paresseusement depuis `app.main` : ce module est chargé par lui, un
+    import de haut de fichier ferait un cycle. Repli sur la racine historique tant
+    que les magasins n'existent pas — un voyage se lit dans n'importe quel cercle,
+    puisqu'un séjour se partage volontiers.
+    """
+    try:
+        from app.main import MEMORY_STORES  # noqa: PLC0415
+        return [s["path"] for s in MEMORY_STORES]
+    except Exception:
+        return [(Path(WORKSPACE) / MEMORY_DIR).resolve()]
+
+
 def _memory_root() -> Path:
-    return (Path(WORKSPACE) / MEMORY_DIR).resolve()
+    """La racine d'ÉCRITURE (overlays `voyage-state.json`) : le magasin principal."""
+    return _memory_roots()[0]
 
 
 def _voyage_file(rel: str) -> Path:
-    root = _memory_root()
-    p = (root / rel).resolve()
-    if root not in p.parents or p.name != "voyage.json" or not p.is_file():
-        raise HTTPException(status_code=404, detail="not a voyage")
-    return p
+    """Résout un `voyage.json` sur l'union des magasins, garde de traversée incluse."""
+    for root in _memory_roots():
+        p = (root / rel).resolve()
+        if root in p.parents and p.name == "voyage.json" and p.is_file():
+            return p
+    raise HTTPException(status_code=404, detail="not a voyage")
 
 
 def _load_json(p: Path) -> dict:
@@ -81,13 +98,18 @@ def _merged_items(data: dict, state: dict) -> list[dict]:
 
 @router.get("/list")
 async def voyage_list():
-    root = _memory_root()
     out = []
-    if root.is_dir():
+    seen: set[str] = set()
+    for root in _memory_roots():  # union des magasins, précédence par ordre
+        if not root.is_dir():
+            continue
         for p in sorted(root.rglob("voyage.json")):
             rel = p.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):
                 continue
+            if str(rel) in seen:
+                continue
+            seen.add(str(rel))
             try:
                 data = json.loads(p.read_text(encoding="utf-8"))
             except (OSError, ValueError):

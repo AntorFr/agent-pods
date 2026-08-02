@@ -2,6 +2,45 @@
 
 > MàJ : 2026-08-02
 
+**Les contrats de format descendent dans l'image, et la mémoire devient composable — À TAGUER
+(2026-08-03)** : suite directe du lot 1, mêmes décisions (dossier `memory/sujets/refonte-archi-alfred.md`
+chez Alfred).
+
+**Étape 2 — le contrat suit le code qui le lit.** `AUTHORING.md` (281 l.) et la skill `redaction`
+d'Alfred (283 l.) décrivaient le MÊME contrat dans deux dépôts déployés séparément, chacun se
+déclarant « source de vérité unique » ; idem `VOYAGES.md` et le workbook. Rien ne détectait la
+dérive. Trois **plugins Claude Code livrés par l'image** (`plugins/fiches|atelier|voyages`),
+chargés via `ClaudeAgentOptions.plugins` et **gatés par `GW_APPS`** : un module éteint n'apporte
+pas son contrat, un module allumé l'apporte forcément à jour. `fiches` est le socle (la mémoire
+n'est pas un module). Les docs du corps deviennent des pointeurs. **La frontière qui rend la chose
+tenable :** l'image porte le FORMAT (qui ne bouge qu'avec le code, donc un build de toute façon),
+le workspace garde le MÉTIER (qui se corrige au fil de l'usage).
+
+> ⚠️ `COPY plugins ./plugins` dans le Dockerfile n'est PAS optionnel : sans lui aucun contrat ne
+> part, et rien ne s'en plaint. Le chemin (`<parent de app>/plugins`) vaut en local comme dans
+> l'image. Le chargement effectif par le CLI se vérifie au premier déploiement — le binaire
+> `claude` vit dans l'image, pas sur le Mac.
+
+**Étape 3 — `GW_MEMORY_STORES`, le composeur multi-magasins.** La mémoire peut désormais être
+l'**union** de plusieurs racines (`perso=memory:rw,famille=/shared/famille:ro`). Un domaine n'est
+plus rangé DANS un magasin : il se **compose** de ce que chacun en porte. **Le chemin logique ne
+contient jamais le magasin** — c'est cette règle qui permettra de promouvoir une fiche d'un cercle
+à l'autre sans casser un seul wikilink. Précédence = ordre de déclaration ; une collision est
+**signalée** (`tree.collisions`), jamais tranchée en silence. Écritures toujours au magasin
+principal. Couvert : `/api/memory/tree`, `/api/memory/index`, `/api/memory/raw`, workbooks,
+voyages.
+
+> 🛡 **Les planifications, elles, ne se composent PAS** — et c'est une garde, pas un oubli. Le
+> corps d'une fiche `type: planif` est exécuté tel quel comme prompt (D30) : les lire sur l'union
+> laisserait n'importe quel pair déposer du code qui tournerait ici. Seul le magasin possédé en
+> écriture arme l'horloge.
+
+> ✅ **Livré en configuration DÉGÉNÉRÉE, et c'est le propos.** Un seul magasin déclaré ⇒ l'union
+> d'un ensemble à un élément est l'identité. Prouvé par un **diff octet à octet** sur la vraie
+> mémoire d'Alfred — **239 entrées, 159 fiches**, `/api/memory/tree` et `/api/memory/index`
+> identiques avec et sans le composeur. 30 tests neufs (`test/stores_test.py`), **éprouvés à
+> l'envers** (champ ajouté en mono → FAIL ; précédence inversée → FAIL). 8 suites Python vertes.
+
 **La modularité s'arrêtait au navigateur — DÉPLOYÉ (2026-08-03, agent-gw 0.52.0)** : lot 1
 d'un chantier d'architecture décidé avec Monsieur le 2026-08-02 (dossier complet dans le dépôt
 d'Alfred, `memory/sujets/refonte-archi-alfred.md`). `GW_APPS` et `GW_FEATURES` ne franchissaient

@@ -446,10 +446,17 @@ def _load_wb_state(wb: Path) -> dict:
 
 @app.get("/api/workbook/list")
 async def workbook_list():
-    root = _memory_root()
     out = []
-    if root.is_dir():
+    seen: set[str] = set()
+    for store in MEMORY_STORES:  # un workbook peut vivre dans n'importe quel cercle
+        root = store["path"]
+        if not root.is_dir():
+            continue
         for p in sorted(root.rglob("workbook.json")):
+            rel = str(p.relative_to(root))
+            if rel in seen:
+                continue
+            seen.add(rel)
             try:
                 data = json.loads(p.read_text())
             except (OSError, ValueError):
@@ -457,7 +464,7 @@ async def workbook_list():
             fait = _load_wb_state(p)["fait"]
             out.append(
                 {
-                    "path": str(p.relative_to(root)),
+                    "path": rel,
                     "projet": data.get("projet"),
                     "titre": data.get("titre") or data.get("projet") or p.parent.name,
                     "pieces": len(data.get("pieces", [])),
@@ -638,11 +645,101 @@ async def tunnel_status():
     }
 
 
+# ── Les MAGASINS de mémoire ──────────────────────────────────────────────────
+# La mémoire n'est plus forcément UNE racine. `GW_MEMORY_STORES` en déclare une
+# liste ordonnée — `id=chemin:mode`, séparés par des virgules :
+#
+#     perso=memory:rw,famille=/shared/famille:ro
+#
+# Le chemin est relatif au workspace, ou absolu. Le mode vaut `rw` (défaut) ou `ro`.
+#
+# CE QUE ÇA CHANGE POUR UN LECTEUR : rien, tant qu'il n'y a qu'un magasin. Un
+# domaine n'est pas rangé DANS un magasin, il se COMPOSE par union de ce que chacun
+# en porte, et l'union d'un ensemble à un élément est l'identité — au bit près, ce
+# qui se vérifie par un diff sur /api/memory/tree.
+#
+# LE CHEMIN LOGIQUE NE CONTIENT JAMAIS LE MAGASIN. `domaines/cadeaux/idee-x` est un
+# NOM ; le magasin est un fait d'emplacement, pas un morceau d'identité. C'est cette
+# règle qui fait que déplacer une fiche d'un cercle à l'autre ne casse aucun
+# wikilink, aucun favori, aucune référence — et sans elle, tout le reste tombe.
+#
+# PRÉCÉDENCE : le premier magasin qui porte un chemin gagne, donc l'ordre de
+# déclaration EST l'ordre de priorité (perso avant parents avant famille : du plus
+# restreint au plus large). Une collision n'est pas résolue en silence — elle est
+# signalée par `/api/memory/tree` (champ `collisions`), parce qu'une fiche qu'on
+# croit corriger alors qu'on en lit une autre est une panne qui ne se voit qu'après.
+MEMORY_STORES_RAW = os.environ.get("GW_MEMORY_STORES", "").strip()
+
+
+def _parse_stores(raw: str) -> list[dict]:
+    """`id=chemin:mode,…` → [{id, path, mode}]. Vide ⇒ le magasin historique.
+
+    Rétrocompatible par construction : sans `GW_MEMORY_STORES`, on rend un magasin
+    unique bâti sur `GW_MEMORY_DIR` — un pod existant ne bouge pas d'un octet.
+    """
+    out: list[dict] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        ident, _, rest = chunk.partition("=")
+        if not rest:  # « chemin » nu : on lui donne l'identifiant historique
+            ident, rest = "perso", ident
+        path, _, mode = rest.rpartition(":")
+        if mode not in ("rw", "ro"):  # pas de mode → tout était le chemin
+            path, mode = rest, "rw"
+        p = Path(path.strip())
+        out.append({
+            "id": ident.strip(),
+            "path": (p if p.is_absolute() else Path(WORKSPACE) / p).resolve(),
+            "mode": mode,
+        })
+    if not out:
+        out.append({
+            "id": "perso",
+            "path": (Path(WORKSPACE) / MEMORY_DIR).resolve(),
+            "mode": "rw",
+        })
+    return out
+
+
+MEMORY_STORES = _parse_stores(MEMORY_STORES_RAW)
+
+
 def _memory_root() -> Path:
-    return (Path(WORKSPACE) / MEMORY_DIR).resolve()
+    """La racine du magasin PRINCIPAL — celui qui reçoit les écritures.
+
+    Conservée pour tout ce qui écrit (les overlays `*-state.json`) et pour la
+    compatibilité : un seul magasin ⇒ exactement l'ancien comportement.
+    """
+    return MEMORY_STORES[0]["path"]
+
+
+def _store_roots() -> list[Path]:
+    return [s["path"] for s in MEMORY_STORES]
+
+
+def _resolve_logical(rel: str) -> Path | None:
+    """Un chemin LOGIQUE → le fichier réel, dans le premier magasin qui le porte.
+
+    Rend None si personne ne le porte. La garde de traversée est appliquée magasin
+    par magasin : un `../` ne doit pas permettre de sortir, même en profitant de la
+    présence d'une seconde racine.
+    """
+    for root in _store_roots():
+        p = (root / rel).resolve()
+        if p != root and root not in p.parents:
+            continue  # tentative de sortie : ce magasin ne répond pas
+        if p.exists():
+            return p
+    return None
 
 
 def _memory_path(rel: str) -> Path:
+    """Chemin d'ÉCRITURE ou de lecture directe, dans le magasin principal.
+
+    Toujours borné au magasin principal : un chemin qui s'échappe est refusé.
+    """
     root = _memory_root()
     p = (root / rel).resolve()
     if p != root and root not in p.parents:
@@ -652,22 +749,49 @@ def _memory_path(rel: str) -> Path:
 
 @app.get("/api/memory/tree")
 async def memory_tree():
-    """Flat listing of the memory dir (the client builds the tree)."""
-    root = _memory_root()
-    entries = []
-    if root.is_dir():
+    """Flat listing of the memory (the client builds the tree).
+
+    UNION des magasins : le chemin logique est la clé, le premier magasin qui le
+    porte gagne. Avec un seul magasin, la sortie est identique à l'octet près à ce
+    qu'elle était avant les magasins — c'est le contrôle de non-régression.
+
+    Les entrées ne disent PAS de quel magasin elles viennent — sauf quand il y en a
+    plus d'un : ajouter un champ `store` dans le cas mono changerait la réponse pour
+    rien, et le front n'a pas à connaître un découpage qui n'existe pas chez lui.
+    """
+    seen: dict[str, dict] = {}
+    collisions: list[str] = []
+    multi = len(MEMORY_STORES) > 1
+    for store in MEMORY_STORES:
+        root = store["path"]
+        if not root.is_dir():
+            continue
         for p in sorted(root.rglob("*")):
             rel = p.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):
                 continue
-            entries.append(
-                {
-                    "path": str(rel),
-                    "dir": p.is_dir(),
-                    "size": p.stat().st_size if p.is_file() else None,
-                }
-            )
-    return {"root": MEMORY_DIR, "todo": TODO_FILE, "entries": entries}
+            key = str(rel)
+            if key in seen:
+                # Homonyme ou doublon : on NE tranche pas en silence. Le premier
+                # magasin garde la main (précédence par ordre de déclaration) et on
+                # remonte le fait, à charge pour l'agent de faire le ménage.
+                if not p.is_dir():
+                    collisions.append(key)
+                continue
+            entry = {
+                "path": key,
+                "dir": p.is_dir(),
+                "size": p.stat().st_size if p.is_file() else None,
+            }
+            if multi:
+                entry["store"] = store["id"]
+            seen[key] = entry
+    out = {"root": MEMORY_DIR, "todo": TODO_FILE, "entries": list(seen.values())}
+    if multi:
+        out["stores"] = [{"id": s["id"], "mode": s["mode"]} for s in MEMORY_STORES]
+        if collisions:
+            out["collisions"] = sorted(set(collisions))
+    return out
 
 
 def _parse_frontmatter(text: str) -> dict:
@@ -705,13 +829,19 @@ def _parse_frontmatter(text: str) -> dict:
 async def memory_index():
     """Frontmatter of every memory .md in one shot — the 'dérivé' data layer that
     powers collection cards, facets and (later) search, without N round-trips."""
-    root = _memory_root()
     items = []
-    if root.is_dir():
+    seen_paths: set[str] = set()
+    for store in MEMORY_STORES:  # union, précédence par ordre de déclaration
+        root = store["path"]
+        if not root.is_dir():
+            continue
         for p in sorted(root.rglob("*.md")):
             rel = p.relative_to(root)
             if any(part.startswith(".") for part in rel.parts):
                 continue
+            if str(rel) in seen_paths:
+                continue
+            seen_paths.add(str(rel))
             try:
                 text = p.read_text(encoding="utf-8", errors="ignore")[:4000]
             except OSError:
@@ -732,8 +862,11 @@ async def memory_index():
 @app.get("/api/memory/raw/{rel_path:path}")
 async def memory_raw(rel_path: str, download: bool = False):
     """Serve one memory file: markdown/images inline, anything else is
-    downloadable (?download=1 forces an attachment disposition)."""
-    p = _memory_path(rel_path)
+    downloadable (?download=1 forces an attachment disposition).
+
+    Résolu sur l'UNION des magasins : une fiche promue d'un cercle à l'autre garde
+    la même URL, puisque le chemin logique ne dit pas où elle est rangée."""
+    p = _resolve_logical(rel_path) or _memory_path(rel_path)
     if not p.is_file():
         raise HTTPException(status_code=404, detail="not found")
     headers = {"Cache-Control": "no-store"}

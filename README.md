@@ -124,6 +124,7 @@ Environment:
 | `GW_MODELS` | `Fable:claude-fable-5,Opus:opus,Sonnet:sonnet,Haiku:haiku` | `Label:model` pairs for the PWA dropdown. CLI aliases resolve to the latest model of each family. |
 | `GW_MEMORY_DIR` | `memory` | Memory dir shown in the PWA side panel, relative to the workspace |
 | `GW_TODO_FILE` | `todo/taches.md` | Todo file for the dedicated view, relative to the memory dir |
+| `GW_MEMORY_STORES` | *(unset — falls back to a single store on `GW_MEMORY_DIR`)* | Ordered list of memory **stores**, `id=path:mode` comma-separated (`perso=memory:rw,famille=/shared/famille:ro`). Paths are workspace-relative or absolute; mode is `rw` (default) or `ro`. The memory is then the **union** of the stores: a domain is not stored *in* one, it is **composed** from what each holds. **A logical path never carries the store** — `domaines/cadeaux/x` is a name, the store is a location; that is what lets a note move between circles without breaking a single wikilink or bookmark. Declaration order **is** precedence (narrowest circle first); a colliding path is reported in `/api/memory/tree.collisions`, never silently resolved. Writes always go to the **first** store. |
 | `GW_AGENT` | `alfred` | The body's identity on the **MCP surface**: names the server, the tool (`ask_<agent>`) and the default allowed Host. A pod exposing `ask_alfred` while it actually tends repositories would be worse than useless — calling agents pick a tool by its name and description. Pair it with `GW_MCP_DESCRIPTION` (what the tool announces to other agents; deployment-specific prose, hence an env rather than code). |
 | `GW_THEME` | `alfred` | Which **skin** dresses the launcher. A skin is a small module under `frontend/src/launcher/skins/` declaring only what differs between bodies — brand, crest, composer placeholder, home screen, status bar, busy indicator — plus a stylesheet scoped to `:root[data-agent="<id>"]`, and server-side assets under `app/static/skins/<id>/` (`icon.svg`, `manifest.json`) since the browser asks for the favicon and the manifest before any script runs. `alfred` is the neutral base: no attribute, no override, an existing pod does not move. Adding a theme is three files-worth of edits and touches nothing else; see the contract in `skins/index.js`. A skin declares **no routes**: a route is an app, it lives in the shell under `appOn()` — one locked inside a theme only exists under that theme. |
 | `GW_TRACE` | `0` | Stream tool calls into the chat (`◇ <tool> · <target>`), grouped under their count. Live only — `/api/history` does not replay them. Only the tool **name** and a short target leave the server, never the full input (a Write carries a whole file, a Bash command may carry a secret). Off by default: a butler stays discreet, a coding agent that hides what it touches cannot be corrected. |
@@ -140,6 +141,28 @@ Environment:
 
 > ⚠️ The gateway exposes an agent that has shell access to its workspace.
 > Do not expose it to the public internet — keep it behind a VPN/SSO layer.
+
+### Format contracts ship **with the image**
+
+A module is not just a tile and a route: it is also a **data format** the agent must
+produce for the view to render it. Those contracts used to live in each agent's
+workspace, hand-copied from the front-end docs — ~1000 duplicated lines across two
+repos that deploy independently, each claiming to be the source of truth, with nothing
+detecting the drift.
+
+They are now **Claude Code plugins shipped inside the image** (`plugins/<module>/`),
+loaded through `ClaudeAgentOptions.plugins` and gated by `GW_APPS`. A module that is off
+brings no contract; a module that is on brings one that is necessarily current — same
+image tag as the code that reads it.
+
+- `fiches` — always loaded (memory browsing is not a module): the Markdoc block
+  vocabulary and typed frontmatter.
+- `atelier`, `voyages` — loaded only when the matching module is in `GW_APPS`.
+
+**The boundary is what makes this work:** the image documents the **format** (how a
+workbook is written), the workspace documents the **craft** (why cuts are grouped by
+width). A format only changes when the code changes — a rebuild either way. Craft is
+corrected as you go, and has no business inside an image.
 
 ### What the body tells the agent
 

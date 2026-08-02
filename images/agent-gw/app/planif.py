@@ -74,6 +74,15 @@ def _memory_root() -> Path:
 
 
 def _planif_root() -> Path:
+    """Les planifications ne se lisent QUE dans le magasin principal.
+
+    ⚠️ C'est une GARDE, pas une simplification. Le corps d'une fiche `type: planif`
+    est exécuté tel quel comme prompt d'un tour d'agent (D30). Les composer sur
+    l'union des magasins mémoire laisserait n'importe quel pair déposer du code qui
+    tournerait ici : il suffirait d'écrire un fichier dans le cercle partagé. Seul
+    le magasin que ce corps possède en écriture arme l'horloge — ce qu'on lit
+    ailleurs est du contenu, jamais une instruction.
+    """
     return _memory_root() / PLANIF_DIR
 
 
