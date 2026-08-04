@@ -138,8 +138,11 @@ domaines/voyages/
 
 - **Vue voyage = timeline verticale par jour**, du début à la fin : un bloc par jour —
   date + **picto météo** + cartes ponctuelles rangées par créneau. Les **continus** en bandeau
-  latéral le long de leurs jours (l'hébergement se lit d'un coup d'œil), les **trajets** dans
-  le flux du jour.
+  le long de leurs jours, les **trajets** dans le flux du jour.
+- **Le bandeau d'hébergement FERME la journée**, sous les cartes : il porte la **nuit**, pas le
+  programme du matin — le jour se lit donc de l'arrivée au coucher. Il reste la référence de la
+  première liaison (« de l'hôtel · 12 min »), qui, elle, s'affiche en haut : on part de là où
+  on a dormi.
 - **Liaisons** entre cartes consécutives d'un même jour : un mince connecteur « 🚶 12 min » /
   « 🚗 35 min · 24 km », dérivé au rendu (section « Liaisons ») — recalculé au drag, le chip
   suit le geste.

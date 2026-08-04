@@ -2590,7 +2590,10 @@ function paintVoyage() {
       if (c.lat != null) prev = c;
     });
     if (!cards.length) flow = '<div class="vfree">— journée libre — déposez une carte</div>';
-    return `<div class="vday" data-day="${day}"><div class="vday-h"><span class="dn">${vfmtDay(day)}</span><span class="wx na" data-wx="${day}"></span></div>${band ? `<div class="vband" data-open="${esc(band.id)}">${vicoOf(band)} ${esc(band.titre || band.id)}<span class="fx">${band.debut === day ? 'arrivée' : ''}</span></div>` : ''}<div class="vflow">${flow}</div></div>`;
+    // L'hébergement CLÔT la journée : c'est la nuit, pas le programme du matin.
+    // Il reste la référence de la première liaison (« de l'hôtel · … »), qui, elle,
+    // se lit en haut — on part de là où on a dormi.
+    return `<div class="vday" data-day="${day}"><div class="vday-h"><span class="dn">${vfmtDay(day)}</span><span class="wx na" data-wx="${day}"></span></div><div class="vflow">${flow}</div>${band ? `<div class="vband" data-open="${esc(band.id)}">${vicoOf(band)} ${esc(band.titre || band.id)}<span class="fx">${band.debut === day ? 'arrivée · nuit ici' : 'nuit ici'}</span></div>` : ''}</div>`;
   }).join('');
 
   const types = [...new Set(allSug.map((i) => i.type))];
