@@ -130,6 +130,14 @@ Trois bornes, qui sont le fond du dispositif :
   l'accueil (route vide) ni sur mobile replié sur le chat — on ne raconte pas un écran
   que Monsieur ne regarde pas. Rien ne colle d'un message au suivant.
 
+La note s'adresse au MODÈLE, pas à Monsieur — et le transcript, lui, garde le prompt
+entier. `/api/history` le rejoue à chaque rechargement (et à chaque réconciliation après
+coupure) : la note se retrouvait donc **dans la bulle de Monsieur**, qui relisait un texte
+qu'il n'avait pas écrit. Les préambules de la passerelle (écran ouvert, pièces jointes,
+mode éphémère) sont désormais **retirés au rejeu** (`_strip_gw_notes`) : ils partent à
+l'agent, ils ne remontent pas à l'écran. Un tour sans texte — pièces jointes seules —
+garde un trombone plutôt que de disparaître.
+
 ## Sessions : coût en tokens, sujets, mode éphémère
 
 Trois mécanismes bornent la consommation (chaque tour rejoue tout le transcript, cache

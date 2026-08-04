@@ -63,5 +63,41 @@ check(
     "« mem/x »" in main._view_note({"route": "mem/x", "titre": {"a": 1}}),
 )
 
+print("\n--- la note ne remonte pas dans la bulle de Monsieur ---")
+# Le transcript garde le PROMPT, pas la frappe. /api/history le rejoue : sans ce
+# nettoyage, Monsieur relit dans sa propre bulle un texte qu'il n'a jamais écrit
+# (c'est ce qui l'a fait tiquer, le 2026-08-04).
+
+note = main._view_note({"route": "voyage/baden-2026", "titre": "Voyages › Baden 2026"})
+strip = main._strip_gw_notes
+
+check("la note seule s'efface", strip(note + "\n\nça donne quoi ?") == "ça donne quoi ?")
+check("le message intact passe tel quel", strip("ça donne quoi ?") == "ça donne quoi ?")
+check(
+    "un crochet dans le fil d'Ariane ne coupe pas au mauvais endroit",
+    strip(main._view_note({"route": "mem/x", "titre": "Fiche [2026] › détail"}) + "\n\nsalut")
+    == "salut",
+)
+check(
+    "notes empilées (éphémère + écran + jointes) toutes retirées",
+    strip(
+        "[Mode éphémère : bla.]\n\n" + note + "\n\n"
+        "[Monsieur a joint 2 fichiers à ce message,\n- /a\n- /b\nbla.]\n\nregarde"
+    ) == "regarde",
+)
+check(
+    "pièces jointes SANS texte -> un trombone, pas une bulle disparue",
+    strip(note + "\n\n[Monsieur a joint 3 fichiers à ce message,\n- /a\nbla.]")
+    == "📎 3 fichiers joints",
+)
+check(
+    "une seule pièce jointe, au singulier",
+    strip("[Monsieur a joint 1 fichier à ce message,\n- /a\nbla.]") == "📎 1 fichier joint",
+)
+check(
+    "un message qui COMMENCE par un crochet n'est pas mangé",
+    strip("[note perso] penser au ferry") == "[note perso] penser au ferry",
+)
+
 print("\nFAIL" if FAILS else "\nSPIKE OK")
 sys.exit(1 if FAILS else 0)
