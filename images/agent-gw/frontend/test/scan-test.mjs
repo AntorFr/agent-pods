@@ -4,7 +4,17 @@
 // Le DÉCODAGE, lui, se teste dans test/scan-decode-test.mjs. On l'a cru hors de
 // portée sans navigateur — c'est ainsi qu'un décodeur mort est parti en prod.
 // Run: node test/scan-test.mjs
-import { FORMATS, validCode, addCode, composeMessage } from '../src/scan/codes.js';
+import {
+  FORMATS, CONFIRM, validCode, createBasket, scanFrame, dropCode, composeMessage,
+} from '../src/scan/codes.js';
+
+/** Montre `code` au panier autant de fois qu'il faut pour qu'il soit corroboré.
+    Retourne true si le panier a changé au moins une fois. */
+const showN = (b, code, n = CONFIRM) => {
+  let changed = false;
+  for (let i = 0; i < n; i++) changed = scanFrame(b, [code]) || changed;
+  return changed;
+};
 
 const checks = [];
 const check = (name, pass) => checks.push([name, pass]);
@@ -34,15 +44,60 @@ check('longueur exotique — acceptée sans prétendre la contrôler', validCode
 
 /* ── panier ──────────────────────────────────────────────────────────── */
 {
-  const b = [];
-  check('panier — un code valide entre et le signale', addCode(b, '3017620422003') === true);
+  const b = createBasket();
+  check('panier — un code valide entre et le signale', showN(b, '3017620422003') === true);
   // Une boucle de scan relit le MÊME code dix fois par seconde : sans dédup, le
   // panier se remplirait de doublons et l'addon paierait dix fois le quota.
-  check('panier — le même code relu ne rentre pas deux fois', addCode(b, '3017620422003') === false);
-  check('panier — un code invalide est ignoré', addCode(b, '3017620422004') === false);
-  check('panier — un deuxième code valide entre', addCode(b, '3229820782560') === true);
-  check('panier — contenu exact', b.join('|') === '3017620422003|3229820782560');
-  check('panier — espaces autour du code tolérés', addCode(b, '  96385074 ') === true && b.includes('96385074'));
+  check('panier — le même code relu ne rentre pas deux fois', scanFrame(b, ['3017620422003']) === false);
+  check('panier — un code invalide est ignoré', showN(b, '3017620422004') === false);
+  check('panier — un deuxième code valide entre', showN(b, '3229820782560') === true);
+  check('panier — contenu exact', b.codes.join('|') === '3017620422003|3229820782560');
+  check('panier — espaces autour du code tolérés',
+    showN(b, '  96385074 ') === true && b.codes.includes('96385074'));
+}
+
+/* ── corroboration : le bruit ne se répète pas ───────────────────────── */
+// Un lecteur 1D décode une LIGNE de pixels : sur une trame bruitée, elle peut
+// tomber sur un EAN-13 dont la clé est juste par hasard. C'est un code valide et
+// inventé — la clé ne le rattrape pas, seule la répétition le trie.
+{
+  const b = createBasket();
+  check('corroboration — une seule lecture ne suffit pas',
+    scanFrame(b, ['3017620422003']) === false && b.codes.length === 0);
+  check(`corroboration — ${CONFIRM} lectures et il entre`,
+    showN(b, '3017620422003') === true && b.codes.length === 1);
+}
+{
+  // Deux coïncidences séparées par une longue plage de trames muettes ne
+  // s'additionnent pas : sinon un scan qui dure finirait toujours par accumuler
+  // assez de hasards pour valider un fantôme.
+  const b = createBasket();
+  scanFrame(b, ['3229820782560']);
+  for (let i = 0; i < 20; i++) scanFrame(b, []);
+  check('corroboration — un compteur trop vieux repart de zéro',
+    scanFrame(b, ['3229820782560']) === false && b.codes.length === 0);
+}
+{
+  // Le natif peut rendre deux fois la même valeur sur UNE trame : ça ne vaut
+  // pas deux corroborations, sinon la garde tomberait à une seule trame.
+  const b = createBasket();
+  scanFrame(b, ['96385074', '96385074', '96385074']);
+  check('corroboration — un doublon dans la MÊME trame ne vaut pas plusieurs lectures',
+    b.codes.length === 0);
+}
+
+/* ── la croix : retirer un code lu à tort ────────────────────────────── */
+{
+  const b = createBasket();
+  showN(b, '3017620422003');
+  showN(b, '3229820782560');
+  check('croix — le code sort du panier', dropCode(b, '3017620422003') === true
+    && b.codes.join('|') === '3229820782560');
+  check('croix — un code absent ne fait rien', dropCode(b, '96385074') === false);
+  // Sans ça la croix serait un gadget : la caméra est encore braquée sur
+  // l'étiquette, le code reviendrait dans la seconde.
+  check('croix — le code retiré ne revient pas de lui-même',
+    showN(b, '3017620422003', CONFIRM * 3) === false && b.codes.length === 1);
 }
 
 /* ── message déposé dans le composer ─────────────────────────────────── */

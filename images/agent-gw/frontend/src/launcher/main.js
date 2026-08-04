@@ -12,7 +12,7 @@ import { resolveSkin } from './skins/index.js';
 // donc leur CSS arrive après `launcher.css` : une app s'appuie sur les
 // primitives de la coque, jamais l'inverse.
 import { resolveApps } from './apps/index.js';
-import { FORMATS, addCode, composeMessage } from '../scan/codes.js';
+import { FORMATS, createBasket, scanFrame, dropCode, composeMessage } from '../scan/codes.js';
 
 const $ = (id) => document.getElementById(id);
 const mqMobile = window.matchMedia('(max-width: 820px)'); // seuil deux-écrans, aligné sur launcher.css
@@ -382,7 +382,7 @@ chatPane.addEventListener('drop', (e) => { if (!takesFiles(e)) return; e.prevent
 // sinon /static/scan.js (@zxing/library, 31 Ko gzip) chargé À LA DEMANDE — iOS
 // Safari porte l'API mais désactivée par défaut de 17.0 à 26.5, Firefox ne l'a pas.
 const scanWrap = $('scanwrap'), scanVideo = $('scanvideo'), scanList = $('scanlist');
-let scanStream = null, scanTimer = null, scanBasket = [], scanDetector = null, scanCanvas = null;
+let scanStream = null, scanTimer = null, scanBasket = createBasket(), scanDetector = null, scanCanvas = null;
 
 function scanSupported() {
   return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -406,19 +406,30 @@ function loadFallback() {
 }
 
 function renderBasket() {
+  const codes = scanBasket.codes;
   scanList.innerHTML = '';
-  for (const code of scanBasket) {
+  for (const code of codes) {
     const c = document.createElement('span');
     c.className = 'scode'; c.textContent = code;
+    // La croix n'est pas un confort : la corroboration réduit les codes fantômes,
+    // elle ne les supprime pas. Sans issue, un seul faux code condamnait le panier
+    // entier — on annulait tout et on rescannait.
+    const x = document.createElement('button');
+    x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+    x.title = 'Retirer — lu à tort';
+    x.addEventListener('click', () => { dropCode(scanBasket, code); renderBasket(); });
+    c.appendChild(x);
     scanList.appendChild(c);
   }
-  $('scan-done').disabled = !scanBasket.length;
-  $('scan-done').textContent = scanBasket.length
-    ? `Ajouter ${scanBasket.length} code${scanBasket.length > 1 ? 's' : ''}` : 'Ajouter';
+  $('scan-done').disabled = !codes.length;
+  $('scan-done').textContent = codes.length
+    ? `Ajouter ${codes.length} code${codes.length > 1 ? 's' : ''}` : 'Ajouter';
 }
 
-function scanHit(raw) {
-  if (!addCode(scanBasket, raw)) return;   // invalide ou déjà dans le panier
+// Une trame vient d'être décodée — `hits` peut être vide, et on le signale quand
+// même : c'est l'horloge des corroborations (cf. scanFrame dans scan/codes.js).
+function scanSaw(hits) {
+  if (!scanFrame(scanBasket, hits)) return;   // rien de neuf, ou pas encore corroboré
   navigator.vibrate?.(40);
   renderBasket();
 }
@@ -444,7 +455,7 @@ async function scanTick() {
   if (scanDetector) {
     // Chemin natif : le détecteur lit la balise vidéo directement, sans canvas.
     try {
-      for (const b of await scanDetector.detect(scanVideo)) scanHit(b.rawValue);
+      scanSaw((await scanDetector.detect(scanVideo)).map((b) => b.rawValue));
       return;
     } catch {
       // Un détecteur natif présent mais qui échoue à chaque trame laisserait le
@@ -468,7 +479,7 @@ async function scanTick() {
   const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(scanVideo, sx, sy, sw, sh, 0, 0, w, h);
   const code = decoder.decode(ctx.getImageData(0, 0, w, h));
-  if (code) scanHit(code);
+  scanSaw(code ? [code] : []);
 }
 
 function scanError(msg) {
@@ -482,7 +493,7 @@ async function openScan() {
     // que d'ouvrir un carré noir.
     return add('error', 'Ce navigateur ne donne pas accès à la caméra (une origine HTTPS est requise).');
   }
-  scanBasket = []; renderBasket();
+  scanBasket = createBasket(); renderBasket();
   scanWrap.hidden = false;
   try {
     scanStream = await navigator.mediaDevices.getUserMedia({
@@ -529,10 +540,10 @@ function closeScan() {
 }
 
 $('scan').addEventListener('click', openScan);
-$('scan-close').addEventListener('click', () => { closeScan(); scanBasket = []; });
+$('scan-close').addEventListener('click', () => { closeScan(); scanBasket = createBasket(); });
 $('scan-done').addEventListener('click', () => {
-  const codes = scanBasket.slice();
-  closeScan(); scanBasket = [];
+  const codes = scanBasket.codes.slice();
+  closeScan(); scanBasket = createBasket();
   if (!codes.length) return;
   input.value = composeMessage(input.value, codes);
   input.focus();
