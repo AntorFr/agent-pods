@@ -1,6 +1,26 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-02
+> MàJ : 2026-08-04
+
+**Cinq retouches de la PWA — À TAGUER (2026-08-04)** : remontées par Monsieur en usage réel,
+quatre commits `agent-gw:`.
+
+- **Le bandeau d'hébergement ferme la journée** au lieu de l'ouvrir : il porte la NUIT. La
+  première liaison (« de l'hôtel · … ») reste en haut — on part de là où on a dormi.
+- **Deux débordements, même cause** : une boîte plus haute que la fenêtre sans `overflow`. Le
+  tray de suggestions est `sticky` (un sticky suit le défilement, il ne le produit pas : son bas
+  passait sous le pli, définitivement) ; la modale est en `place-items:center` (une carte trop
+  haute déborde des DEUX côtés, donc son haut aussi). Bornées à la fenêtre, elles défilent.
+- **Les préambules de la passerelle remontaient dans la bulle de Monsieur.** Ils sont ajoutés au
+  PROMPT (écran ouvert, pièces jointes, éphémère) ; le transcript garde le prompt entier, et
+  `/api/history` le rejoue à chaque rechargement ET à chaque réconciliation après coupure — d'où
+  le « parfois ». Retirés au rejeu (`_strip_gw_notes`), à partir des mêmes constantes qui servent
+  à les écrire : la liste ne peut pas dériver du texte réellement injecté.
+- **Le scanner voyait des codes fantômes.** Un lecteur 1D décode UNE LIGNE de pixels : sur une
+  trame bruitée, elle tombe parfois sur un EAN-13 dont la clé de contrôle est juste par hasard
+  (une chance sur dix, tirée huit fois par seconde). La clé ne rattrape pas ça — seule la
+  RÉPÉTITION trie : 3 lectures identiques et rapprochées avant d'entrer au panier. Plus une
+  croix par pastille, sans quoi un seul faux code condamnait le panier entier.
 
 **`ENV HOME` remonté dans les TROIS images — À TAGUER (2026-08-03)** : découvert en basculant
 Alfred sous `runAsUser: 3000` (uid d'une personne réelle, venu de holocron, absent de
@@ -868,6 +888,16 @@ audience rosetta, RS256, consent implicit), pod alfred en 0.21.0/0.5.0,
 l'access token). Avenant skill correspondance = côté cerveau.
 
 **Prochaines étapes :**
+- [ ] **Cinq retouches PWA (2026-08-04)** : taguer une `agent-gw-vX.Y.Z` → image CI → bumper
+      `image.tag` dans `alfred-helm.yml` (k8s-home-lab) → ArgoCD. À vérifier en vrai : le
+      bandeau de nuit sur Baden, le tray avec beaucoup de suggestions, une fiche longue en
+      pop-in, une bulle après rechargement, et **le scanner en rayon** (le seul dont le
+      réglage — 3 lectures, fenêtre de 8 trames — se juge à la main, pas au test).
+- [ ] **`app/static/launcher.js|css` sont des artefacts de build TRACKÉS et périmés** (dernier
+      rafraîchissement : 8a673e9, alors que `frontend/src` a bougé quatre fois depuis). Ils ne
+      servent rien en prod — le Dockerfile les écrase par le bundle de l'étape `frontend` —
+      mais ils mentent à qui lit le dépôt. `engine.js`/`engine.css`/`scan.js` sont déjà
+      ignorés : les deux-là ont été oubliés. `git rm --cached` + deux lignes de `.gitignore`.
 - [ ] **Pod Skippy** (`SKIPPY-POD.md`) — design validé, `GW_APPS` posé, question CI
       tranchée (un token d'App déclenche bien les workflows → `actions_run` retiré de
       la surface). Prochain geste, **côté navigateur** : créer la GitHub App. Puis
