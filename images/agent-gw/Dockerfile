@@ -80,6 +80,10 @@ COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
 # memory-sync : écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
 # conflit remonté jamais deviné). Configure son helper git depuis $GITHUB_TOKEN.
 COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
+# trace-geom : calcule la trace d'un parcours (hub rosetta, addon `trace`) et
+# l'écrit dans son .parcours.json. La géométrie va du hub au disque sans passer
+# par la conversation — 328 points recopiés par un modèle, c'est une trace fausse.
+COPY --chmod=755 trace-geom /usr/local/bin/trace-geom
 # Bundled content engine + launcher shell (built once, never at runtime).
 # scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
 # weighs 116 kB gzipped and is fetched only when the browser has no

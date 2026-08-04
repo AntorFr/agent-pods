@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""trace-geom — calcule la trace d'un parcours et l'écrit dans son fichier.
+
+Pourquoi ce script existe : une balade de 3 km fait 328 points de trace, une
+rando de 10 km en fait 519. Recopiés par un modèle de langage, un caractère
+perdu décale toute la fin du parcours — et ça coûte ~12 000 tokens, deux fois
+(ce qu'il lit, puis ce qu'il réécrit). Alfred choisit les repères ; la
+géométrie, elle, va du hub au disque **sans jamais passer par la conversation**.
+
+Le fichier de parcours (`…/assets/<nom>.parcours.json`, en git, frère de
+`voyage.json`) porte les deux matières et une seule règle :
+
+  - `reperes[]` — la PROSE d'Alfred : nom, description, note de contexte, lien,
+    et les sources tierces (Google, OSM) datées et gardées séparées. Il l'écrit
+    et la corrige à la main, autant de fois qu'il veut ;
+  - `trace` — la MACHINE : géométrie encodée, distance, dénivelé, revêtement.
+    Ce script en est le seul auteur. Personne ne l'édite à la main.
+
+D'où la propriété qui fait tout l'intérêt de la séparation : **corriger une
+description ne recalcule rien**. Seuls l'ajout, le retrait ou le déplacement
+d'un repère demandent de relancer ce script.
+
+Les points envoyés au routeur sont lus dans `reperes[].latlng`, dans l'ordre du
+fichier : la liste n'existe qu'à un seul endroit, on ne la recopie pas en
+argument. Pour une boucle, répéter le point de départ en dernier repère.
+
+Usage :
+  trace-geom <fichier.parcours.json> [--profil pieton|rando|velo|vtt|direct]
+                                     [--altimetrie routeur|ign]
+
+Env (mêmes variables que rosetta-bridge, même identité machine) :
+  ROSETTA_URL        défaut https://rosetta.mcp.berard.me
+  ROSETTA_TOKEN_URL  défaut https://auth.berard.me/api/oidc/token
+  ROSETTA_SCOPE      défaut mcp
+  AGENT_CLIENT_ID / AGENT_CLIENT_SECRET
+
+Bibliothèque standard uniquement, comme rosetta-bridge : ce script doit tourner
+sur le python3 nu de l'image, sans dépendance à tenir à jour.
+"""
+
+import base64
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import date
+
+TIMEOUT = 90.0  # le routage d'une longue rando prend son temps
+
+PROFILS = ("pieton", "rando", "velo", "vtt", "direct")
+
+
+def die(message: str, code: int = 1):
+    print(f"trace-geom : {message}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def token() -> str:
+    """Un jeton machine par client_credentials — le même que rosetta-bridge.
+
+    Volontairement sans cache : le script vit le temps d'un appel, un fichier
+    de jeton sur disque serait un secret de plus à faire vivre pour rien.
+    """
+    url = os.environ.get("ROSETTA_TOKEN_URL", "https://auth.berard.me/api/oidc/token")
+    client_id = os.environ.get("AGENT_CLIENT_ID", "")
+    client_secret = os.environ.get("AGENT_CLIENT_SECRET", "")
+    if not client_id or not client_secret:
+        die("AGENT_CLIENT_ID / AGENT_CLIENT_SECRET absents de l'environnement.")
+    scope = os.environ.get("ROSETTA_SCOPE", "mcp")
+    basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    req = urllib.request.Request(
+        url,
+        data=f"grant_type=client_credentials&scope={scope}".encode(),
+        headers={"Authorization": f"Basic {basic}",
+                 "Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.load(resp)["access_token"]
+    except urllib.error.HTTPError as exc:
+        die(f"jeton refusé : HTTP {exc.code}.")
+    except OSError as exc:
+        die(f"serveur de jetons injoignable : {exc}.")
+
+
+def fetch(points: str, profil: str, altimetrie: str) -> dict:
+    base = os.environ.get("ROSETTA_URL", "https://rosetta.mcp.berard.me").rstrip("/")
+    query = {"points": points, "profil": profil}
+    if altimetrie == "ign":
+        query["altimetrie"] = "ign"
+    url = f"{base}/trace/geometrie?{urllib.parse.urlencode(query)}"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token()}"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as exc:
+        # Le hub rend le refus du routeur en texte : on le montre tel quel
+        # plutôt que d'afficher un code que personne ne peut interpréter.
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace").strip()[:300]
+        except Exception:
+            pass
+        die(f"le hub a refusé (HTTP {exc.code}) : {detail}")
+    except OSError as exc:
+        die(f"hub injoignable : {exc}.")
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    chemin, args = argv[0], argv[1:]
+    profil, altimetrie = None, "routeur"
+    while args:
+        flag = args.pop(0)
+        if flag == "--profil" and args:
+            profil = args.pop(0)
+        elif flag == "--altimetrie" and args:
+            altimetrie = args.pop(0)
+        else:
+            die(f"argument inconnu : {flag}")
+
+    try:
+        with open(chemin, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        die(f"fichier introuvable : {chemin}")
+    except ValueError as exc:
+        die(f"JSON illisible ({chemin}) : {exc}")
+
+    reperes = data.get("reperes") or []
+    points = [str(r.get("latlng", "")).strip() for r in reperes]
+    manquants = [i + 1 for i, p in enumerate(points) if not p]
+    if manquants:
+        die(f"repère(s) sans latlng : {', '.join(map(str, manquants))}.")
+    if len(points) < 2:
+        die("il faut au moins deux repères portant un latlng.")
+
+    profil = profil or data.get("profil") or "pieton"
+    if profil not in PROFILS and "-" not in profil:
+        die(f"profil « {profil} » inconnu. Attendu : {', '.join(PROFILS)}.")
+
+    geom = fetch("; ".join(points), profil, altimetrie)
+
+    # Le bloc `trace` est réécrit en entier : ce script en est le seul auteur,
+    # et un merge partiel laisserait une géométrie d'hier sous des chiffres
+    # d'aujourd'hui. Tout le reste du fichier est laissé strictement intact.
+    data["profil"] = profil
+    data["trace"] = {
+        "moteur": geom.get("moteur"),
+        "altimetrie": geom.get("altimetrie"),
+        "calcule_le": date.today().isoformat(),
+        "distance_m": geom.get("distance_m"),
+        "denivele_pos_m": geom.get("denivele_pos_m"),
+        "denivele_neg_m": geom.get("denivele_neg_m"),
+        "duree_s": geom.get("duree_s"),
+        "points_trace": geom.get("points_trace"),
+        "escaliers_m": geom.get("escaliers_m"),
+        "revetement_m": geom.get("revetement_m"),
+        "voies_m": geom.get("voies_m"),
+        "encodage": geom.get("encodage"),
+        "geometrie": geom.get("geometrie"),
+        "altitudes": geom.get("altitudes"),
+    }
+
+    # Chaque repère reçoit ce qui le concerne : la distance depuis le précédent,
+    # et son écart à la trace. L'écart n'est pas un détail — un repère à 27 m de
+    # la voie qui le dessert est normal en ville, un repère à 300 m est une
+    # coordonnée fausse, et sans ce chiffre personne ne fait la différence.
+    etapes = {e["de"]: e["distance_m"] for e in geom.get("etapes") or []}
+    ecarts = geom.get("ecart_reperes_m") or []
+    for i, repere in enumerate(reperes):
+        if i < len(ecarts):
+            repere["ecart_trace_m"] = ecarts[i]
+        if i > 0 and i in etapes:
+            repere["distance_precedent_m"] = etapes[i]
+
+    with open(chemin, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
+    t = data["trace"]
+    print(f"{chemin} — {t['distance_m'] / 1000:.2f} km, "
+          f"D+ {t['denivele_pos_m']} m / D− {t['denivele_neg_m']} m, "
+          f"{t['points_trace']} points de trace, {len(reperes)} repères.")
+    if t.get("escaliers_m"):
+        print(f"  escaliers : {t['escaliers_m']} m")
+    if t.get("revetement_m"):
+        detail = ", ".join(f"{k} {v} m" for k, v in list(t["revetement_m"].items())[:4])
+        print(f"  revêtement : {detail}")
+    loin = [(i + 1, e) for i, e in enumerate(ecarts) if e > 50]
+    if loin:
+        print("  ⚠ repère(s) loin de la trace : "
+              + ", ".join(f"n°{n} à {e} m" for n, e in loin))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,6 +1,43 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-04
+> MàJ : 2026-08-05
+
+**Les parcours — la moitié pod, ÉCRITE, À TAGUER (2026-08-05)** : Alfred fabriquait ses
+GPX à la main (328 `<trkpt>` tapés au clavier pour la boucle de Vannes, cinq commits en
+24 h, zéro `<ele>`). Le hub `rosetta` 0.12.0 apporte l'addon `trace` ; ici viennent les
+deux pièces qui ferment la boucle. Spec complète : `images/agent-gw/PARCOURS.md`.
+
+- **`trace-geom`** (CLI, stdlib seule, à côté de `memory-sync`) : lit les `reperes[].latlng`
+  d'un `*.parcours.json`, appelle `/trace/geometrie` sur le hub avec l'identité machine
+  (même client_credentials que `rosetta-bridge`), et **réécrit le bloc `trace`** du fichier.
+  La géométrie va du hub au disque **sans passer par la conversation**. Il écrit aussi, par
+  repère, `ecart_trace_m` et `distance_precedent_m`.
+- **`app/parcours.py`** : `GET /api/parcours/gpx?f=…` assemble le GPX à la demande. Le
+  `.gpx` n'est **pas** un fichier de la mémoire — c'est un dérivé. Ce qui se commite est le
+  fait (repères rédigés + géométrie mesurée), jamais son rendu.
+
+**La décision qui commande tout : deux matières, deux auteurs.** `trace` appartient à la
+machine, `reperes[]` à Alfred. D'où la propriété qui justifie la séparation — **corriger
+une description ne recalcule rien** ; seul l'ajout, le retrait ou le déplacement d'un
+repère demande de relancer `trace-geom`. Les cinq commits de Vannes venaient exactement de
+là : un seul fichier portait les deux matières.
+
+**Validé de bout en bout** en refabriquant la boucle de Vannes par toute la chaîne et en la
+comparant au fichier tapé à la main : **19 repères et 328 points identiques, écart maximal
+0,63 m** (l'arrondi de la polyline, moyen 0,37 m), **328 `<ele>` contre 0**, et le GPX parse.
+
+L'endpoint est borné aux `*.parcours.json` — pas à n'importe quel JSON de la mémoire — et
+la garde de traversée est celle des magasins, comme `voyages`. Testé
+(`./.venv/bin/python test/parcours_test.py`), les cinq autres suites passent toujours.
+
+**Reste à faire sur ce chantier :**
+- [ ] Le bloc `{% parcours %}` (vocabulaire Markdoc) + l'app-module **carte** : trace,
+      repères cliquables, profil altimétrique. La donnée est prête, le rendu non.
+- [ ] Arbitrage en attente : fond de carte **OSM** ou **Plan IGN** (les deux sont gratuits ;
+      l'IGN est meilleur sur les sentiers français, l'OSM est universel).
+- [ ] Côté cerveau (hors de ce repo) : la skill qui tient la méthode, et **où vivent les
+      balades hors voyage** — les deux traces existantes sont sous `voyages/`, une rando du
+      dimanche n'est pas un voyage.
 
 **Cinq retouches de la PWA — À TAGUER (2026-08-04)** : remontées par Monsieur en usage réel,
 quatre commits `agent-gw:`.
