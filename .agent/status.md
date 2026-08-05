@@ -30,14 +30,35 @@ L'endpoint est borné aux `*.parcours.json` — pas à n'importe quel JSON de la
 la garde de traversée est celle des magasins, comme `voyages`. Testé
 (`./.venv/bin/python test/parcours_test.py`), les cinq autres suites passent toujours.
 
+**Le rendu — bloc `{% parcours source="…" /%}`, livré dans la foulée.** Le bloc pose une ancre,
+`frontend/src/parcours.js` va chercher le fichier et peint au montage : carte, repères numérotés
+cliquables reliés à la liste, profil altimétrique, bouton GPX. **Sans bibliothèque de carto** —
+Leaflet coûte 42 ko gzippés pour du zoom dont une fiche n'a pas besoin, alors qu'une mosaïque de
+tuiles est une grille d'`<img>` et que Mercator tient en six lignes. Coût réel : **+8 ko sur
+`engine.js`** (292 → 300 ko), tout compris.
+
+Deux fonds vérifiés vivants le 2026-08-05, gratuits et **sans clé** : Plan IGN (`data.geopf.fr`,
+WMTS `GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2`) et OpenStreetMap, avec un bouton de bascule. Le défaut
+se choisit sur la position — l'IGN ne couvre pas l'étranger, et une carte vide serait une
+régression silencieuse. ⚠️ Un 404 IGN peut venir de **coordonnées de tuile fausses**, pas du
+service : vérifier le calcul avant d'accuser l'amont (piège rencontré).
+
+L'invariant de `chart.js` tient : rien du contenu d'une fiche ne s'exécute. Aucun `innerHTML`
+porteur de contenu mémoire dans `parcours.js` (tout par `textContent`), et le `web` d'un repère
+est filtré sur http/https — un `javascript:` dans une fiche deviendrait du script au clic.
+
+⚠️ **Défaut latent trouvé au passage, non corrigé** : `required: true` de Markdoc *signale* un
+attribut manquant mais n'empêche pas le transform de tourner. `{% piece-jointe %}` (et `galerie`)
+appellent `asset(undefined)` dans ce cas → l'exception emporte le rendu de **toute** la fiche, qui
+s'affiche « Fiche introuvable ». `parcours` se garde lui-même ; les autres non. Un `if (!x)` dans
+chaque bloc, ou un garde dans `asset()`, à arbitrer.
+
 **Reste à faire sur ce chantier :**
-- [ ] Le bloc `{% parcours %}` (vocabulaire Markdoc) + l'app-module **carte** : trace,
-      repères cliquables, profil altimétrique. La donnée est prête, le rendu non.
-- [ ] Arbitrage en attente : fond de carte **OSM** ou **Plan IGN** (les deux sont gratuits ;
-      l'IGN est meilleur sur les sentiers français, l'OSM est universel).
-- [ ] Côté cerveau (hors de ce repo) : la skill qui tient la méthode, et **où vivent les
-      balades hors voyage** — les deux traces existantes sont sous `voyages/`, une rando du
-      dimanche n'est pas un voyage.
+- [ ] Côté cerveau : livré aussi (skill `balades`, D44, `.mcp.json`) — voir le repo Alfred.
+      **En attente de Monsieur** : où vivent les balades hors voyage (la skill propose
+      `memory/domaines/balades/` mais s'interdit de créer le domaine sans demander).
+- [ ] Déployer : `rosetta` 0.12.0 puis `agent-gw`, et vérifier `trace` **par le pont** (e2e).
+- [ ] Le déplacement / zoom sur la carte, si ça manque à l'usage : ce sera un app-module.
 
 **Cinq retouches de la PWA — À TAGUER (2026-08-04)** : remontées par Monsieur en usage réel,
 quatre commits `agent-gw:`.

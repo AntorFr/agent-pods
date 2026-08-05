@@ -125,6 +125,8 @@ Texte important, mis en évidence.
 
 {% piece-jointe fichier="assets/plan.pdf" /%}   {# carte de téléchargement #}
 
+{% parcours source="assets/vannes.parcours.json" /%}   {# une balade : carte, repères, GPX #}
+
 {% graphique type="barres" titre="Coût par place" unite="€" couleur="vert" %}
 IVAR: 17
 PAX gainé: 26
@@ -213,6 +215,32 @@ la supprime (sécurité), la vidéo n'apparaîtrait pas.
 ```markdown
 {% outil id="debit" projet="rangement-garage" /%}   {# le plan de débit / suivi menuiserie #}
 ```
+
+### Une balade — `{% parcours %}`
+
+Le bloc affiche la carte d'un parcours, ses repères numérotés (cliquables, reliés à la liste),
+son profil altimétrique quand il y a du relief, et le bouton de téléchargement du **GPX**.
+
+```markdown
+{% parcours source="assets/vannes-ville-close.parcours.json" /%}
+```
+
+Il ne porte **qu'un chemin** : tout vit dans le `*.parcours.json` à côté de la fiche. Deux
+matières, deux auteurs, et c'est la règle qui compte :
+
+- **`reperes[]` est à toi.** Nom, `desc` (ta parole), `note` (ce que tu ajoutes de ta main),
+  `web`, `sym`, et `sources` — Google et OSM, chacun daté, gardés **séparés** de ta prose parce
+  que ce sont des entrées non fiables. Tu les corriges quand tu veux, à la ligne.
+- **`trace` est à la machine.** Géométrie, distance, dénivelé, revêtement : écrits par
+  `trace-geom`, jamais à la main. **Ne recopie jamais de coordonnées de trace toi-même** — 328
+  points pour 3 km, un caractère perdu et la fin du parcours part ailleurs.
+
+D'où la propriété à connaître : **corriger une description ne recalcule rien.** Seul l'ajout,
+le retrait ou le déplacement d'un repère demande de relancer `trace-geom`.
+
+N'écris pas de `.gpx` dans `memory/` : il n'en existe plus. Le fichier est **assemblé à la
+demande** à partir du parcours, donc toujours à jour. Le contrat complet est dans
+`PARCOURS.md` (repo agent-pods).
 
 Blocs standard aussi : titres `#`, listes `-` / `1.`, gras `**`, tableaux, code — markdown normal.
 

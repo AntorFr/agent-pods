@@ -3,6 +3,7 @@
 import './design-system.css'; // esbuild bundles this into engine.css
 import DOMPurify from 'dompurify';
 import { renderPage } from './render.js';
+import { mountParcours } from './parcours.js';
 
 export function render(source, opts) {
   const { frontmatter, html, errors } = renderPage(source, opts);
@@ -11,4 +12,8 @@ export function render(source, opts) {
   return { frontmatter, html: DOMPurify.sanitize(html, { ADD_ATTR: ['target'] }), errors };
 }
 
-export { renderPage };
+// `render` rend une CHAÎNE : les blocs qui doivent aller chercher un fichier
+// (aujourd'hui `parcours`) ne peuvent se peindre qu'une fois le document inséré.
+// L'appelant monte donc explicitement, après insertion — l'invariant tient :
+// rien du fichier ne s'exécute, seule sa donnée est lue (cf. parcours.js).
+export { renderPage, mountParcours };

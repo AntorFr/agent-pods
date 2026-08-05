@@ -122,6 +122,32 @@ export const config = {
       transform: chart,
     },
 
+    // A walk: its track on a map, its elevation profile and its numbered
+    // landmarks, all read from the `*.parcours.json` beside the fiche.
+    //
+    // An anchor rather than a drawing, and the reason is not laziness: a 3 km
+    // town loop is 328 track points. Inlining them in the fiche would put the
+    // whole geometry back through the model on every edit — the exact cost the
+    // parcours file exists to avoid (see PARCOURS.md). So the block resolves
+    // the path and stops there; `parcours.js` fetches and paints at mount, the
+    // same contract `outil` already declares.
+    parcours: {
+      selfClosing: true,
+      attributes: { source: { type: String, required: true } },
+      transform(node, cfg) {
+        const { source } = node.transformAttributes(cfg);
+        // `required: true` SIGNALE l'oubli, il ne l'empêche pas : Markdoc
+        // exécute le transform quand même, et `asset(undefined)` jetterait —
+        // emportant le rendu de toute la fiche, pas seulement ce bloc.
+        if (!source) return new Tag('div', { class: 'parcours' },
+          [new Tag('div', { class: 'pc-vide' }, ['Parcours : il manque « source ».'])]);
+        return new Tag('div', {
+          class: 'parcours',
+          'data-src': asset(source, cfg.variables?.baseDir),
+        }, [new Tag('div', { class: 'pc-vide' }, ['Parcours…'])]);
+      },
+    },
+
     // Embeds a coded app-module by reference; the front swaps in the real
     // component (workbench, task list…) at mount. Renders a placeholder anchor.
     outil: {

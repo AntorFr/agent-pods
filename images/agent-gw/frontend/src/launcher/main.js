@@ -1531,6 +1531,11 @@ async function renderFiche(path) {
         if (h1) h1.after(bar); else doc.prepend(bar);
       }
       labelMemLinks(doc);
+      // Les blocs `{% parcours %}` vont chercher leur géométrie dans un fichier
+      // voisin : ils ne peuvent se peindre qu'une fois le document DANS le DOM
+      // (la largeur du conteneur décide du zoom de la carte). D'où le montage
+      // différé en fin de `showMem`, après `page.appendChild(wrap)`.
+      queueMicrotask(() => window.Alfred?.mountParcours?.(doc));
       if (isSpace) {
         // Index d'abord, puis les pages triées par titre.
         const label = (p) => (memIndex?.get(p)?.titre) || prettify(p.split('/').pop());

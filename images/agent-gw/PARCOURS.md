@@ -113,10 +113,39 @@ d'afficher un fichier qui ne porte que des waypoints. Un parcours pas encore
 routé sort avec ses repères seuls, mais **l'annonce dans sa description** plutôt
 que de laisser croire à un chemin.
 
+## Le rendu — `{% parcours source="…" /%}`
+
+Le bloc pose une **ancre** (une `div` portant le chemin) ; `frontend/src/parcours.js`
+va chercher le fichier et peint au montage. Carte, repères numérotés cliquables
+reliés à la liste, profil altimétrique, bouton GPX.
+
+**Sans bibliothèque de cartographie.** Leaflet pèse 42 ko gzippés pour du zoom
+et du déplacement dont une fiche n'a pas besoin — on regarde la forme d'une
+boucle, on ne l'explore pas. Une mosaïque de tuiles est une grille d'`<img>`, la
+projection Mercator tient en six lignes, et le tracé est un `<path>` SVG qui se
+thème tout seul là où un canvas cuirait ses pixels. Coût réel mesuré : **+8 ko
+sur `engine.js`**, tout compris.
+
+**Deux fonds, vérifiés vivants le 2026-08-05, gratuits et sans clé** : Plan IGN
+(`data.geopf.fr`, WMTS `GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2`) et OpenStreetMap. Le
+défaut se choisit sur la position — l'IGN ne couvre pas l'étranger, et une carte
+vide serait une régression silencieuse. Un bouton bascule.
+
+**L'invariant du moteur tient.** `chart.js` le pose : rien du contenu d'une
+fiche ne s'exécute. Une passe de montage n'y déroge pas tant qu'elle **lit** la
+donnée sans l'exécuter : pas un seul `innerHTML` porteur de contenu mémoire dans
+`parcours.js` (tout passe par `textContent`), et la seule URL qu'un fichier peut
+proposer — le `web` d'un repère — est filtrée sur `http`/`https`, parce qu'un
+`javascript:` deviendrait du script au clic.
+
+Deux détails qui ne se devinent pas : le profil altimétrique est **omis** sous
+15 m d'amplitude (une courbe de bruit se lirait comme du relief), et un écart
+repère ↔ trace n'est signalé qu'**au-delà de 60 m** — en deçà c'est le point qui
+vise le lieu pendant que la trace suit la voie.
+
 ## Hors v1
 
-- Le bloc `{% parcours %}` et l'app-module carte (afficher la trace, le profil
-  altimétrique, les repères cliquables) — la donnée est prête, le rendu non.
 - La génération de boucle (« 8 km au départ d'ici ») : BRouter ne sait pas le
   faire, il faudrait GraphHopper.
 - La lecture d'une trace importée (Wikiloc, Komoot).
+- Le déplacement et le zoom sur la carte : ce sera un app-module, pas ce bloc.
