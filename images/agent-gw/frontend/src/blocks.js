@@ -131,11 +131,19 @@ export const config = {
     // parcours file exists to avoid (see PARCOURS.md). So the block resolves
     // the path and stops there; `parcours.js` fetches and paints at mount, the
     // same contract `outil` already declares.
+    // DEUX VUES, et c'est ce qui évite un domaine « balades ». Un parcours n'a
+    // pas de maison : il s'accroche à la fiche qui a une raison d'en parler —
+    // un week-end, une forêt, un voyage — et il est adressable tout seul par
+    // `#/parcours/<chemin>`. `vue="lien"` pose une carte compacte qui y mène,
+    // pour qu'une fiche puisse en citer trois sans empiler trois cartes.
     parcours: {
       selfClosing: true,
-      attributes: { source: { type: String, required: true } },
+      attributes: {
+        source: { type: String, required: true },
+        vue: { type: String, default: 'carte', matches: ['carte', 'lien'] },
+      },
       transform(node, cfg) {
-        const { source } = node.transformAttributes(cfg);
+        const { source, vue } = node.transformAttributes(cfg);
         // `required: true` SIGNALE l'oubli, il ne l'empêche pas : Markdoc
         // exécute le transform quand même, et `asset(undefined)` jetterait —
         // emportant le rendu de toute la fiche, pas seulement ce bloc.
@@ -144,6 +152,7 @@ export const config = {
         return new Tag('div', {
           class: 'parcours',
           'data-src': asset(source, cfg.variables?.baseDir),
+          ...(vue === 'lien' ? { 'data-vue': 'lien' } : {}),
         }, [new Tag('div', { class: 'pc-vide' }, ['Parcours…'])]);
       },
     },

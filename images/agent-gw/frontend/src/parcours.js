@@ -362,6 +362,36 @@ function peindre(hote, data, relPath) {
   hote.appendChild(pied);
 }
 
+/** La vue compacte : une carte-lien vers la page du parcours.
+ *
+ *  Un parcours n'appartient à aucun domaine — il s'accroche à la fiche qui a
+ *  une raison d'en parler. Une fiche « week-end en Brocéliande » peut donc en
+ *  citer trois sans empiler trois cartes plein cadre. */
+function peindreLien(hote, data, relPath) {
+  const trace = data.trace || {};
+  hote.textContent = '';
+  hote.classList.add('pc-ready', 'pc-asLink');
+
+  const a = el('a', 'pc-card');
+  a.href = `#/parcours/${relPath.split('/').map(encodeURIComponent).join('/')}`;
+  a.appendChild(el('span', 'pc-card-ico', '⛰'));
+  const corps = el('span', 'pc-card-body');
+  corps.appendChild(el('span', 'pc-card-t', data.titre || 'Parcours'));
+
+  const bits = [];
+  if (trace.distance_m) bits.push(fmtKm(trace.distance_m));
+  if (trace.denivele_pos_m) bits.push(`D+ ${trace.denivele_pos_m} m`);
+  const d = fmtDuree(trace.duree_s);
+  if (d) bits.push(d);
+  const n = (data.reperes || []).length;
+  if (n) bits.push(`${n} repère${n > 1 ? 's' : ''}`);
+  // Sans bloc `trace`, on ne fabrique pas un chiffre : on dit qu'il manque.
+  corps.appendChild(el('span', 'pc-card-m',
+    bits.length ? bits.join(' · ') : 'trace pas encore calculée'));
+  a.appendChild(corps);
+  hote.appendChild(a);
+}
+
 /** Monte tous les blocs `{% parcours %}` d'un document déjà inséré.
  *  Idempotent : un bloc déjà peint est ignoré. */
 export function mountParcours(racine = document) {
@@ -369,11 +399,13 @@ export function mountParcours(racine = document) {
     hote.classList.add('pc-loading');
     const src = hote.dataset.src;
     // Le chemin mémoire, reconstitué depuis l'URL brute : c'est lui que
-    // /api/parcours/gpx attend, et le bloc n'a que l'URL.
+    // /api/parcours/gpx et la route #/parcours/… attendent, et le bloc n'a que
+    // l'URL.
     const rel = decodeURIComponent(String(src).replace(/^\/?api\/memory\/raw\//, ''));
+    const peintre = hote.dataset.vue === 'lien' ? peindreLien : peindre;
     fetch(src, { headers: { Accept: 'application/json' } })
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((data) => peindre(hote, data, rel))
+      .then((data) => peintre(hote, data, rel))
       .catch((e) => {
         hote.textContent = '';
         hote.appendChild(el('div', 'pc-vide', `Parcours illisible : ${e.message}`));

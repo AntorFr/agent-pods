@@ -222,8 +222,17 @@ Le bloc affiche la carte d'un parcours, ses repères numérotés (cliquables, re
 son profil altimétrique quand il y a du relief, et le bouton de téléchargement du **GPX**.
 
 ```markdown
-{% parcours source="assets/vannes-ville-close.parcours.json" /%}
+{% parcours source="assets/vannes-ville-close.parcours.json" /%}              {# la carte en grand #}
+{% parcours source="assets/vannes-ville-close.parcours.json" vue="lien" /%}   {# une carte compacte #}
 ```
+
+**Une balade n'a pas de domaine.** Ce n'est pas un pan de vie, c'est une pièce jointe à
+quelque chose qui, lui, en est un : elle vit dans les `assets/` de la fiche qui a une raison
+d'en parler — un voyage, un week-end, un lieu — et elle est **adressable toute seule** par
+`#/parcours/<chemin>`. D'où les deux vues : `carte` (défaut) quand la balade *est* le sujet de
+la fiche, `lien` quand la fiche parle d'autre chose ou en cite plusieurs — trois cartes plein
+cadre empilées, personne ne les lit. Un même parcours peut être cité en lien depuis plusieurs
+fiches : un fichier, plusieurs renvois.
 
 Il ne porte **qu'un chemin** : tout vit dans le `*.parcours.json` à côté de la fiche. Deux
 matières, deux auteurs, et c'est la règle qui compte :

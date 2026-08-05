@@ -113,11 +113,35 @@ d'afficher un fichier qui ne porte que des waypoints. Un parcours pas encore
 routé sort avec ses repères seuls, mais **l'annonce dans sa description** plutôt
 que de laisser croire à un chemin.
 
+## Où vit un parcours — nulle part en particulier, et c'est voulu
+
+**Un parcours n'a pas de domaine.** Une balade n'est pas un pan de vie : c'est
+une pièce jointe à quelque chose qui, lui, en est un. Elle vit dans les
+`assets/` de la fiche qui a une raison d'en parler — un voyage, un week-end, un
+lieu — et elle est **adressable toute seule** par `#/parcours/<chemin>`, qui lui
+donne sa pleine page.
+
+Un domaine `balades` dédié aurait forcé à trancher « la boucle de Vannes est-elle
+un voyage ou une balade ? » — une question sans réponse, donc une mauvaise
+question. Le chemin du fichier suffit à l'identifier ; la fiche qui la cite
+suffit à la situer.
+
+D'où les **deux vues** du bloc, un choix éditorial :
+
+| | Quand |
+|---|---|
+| `vue="carte"` (défaut) | la balade **est** le sujet de la fiche |
+| `vue="lien"` | la fiche parle d'autre chose et la cite au passage, ou en cite plusieurs |
+
+Un même parcours peut être cité en lien depuis plusieurs fiches : un fichier,
+plusieurs renvois — la non-duplication habituelle.
+
 ## Le rendu — `{% parcours source="…" /%}`
 
 Le bloc pose une **ancre** (une `div` portant le chemin) ; `frontend/src/parcours.js`
 va chercher le fichier et peint au montage. Carte, repères numérotés cliquables
-reliés à la liste, profil altimétrique, bouton GPX.
+reliés à la liste, profil altimétrique, bouton GPX. La route `#/parcours/…` monte
+exactement le même bloc, seul dans son écran.
 
 **Sans bibliothèque de cartographie.** Leaflet pèse 42 ko gzippés pour du zoom
 et du déplacement dont une fiche n'a pas besoin — on regarde la forme d'une

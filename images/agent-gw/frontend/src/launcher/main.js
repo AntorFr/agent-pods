@@ -1202,6 +1202,10 @@ function renderRoute() {
   // agent qui écrit dans memory/ la parcourt. Seuls les modules ci-dessous se
   // configurent — une route éteinte retombe sur l'accueil, jamais sur un écran mort.
   if (route.startsWith('mem/')) return renderFiche(route.slice(4));
+  // Un parcours est de la mémoire adressable, comme une fiche — pas un module.
+  // Il n'a donc pas de domaine à lui : il s'accroche à la fiche qui a une raison
+  // d'en parler, et celle-ci y renvoie par `{% parcours vue="lien" %}`.
+  if (route.startsWith('parcours/')) return renderParcours(decodeURIComponent(route.slice(9)));
   // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
   // mène au hub (timeline), pas à la collection de fiches. Module éteint :
   // l'interception saute et #/dom/voyages redevient un domaine ordinaire.
@@ -1462,6 +1466,39 @@ async function renderDomain(rawSubpath) {
     });
     draw();
   }
+}
+
+/* ── Un parcours, en pleine page ───────────────────────────────────────────
+ * Le même bloc que dans une fiche, seul dans son écran. C'est ce qui permet à
+ * une balade de n'appartenir à AUCUN domaine : elle vit dans les assets de la
+ * fiche qui a une raison d'en parler (un week-end, une forêt, un voyage) et
+ * reste adressable par son chemin. Le fil d'Ariane remonte au dossier, pas à
+ * un domaine « balades » qui n'existe pas. */
+function renderParcours(path) {
+  const parts = path.split('/');
+  const dossier = parts.slice(0, -1).join('/');
+  const cr = [{ label: 'Accueil', hash: '#/' }];
+  if (parts[0] === 'domaines' && parts.length > 2) {
+    cr.push({ label: metaFor(parts[1]).label, hash: '#/dom/' + parts[1] });
+  }
+  // Le parcours vit dans `assets/` : c'est la fiche du dossier parent qui
+  // l'expose, et c'est là qu'on veut revenir.
+  const parent = dossier.replace(/\/assets$/, '');
+  if (parent && parent !== dossier) {
+    cr.push({ label: prettify(parent.split('/').pop()), hash: '#/mem/' + parent + '/' + parent.split('/').pop() + '.md' });
+  }
+  cr.push({ label: parts.at(-1).replace(/\.parcours\.json$/, ''), hash: '#/parcours/' + path });
+  crumbs(cr);
+
+  const wrap = document.createElement('div'); wrap.className = 'wrap';
+  const doc = document.createElement('div'); doc.className = 'agent-doc';
+  const hote = document.createElement('div');
+  hote.className = 'parcours';
+  hote.dataset.src = '/api/memory/raw/' + path.split('/').map(encodeURIComponent).join('/');
+  doc.appendChild(hote); wrap.appendChild(doc);
+  page.innerHTML = ''; page.appendChild(wrap);
+  // Après insertion : la largeur du conteneur décide du zoom de la carte.
+  queueMicrotask(() => window.Alfred?.mountParcours?.(doc));
 }
 
 async function renderFiche(path) {

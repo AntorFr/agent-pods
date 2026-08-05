@@ -11,6 +11,7 @@ import { decode } from '../src/parcours.js';
 const checks = [];
 const check = (name, pass) => checks.push([name, pass]);
 const r = (body) => renderPage(body, { baseDir: 'domaines/voyages/baden-2026' });
+const niveaux0 = (src) => Markdoc.validate(Markdoc.parse(src), config).map((e) => e.error.id);
 
 /* ── le bloc : une ancre, pas un dessin ──────────────────────────────── */
 const p = r('{% parcours source="assets/vannes.parcours.json" /%}');
@@ -24,6 +25,15 @@ check('l\'ancre est légère (moins de 200 octets)', p.html.length < 200);
 
 const abs = r('{% parcours source="/api/memory/raw/x/y.parcours.json" /%}');
 check('un chemin absolu passe intact', abs.html.includes('data-src="/api/memory/raw/x/y.parcours.json"'));
+
+/* ── les deux vues — ce qui evite un domaine « balades » ─────────────── */
+check('la vue par défaut est la carte (pas de data-vue)', !p.html.includes('data-vue'));
+const lien = r('{% parcours source="assets/v.parcours.json" vue="lien" /%}');
+check('vue="lien" marque l\'ancre', lien.html.includes('data-vue="lien"'));
+check('vue="lien" garde le même chemin',
+  lien.html.includes('data-src="/api/memory/raw/domaines/voyages/baden-2026/assets/v.parcours.json"'));
+check('une vue hors vocabulaire est refusée par le schéma',
+  niveaux0('{% parcours source="a.json" vue="satellite" /%}').includes('attribute-value-invalid'));
 
 // ⚠️ `renderPage` ne remonte que les erreurs de niveau `critical` ; Markdoc
 // classe l'attribut manquant et l'attribut inconnu en `error`. Ils ne sont donc

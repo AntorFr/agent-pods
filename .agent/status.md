@@ -53,10 +53,17 @@ appellent `asset(undefined)` dans ce cas → l'exception emporte le rendu de **t
 s'affiche « Fiche introuvable ». `parcours` se garde lui-même ; les autres non. Un `if (!x)` dans
 chaque bloc, ou un garde dans `asset()`, à arbitrer.
 
+**Un parcours n'a PAS de domaine — tranché par Monsieur le 2026-08-05**, contre la proposition
+d'un domaine `balades`. Une balade n'est pas un pan de vie : c'est une pièce jointe à quelque
+chose qui, lui, en est un. Elle vit dans les `assets/` de la fiche qui a une raison d'en parler
+(un voyage, un week-end, un lieu) et devient **adressable seule** par la route `#/parcours/…`,
+qui monte exactement le même bloc en pleine page. D'où une seconde vue, `vue="lien"` : une carte
+compacte (titre, distance, D+, durée) qui y mène, pour qu'une fiche puisse en citer trois sans
+empiler trois cartes plein cadre. Un domaine dédié aurait forcé à trancher « Vannes est-elle un
+voyage ou une balade ? » — une question sans réponse, donc une mauvaise question.
+
 **Reste à faire sur ce chantier :**
 - [ ] Côté cerveau : livré aussi (skill `balades`, D44, `.mcp.json`) — voir le repo Alfred.
-      **En attente de Monsieur** : où vivent les balades hors voyage (la skill propose
-      `memory/domaines/balades/` mais s'interdit de créer le domaine sans demander).
 - [ ] Déployer : `rosetta` 0.12.0 puis `agent-gw`, et vérifier `trace` **par le pont** (e2e).
 - [ ] Le déplacement / zoom sur la carte, si ça manque à l'usage : ce sera un app-module.
 
