@@ -71,6 +71,11 @@ typing indicator, model picker) and an SSE API:
 - `GET /api/memory/raw/<path>` — one memory file (`?download=1` forces attachment)
 - `GET /api/tunnel` — VS Code tunnel reconnect helper: pending GitHub device
   code + vscode.dev link, parsed from the claude-pod mirrored output
+- `GET /api/claude-token/status`, `POST /api/claude-token/{start,code}` —
+  renew the pod's Claude subscription from the PWA (settings → « Connexion
+  Claude »): the gateway drives `claude setup-token` in a pty, returns the
+  authorization URL, accepts the pasted code, and injects the captured token
+  as `CLAUDE_CODE_OAUTH_TOKEN` on every agent turn (token stays server-side)
 - `GET /api/history` — replay of the current session transcript (the PWA
   restores the visible conversation on reload)
 - `GET /api/workbook/list`, `GET|POST /api/workbook/state` — project workbooks:

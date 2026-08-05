@@ -31,7 +31,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, fleet, parcours, planif, voyages
+from . import auth, claude_token, fleet, parcours, planif, voyages
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
@@ -240,6 +240,7 @@ async def _lifespan(_app: FastAPI):
 
 app = FastAPI(title="agent-gw", lifespan=_lifespan)
 app.include_router(auth.router)
+app.include_router(claude_token.router)
 app.include_router(voyages.router)
 app.include_router(parcours.router)
 app.include_router(planif.router)
@@ -1038,7 +1039,10 @@ async def _run_alfred(
         plugins=_module_plugins(),
         setting_sources=["project"],
         max_buffer_size=MAX_BUFFER_BYTES,
-        env=env or {},
+        # Token d'abonnement renouvelé depuis la PWA (modale « Connexion
+        # Claude ») : injecté sous l'env de l'appelant, il prime sur des
+        # credentials périmés du home partagé sans écraser le retag de canal.
+        env={**claude_token.stored_env(), **(env or {})},
     )
     parts: list[str] = []
     session_id = resume

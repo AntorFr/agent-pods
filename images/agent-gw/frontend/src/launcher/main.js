@@ -2850,6 +2850,72 @@ async function refreshTunnel() {
 async function pollTunnel() { try { const r = await fetch('/api/tunnel', { headers: headers(false), cache: 'no-store' }); if (r.ok) { const t = await r.json(); $('vsc').classList.toggle('pending', !!t.pending); $('gear').classList.toggle('pending', !!t.pending); } } catch {} }
 setInterval(pollTunnel, 120000);
 
+/* ── Connexion Claude (abonnement du pod) ────────────────────────── */
+/* Le corps pilote `claude setup-token` : on affiche l'URL d'autorisation,
+   l'humain autorise dans son navigateur puis colle le code. Le token reste
+   côté serveur ; ici on ne voit que l'état. */
+const claudeModal = $('claude-modal'), claudeBody = $('claude-body');
+let claudeSession = null;
+$('claude-login').addEventListener('click', () => { setModal.hidden = true; claudeModal.hidden = false; claudeStatus(); });
+$('claude-close').addEventListener('click', () => { claudeModal.hidden = true; });
+claudeModal.addEventListener('click', (e) => { if (e.target === claudeModal) claudeModal.hidden = true; });
+function claudeRow(html) { claudeBody.insertAdjacentHTML('beforeend', '<div class="row">' + html + '</div>'); }
+async function claudeStatus() {
+  claudeBody.innerHTML = '<div class="row">chargement…</div>';
+  let s;
+  try { const r = await fetch('/api/claude-token/status', { headers: headers(false), cache: 'no-store' }); if (!r.ok) throw new Error(r.status); s = await r.json(); }
+  catch (e) { claudeBody.innerHTML = '<div class="row">État indisponible (' + esc(String(e)) + ').</div>'; return; }
+  claudeBody.innerHTML = '';
+  claudeRow(s.tokenPresent
+    ? 'Token enregistré' + (s.savedAt ? ' le ' + new Date(s.savedAt * 1000).toLocaleDateString('fr-FR') : '') + ' (valable 1 an).'
+    : 'Aucun token géré ici — le pod vit sur ses credentials <code>claude login</code>.');
+  const b = document.createElement('button');
+  b.className = 'golink'; b.type = 'button';
+  b.textContent = s.tokenPresent ? 'Renouveler le token' : 'Connecter l’abonnement';
+  b.addEventListener('click', claudeStart);
+  claudeBody.appendChild(b);
+}
+async function claudeStart() {
+  claudeBody.innerHTML = '<div class="row">Préparation du lien… (quelques secondes)</div>';
+  let d;
+  try {
+    const r = await fetch('/api/claude-token/start', { method: 'POST', headers: headers(false) });
+    d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+  } catch (e) { claudeBody.innerHTML = '<div class="row">Échec : ' + esc(String(e.message || e)) + '</div>'; return; }
+  claudeSession = d.sessionId;
+  claudeBody.innerHTML = '';
+  claudeRow('1. Ouvre ce lien, connecte-toi au compte Claude et autorise :');
+  const a = document.createElement('a');
+  a.className = 'golink'; a.href = d.authorizeUrl; a.target = '_blank'; a.rel = 'noopener';
+  a.textContent = 'Ouvrir la page d’autorisation';
+  claudeBody.appendChild(a);
+  claudeRow('2. Colle ici le code affiché à la fin :');
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.placeholder = 'code d’autorisation'; inp.className = 'code-in';
+  inp.style.cssText = 'width:100%;padding:8px;font-family:monospace';
+  claudeBody.appendChild(inp);
+  const ok = document.createElement('button');
+  ok.className = 'golink'; ok.type = 'button'; ok.textContent = 'Valider le code';
+  ok.addEventListener('click', async () => {
+    if (!inp.value.trim()) return;
+    ok.disabled = true; ok.textContent = 'Échange du code…';
+    try {
+      const r = await fetch('/api/claude-token/code', {
+        method: 'POST', headers: headers(true),
+        body: JSON.stringify({ sessionId: claudeSession, code: inp.value.trim() }),
+      });
+      const d2 = await r.json();
+      if (!r.ok) throw new Error(d2.detail || r.status);
+      claudeStatus();
+    } catch (e) {
+      ok.disabled = false; ok.textContent = 'Valider le code';
+      claudeRow('Échec : ' + esc(String(e.message || e)));
+    }
+  });
+  claudeBody.appendChild(ok);
+}
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 window.addEventListener('hashchange', renderRoute);
 (async function boot() {

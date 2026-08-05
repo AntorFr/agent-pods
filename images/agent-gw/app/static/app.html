@@ -65,6 +65,7 @@
       <div class="setlist">
         <button id="set-theme" type="button">◐ Thème clair / sombre</button>
         <button id="vsc" type="button">⧉ Tunnel VS Code</button>
+        <button id="claude-login" type="button">✳ Connexion Claude</button>
         <button id="set-logout" type="button">⎋ Déconnexion</button>
       </div>
       <div class="setver" id="set-version">agent-gw …</div>
@@ -82,6 +83,17 @@
       <div class="actions">
         <button id="sujets-fresh" type="button">🧹 Consolider &amp; repartir à neuf</button>
         <button id="sujets-close" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="claude-modal" hidden>
+    <div class="card">
+      <h2>Connexion Claude</h2>
+      <div class="row">Renouvelle l’abonnement Claude du pod sans terminal : le corps lance <code>claude setup-token</code>, tu ouvres le lien, autorises, puis colles le code affiché.</div>
+      <div id="claude-body"><div class="row">chargement…</div></div>
+      <div class="actions">
+        <button id="claude-close" type="button">Fermer</button>
       </div>
     </div>
   </div>
