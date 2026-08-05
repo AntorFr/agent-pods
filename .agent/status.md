@@ -97,6 +97,26 @@ repères à moins de 27 m). **Trois causes de DESSIN, aucune de géométrie :**
 Le dézoom est **plancherisé à un cran sous le cadrage** : au-delà on ne voit plus la balade,
 on voit la région.
 
+⚠️ **VOIR CE QUE LE FRONT DESSINE, SANS NAVIGATEUR — la technique qui a tranché.** Après ces
+correctifs, « le tracé est toujours très faux » : impossible de savoir si le bug survivait ou si
+le navigateur servait un vieux bundle. Trois pas, tous avec l'outillage déjà présent :
+1. **La donnée d'abord**, en ASCII (64×26 dans le terminal) : la trace décodée et le GPX
+   d'origine se sont superposés au caractère près → la géométrie était hors de cause.
+2. **Le vrai code ensuite**, dans un **faux DOM** de trente lignes (`createElement`,
+   `createElementNS`, `appendChild`) : `creerCarte(...).dessine()` tourne sous Node et on lit le
+   `d` du `<path>`, les positions de tuiles et les pastilles réellement produits.
+3. **L'image enfin** : on sérialise cette sortie en HTML statique (tuiles en `data:` base64,
+   `<path>` inline) et **`qlmanage -t -s 1200 -o <dir> page.html`** en fait un PNG — QuickLook
+   est dans macOS, rien à installer. ⚠️ Il ne **court pas le JavaScript** : la page doit être
+   pré-rendue, sinon on thumbnaile du blanc (essayé).
+
+Verdict : le code rendait juste, la boucle suivait les rues, `1·19` était bien fondu. C'était le
+cache — la démo chargeait `engine.js` depuis `file://` **sans horodatage**. Elle porte désormais
+`?v=<ts>` et affiche la **signature du bundle** en coin. Une page de test qui ment coûte plus
+cher que pas de page de test du tout.
+
+`creerCarte` est **exporté** pour ça : sans lui, l'étape 2 est impossible.
+
 ⚠️ **J'avais écrit que Leaflet était inutile « parce qu'une fiche n'a pas besoin de zoom ».**
 L'argument était conditionnel et la condition est tombée. Ce qui reste : ~150 ko bruts sur un
 bundle de 300 chargé pour chaque fiche, quand il n'a manqué que l'inverse de la projection et

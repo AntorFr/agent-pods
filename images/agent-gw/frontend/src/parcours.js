@@ -184,7 +184,7 @@ function latLngDe(x, y, z) {
  *
  *  Rend un contrôleur : { redessine, bascule, recadre, detruire }.
  */
-function creerCarte(boite, coords, reperes, fondInitial) {
+export function creerCarte(boite, coords, reperes, fondInitial) {
   let fondId = fondInitial;
   let vue = null;                                  // { z, lat, lng } — le centre
   // Le zoom de cadrage — celui qui montre le parcours entier. Il sert de PLANCHER
