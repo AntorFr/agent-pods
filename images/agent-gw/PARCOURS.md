@@ -143,12 +143,23 @@ va chercher le fichier et peint au montage. Carte, repères numérotés cliquabl
 reliés à la liste, profil altimétrique, bouton GPX. La route `#/parcours/…` monte
 exactement le même bloc, seul dans son écran.
 
-**Sans bibliothèque de cartographie.** Leaflet pèse 42 ko gzippés pour du zoom
-et du déplacement dont une fiche n'a pas besoin — on regarde la forme d'une
-boucle, on ne l'explore pas. Une mosaïque de tuiles est une grille d'`<img>`, la
-projection Mercator tient en six lignes, et le tracé est un `<path>` SVG qui se
-thème tout seul là où un canvas cuirait ses pixels. Coût réel mesuré : **+8 ko
-sur `engine.js`**, tout compris.
+La carte se **déplace et se zoome** : glisser à la souris, molette avec Ctrl/⌘,
+double-clic, boutons `+ − ⤢`, et deux doigts au tactile. Le geste tactile est
+délibérément **partagé** — un doigt fait défiler la page, deux doigts pilotent
+la carte. Prendre le doigt unique (`touch-action:none`, ce que fait Leaflet)
+rendrait une fiche longue impossible à parcourir dès que le pouce tombe sur la
+carte. Même logique à la molette : sans Ctrl/⌘, la page défile ; le pincement de
+trackpad, lui, envoie `ctrlKey` de lui-même et zoome sans rien tenir.
+
+**Sans bibliothèque de cartographie — et le pourquoi a changé en route.**
+L'argument d'origine était « on regarde la forme d'une boucle, on ne l'explore
+pas, donc pas besoin de zoom ». Il était honnête mais **conditionnel**, et la
+condition est tombée le 2026-08-06 quand Monsieur a demandé le déplacement.
+Ce qui reste, et qui suffit : Leaflet pèse ~150 ko bruts sur un bundle de 300
+chargé pour **chaque** fiche, alors que la projection, la mosaïque et le tracé
+étaient déjà écrits — il n'a manqué que l'inverse de la projection (pour zoomer
+autour d'un point, il faut savoir quel lieu est sous le curseur) et trois
+écouteurs. Coût total mesuré, gestes compris : **+11 ko sur `engine.js`**.
 
 **Deux fonds, vérifiés vivants le 2026-08-05, gratuits et sans clé** : Plan IGN
 (`data.geopf.fr`, WMTS `GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2`) et OpenStreetMap. Le
@@ -167,9 +178,39 @@ Deux détails qui ne se devinent pas : le profil altimétrique est **omis** sous
 repère ↔ trace n'est signalé qu'**au-delà de 60 m** — en deçà c'est le point qui
 vise le lieu pendant que la trace suit la voie.
 
+### Quatre défauts de LECTURE, corrigés le 2026-08-05
+
+Tous constatés à l'usage sur la boucle de Vannes, aucun visible en relisant le
+code :
+
+1. **Le profil était tracé par INDICE de point, pas par distance.** Une trace
+   routée est dense dans les virages et clairsemée en ligne droite : une épingle
+   à cheveux occupait autant de largeur qu'un kilomètre de plat, et la pente
+   affichée n'était pas la pente réelle. L'abscisse est désormais la distance
+   cumulée. Il porte en plus ses **échelles** (altitudes bornantes, distances)
+   et un **trait par repère**, numéroté quand il y a la place.
+2. **Départ et arrivée étaient superposés.** Sur une boucle ils sont le même
+   point : deux pastilles exactement l'une sur l'autre, et on ne savait plus par
+   où l'on commence. Quand elles coïncident (moins de 18 px), une seule les
+   porte — « 1·19 » — marquée départ. Les autres collisions s'écartent en
+   éventail, avec un fil qui raccroche la pastille à son point réel.
+3. **Un aller-retour se cachait sous lui-même.** Deux réponses cumulées : la
+   ligne est **semi-opaque**, donc un tronçon parcouru deux fois fonce ; et des
+   **chevrons orientés** tous les 90 px donnent le sens de marche — deux
+   chevrons opposés sur la même rue disent « on y va et on en revient », ce
+   qu'aucune épaisseur de trait ne peut dire.
+4. **Le bouton GPX était en pied de page.** Il est sous la carte : on emporte la
+   trace au moment où on la regarde, pas après avoir fait défiler dix-neuf
+   descriptions.
+
+Un repère peut porter son `picto` et sa `couleur` (une des 12 teintes). ⚠️ Le
+picto vit dans **la liste seulement** : essayé sur les pastilles le 2026-08-06,
+dix-neuf emojis sur une carte ne se distinguent pas les uns des autres. La
+pastille garde son **numéro**, qui est de toute façon le seul lien entre elle et
+sa description.
+
 ## Hors v1
 
 - La génération de boucle (« 8 km au départ d'ici ») : BRouter ne sait pas le
   faire, il faudrait GraphHopper.
 - La lecture d'une trace importée (Wikiloc, Komoot).
-- Le déplacement et le zoom sur la carte : ce sera un app-module, pas ce bloc.

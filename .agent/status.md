@@ -62,10 +62,59 @@ compacte (titre, distance, D+, durée) qui y mène, pour qu'une fiche puisse en 
 empiler trois cartes plein cadre. Un domaine dédié aurait forcé à trancher « Vannes est-elle un
 voyage ou une balade ? » — une question sans réponse, donc une mauvaise question.
 
+**Cinq retours d'usage sur la carte, tous traités le 2026-08-06** — aucun visible en relisant
+le code, tous en regardant l'écran :
+1. **Le profil était tracé par INDICE de point, pas par distance** : une épingle à cheveux
+   occupait autant de largeur qu'un kilomètre de plat, la pente affichée n'était pas la vraie.
+   Abscisse = distance cumulée, plus les **échelles** (altitudes bornantes, distances) et un
+   trait par repère.
+2. **Départ et arrivée superposés** sur une boucle : une seule pastille les porte (« 1·19 »),
+   marquée départ ; les autres collisions s'écartent en éventail, avec un fil vers le point réel.
+3. **Un aller-retour se cachait sous lui-même** : ligne semi-opaque (les passages s'additionnent
+   et foncent) + **chevrons orientés** tous les 90 px — deux chevrons opposés sur la même rue
+   disent « on y va et on en revient ».
+4. **Bouton GPX remonté sous la carte**, plus en pied de page.
+5. **Déplacement et zoom** (glisser, molette+Ctrl/⌘, double-clic, `+ − ⤢`, deux doigts).
+   ⚠️ Le geste tactile est **partagé** : un doigt = la page défile, deux doigts = la carte.
+   `touch-action:none` (ce que fait Leaflet) rendrait une fiche longue impraticable.
+
+**« Le tracé a l'air faux »** — remonté par Monsieur, et il avait raison sur l'écran alors que
+la donnée, elle, était juste (328 points, 3 038 m recalculés contre 3 036 annoncés, tous les
+repères à moins de 27 m). **Trois causes de DESSIN, aucune de géométrie :**
+1. ⚠️ **`* { box-sizing:border-box }` est global** et `.pc-map` porte une bordure : fixer
+   `style.height = h` donne un intérieur de **h−2 px**. Le SVG en `height:100%` avec un viewBox
+   de `h` unités s'y comprimait de 0,5 % pendant que tuiles et pastilles restaient en pixels
+   bruts — le tracé glissait hors des rues, d'autant plus qu'on descendait. Le SVG porte
+   désormais ses dimensions **en pixels**, les trois calques partagent un seul repère.
+2. **L'éventail anti-collision déplaçait les pastilles de 20 px, soit ~32 m au cadrage** — un
+   repère posé une rue plus loin que le monument qu'il nomme. Retiré le jour même : depuis que
+   la carte se zoome, deux pastilles serrées se séparent d'un geste, alors qu'une pastille
+   déplacée **ment** sans que rien ne le dise.
+3. **Les largeurs de trait n'étaient pas calibrées sur l'échelle.** Au zoom de cadrage (z=16)
+   1 px vaut **1,6 m** : une rue de 10 m fait 6 px, et je dessinais une ligne de 3,5 px sous un
+   liseré de 7. Ramenés à 2,2 et 4,5.
+
+Le dézoom est **plancherisé à un cran sous le cadrage** : au-delà on ne voit plus la balade,
+on voit la région.
+
+⚠️ **J'avais écrit que Leaflet était inutile « parce qu'une fiche n'a pas besoin de zoom ».**
+L'argument était conditionnel et la condition est tombée. Ce qui reste : ~150 ko bruts sur un
+bundle de 300 chargé pour chaque fiche, quand il n'a manqué que l'inverse de la projection et
+trois écouteurs. Coût réel, gestes compris : **+11 ko**.
+
+**Le picto d'un repère vit dans la LISTE, pas sur la pastille** (essayé, puis retiré : dix-neuf
+emojis sur une carte ne se distinguent pas). La pastille garde son numéro — seul lien avec la
+description.
+
+**`{% callout %}` gagne `icone` et `couleur`** (12 teintes, celles des graphiques). Le `type`
+reste fermé : il porte l'intention, pas le goût. C'est la vraie cause des quatre `type="info"`
+du contenu — le besoin était l'allure, pas un quatrième type.
+
 **Reste à faire sur ce chantier :**
 - [ ] Côté cerveau : livré aussi (skill `balades`, D44, `.mcp.json`) — voir le repo Alfred.
 - [ ] Déployer : `rosetta` 0.12.0 puis `agent-gw`, et vérifier `trace` **par le pont** (e2e).
-- [ ] Le déplacement / zoom sur la carte, si ça manque à l'usage : ce sera un app-module.
+- [ ] La carte n'a jamais tourné dans la VRAIE PWA, seulement dans une page de démonstration :
+      le montage y passe par `showMem`. Même logique, mais à confirmer au premier `#/mem/…`.
 
 **Cinq retouches de la PWA — À TAGUER (2026-08-04)** : remontées par Monsieur en usage réel,
 quatre commits `agent-gw:`.

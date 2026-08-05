@@ -114,6 +114,13 @@ Les blocs sans contenu se ferment par `/%}` ; ceux avec contenu par `{% /nom %}`
 Texte important, mis en évidence.
 {% /callout %}
 
+{% callout type="note" icone="🥾" couleur="ambre" %}   {# l'allure est libre, le type non #}
+Le `type` porte l'INTENTION (une astuce n'est pas une mise en garde) et reste fermé.
+Le picto et la teinte, eux, sont à toi : `icone` accepte n'importe quel emoji,
+`couleur` prend une des 12 teintes du système (les mêmes que `{% graphique %}`) :
+rouge, orange, ambre, vert, emeraude, turquoise, bleu, indigo, violet, rose, gris, ardoise.
+{% /callout %}
+
 ![Légende de l'image](assets/photo.png)   {# chemin RELATIF à la fiche → résolu tout seul #}
 
 {% galerie %}
@@ -240,6 +247,10 @@ matières, deux auteurs, et c'est la règle qui compte :
 - **`reperes[]` est à toi.** Nom, `desc` (ta parole), `note` (ce que tu ajoutes de ta main),
   `web`, `sym`, et `sources` — Google et OSM, chacun daté, gardés **séparés** de ta prose parce
   que ce sont des entrées non fiables. Tu les corriges quand tu veux, à la ligne.
+  L'allure aussi est à toi : `picto` (un emoji, affiché dans la liste) et `couleur` (une des
+  12 teintes, qui colore la pastille ET la ligne). Le **numéro**, lui, ne se choisit pas et
+  reste seul sur la pastille : c'est le lien entre la carte et la description, et dix-neuf
+  emojis sur une carte ne se distinguent pas.
 - **`trace` est à la machine.** Géométrie, distance, dénivelé, revêtement : écrits par
   `trace-geom`, jamais à la main. **Ne recopie jamais de coordonnées de trace toi-même** — 328
   points pour 3 km, un caractère perdu et la fin du parcours part ailleurs.

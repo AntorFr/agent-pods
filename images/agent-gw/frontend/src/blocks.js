@@ -28,6 +28,20 @@ function asset(src, baseDir = '') {
 
 const CALLOUT_ICON = { note: '🛈', astuce: '✓', attention: '⚠' };
 
+// `required: true` SIGNALE un attribut manquant, il ne l'EMPÊCHE pas : Markdoc
+// valide et transforme en deux passes indépendantes, donc le transform tourne
+// quand même avec `undefined`. Mesuré le 2026-08-05 : `{% piece-jointe /%}`
+// jetait un TypeError sur `.split`, l'exception remontait hors du try/catch de
+// `renderFiche` (qui n'entoure que le fetch), et comme la fonction est `async`
+// sans `await`, la promesse rejetée mourait en silence — la fiche ENTIÈRE
+// restait bloquée sur « chargement… », sans un mot dans l'interface.
+// `web` et `outil` ne jetaient pas mais mentaient, en rendant la chaîne
+// « undefined » comme si c'était une valeur.
+// D'où ce garde partagé : un bloc incomplet le DIT, à sa place, et le reste de
+// la fiche s'affiche.
+const manque = (bloc, attr) => new Tag('div', { class: 'bloc-ko' },
+  [`${bloc} : il manque « ${attr} ».`]);
+
 // YouTube video id from any common URL shape, or null if not a YouTube URL.
 // watch?v=ID, youtu.be/ID, embed/ID, shorts/ID — id itself is [A-Za-z0-9_-]{11}.
 function youtubeId(url) {
@@ -43,16 +57,32 @@ function youtubeId(url) {
 
 export const config = {
   tags: {
+    // `type` reste FERMÉ — il porte l'intention (une astuce n'est pas une mise
+    // en garde), et c'est ce qui rend une fiche lisible d'une fiche à l'autre.
+    // Mais l'ALLURE, elle, s'ouvre : `icone` et `couleur` laissent l'agent qui
+    // rédige choisir son pictogramme et sa teinte parmi les 12 du système.
+    // Ce n'est pas un ornement : quatre fiches écrivaient `type="info"`, un
+    // synonyme que le vocabulaire n'a pas — le besoin réel était l'allure, pas
+    // un quatrième type. On l'ouvre là où il devait l'être.
     callout: {
       render: 'div',
       attributes: {
         type: { type: String, default: 'note', matches: ['note', 'astuce', 'attention'] },
+        icone: { type: String },
+        couleur: { type: String, matches: TINTS },
       },
       transform(node, cfg) {
-        const { type } = node.transformAttributes(cfg);
+        const { type, icone, couleur } = node.transformAttributes(cfg);
         const children = node.transformChildren(cfg);
-        return new Tag('div', { class: `callout ${type}` }, [
-          new Tag('span', { class: 'i' }, [CALLOUT_ICON[type] || '🛈']),
+        return new Tag('div', {
+          class: `callout ${type}`,
+          // `matches` SIGNALE une valeur hors vocabulaire, il ne la retient pas :
+          // même deux passes que `required`. On filtre donc ici, comme `chart`.
+          ...(TINTS.includes(couleur) ? { 'data-teinte': couleur } : {}),
+        }, [
+          // Un pictogramme libre, borné à deux caractères : c'est une vignette,
+          // pas une colonne de texte qui pousserait le corps hors du cadre.
+          new Tag('span', { class: 'i' }, [(icone || '').slice(0, 2) || CALLOUT_ICON[type] || '🛈']),
           new Tag('div', { class: 'callout-body' }, children),
         ]);
       },
@@ -72,6 +102,7 @@ export const config = {
       },
       transform(node, cfg) {
         const { url, titre } = node.transformAttributes(cfg);
+        if (!url) return manque('Lien web', 'url');
         // A YouTube URL gets an embedded player (click-to-play facade — no
         // iframe/tracking until the visitor actually presses play). Anything
         // else stays a link-preview card.
@@ -100,6 +131,7 @@ export const config = {
       attributes: { fichier: { type: String, required: true } },
       transform(node, cfg) {
         const { fichier } = node.transformAttributes(cfg);
+        if (!fichier) return manque('Pièce jointe', 'fichier');
         const name = fichier.split('/').pop();
         const ext = (name.split('.').pop() || '?').toUpperCase();
         return new Tag('a', { class: 'attach', href: `${asset(fichier, cfg.variables?.baseDir)}?download=1` }, [
@@ -144,11 +176,7 @@ export const config = {
       },
       transform(node, cfg) {
         const { source, vue } = node.transformAttributes(cfg);
-        // `required: true` SIGNALE l'oubli, il ne l'empêche pas : Markdoc
-        // exécute le transform quand même, et `asset(undefined)` jetterait —
-        // emportant le rendu de toute la fiche, pas seulement ce bloc.
-        if (!source) return new Tag('div', { class: 'parcours' },
-          [new Tag('div', { class: 'pc-vide' }, ['Parcours : il manque « source ».'])]);
+        if (!source) return manque('Parcours', 'source');
         return new Tag('div', {
           class: 'parcours',
           'data-src': asset(source, cfg.variables?.baseDir),
@@ -167,6 +195,7 @@ export const config = {
       },
       transform(node, cfg) {
         const { id, projet } = node.transformAttributes(cfg);
+        if (!id) return manque('Module', 'id');
         return new Tag('div', {
           class: 'module-embed',
           'data-module': id,

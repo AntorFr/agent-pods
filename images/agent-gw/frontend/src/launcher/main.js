@@ -1550,8 +1550,27 @@ async function renderFiche(path) {
       : [];
     const isSpace = spacePages.length > 1;
     if (window.Alfred?.render) {
-      const { frontmatter: fm, html } = window.Alfred.render(text, { baseDir });
+      const { frontmatter: fm, html, errors } = window.Alfred.render(text, { baseDir });
       const doc = document.createElement('div'); doc.className = 'agent-doc'; doc.innerHTML = html;
+      // Le vocabulaire est FERMÉ — encore faut-il le dire. Ces erreurs étaient
+      // calculées puis jetées : quatre fiches rendaient un `{% callout %}` cassé
+      // depuis des semaines sans que personne soit prévenu. Elles s'affichent
+      // ici, au-dessus de la fiche, à qui peut les corriger.
+      if (errors?.length) {
+        const box = document.createElement('div'); box.className = 'doc-errs';
+        box.appendChild(Object.assign(document.createElement('div'), {
+          className: 'de-t',
+          textContent: errors.length > 1
+            ? `${errors.length} erreurs d’écriture dans cette fiche`
+            : 'Une erreur d’écriture dans cette fiche',
+        }));
+        for (const e of errors.slice(0, 8)) {
+          const li = document.createElement('div'); li.className = 'de-l';
+          li.textContent = `ligne ${e.ligne} — ${e.message}`;
+          box.appendChild(li);
+        }
+        doc.prepend(box);
+      }
       // Barre de propriétés (maquette) : dérivée du frontmatter, injectée sous le h1.
       const props = [];
       const kv = (k, v) => props.push(`<span class="k">${k}</span>${v}`);

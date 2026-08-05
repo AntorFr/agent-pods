@@ -37,12 +37,38 @@ Voir [la commande](assets/DISPANO.pdf) et [les notes](notes-couture.md).
 `;
 
 const { frontmatter, html, errors } = renderPage(sample, { baseDir: 'domaines/diy/projets/voiles-lego-fortuna' });
+const r = (src) => renderPage(src, { baseDir: 'domaines/diy' });
 
 const checks = [
   ['frontmatter.type === projet', frontmatter.type === 'projet'],
   ['tags array parsed', Array.isArray(frontmatter.tags) && frontmatter.tags.length === 3],
   ['no critical schema errors', errors.length === 0],
   ['callout rendered', html.includes('class="callout attention"')],
+  // L'ALLURE d'un callout est libre (picto + teinte), son `type` reste fermé :
+  // le type porte l'intention, la teinte ne porte que le goût.
+  ['callout — picto libre', r('{% callout icone="🥾" %}A{% /callout %}').html.includes('>🥾<')],
+  ['callout — picto borné à 2 caractères',
+    r('{% callout icone="abcdef" %}A{% /callout %}').html.includes('>ab<')],
+  ['callout — teinte libre parmi les 12',
+    r('{% callout couleur="ambre" %}A{% /callout %}').html.includes('data-teinte="ambre"')],
+  ['callout — teinte hors palette jetée',
+    !r('{% callout couleur="fuchsia" %}A{% /callout %}').html.includes('fuchsia')],
+  ['callout — sans picto, l’icône du type',
+    r('{% callout type="astuce" %}A{% /callout %}').html.includes('>✓<')],
+  // `required: true` SIGNALE mais n'empêche pas le transform : sans garde,
+  // `{% piece-jointe /%}` jetait et emportait le rendu de toute la fiche.
+  ['bloc incomplet — dit ce qui manque au lieu de planter',
+    r('{% piece-jointe /%}').html.includes('il manque')],
+  ['bloc incomplet — n’écrit jamais « undefined »',
+    !r('{% web /%}\n\n{% outil /%}').html.includes('undefined')],
+  // Le vocabulaire est fermé — encore faut-il le dire. Ces erreurs étaient
+  // calculées puis jetées (filtre `critical` seul).
+  ['erreur de niveau `error` remontée',
+    r('{% callout type="info" %}A{% /callout %}').errors.length === 1],
+  ['erreur remontée avec sa ligne (1-based)',
+    r('\n\n{% callout type="info" %}A{% /callout %}').errors[0].ligne === 3],
+  ['les 239 warnings du contenu réel restent filtrés',
+    r('- item\n\n  {% callout %}A{% /callout %}').errors.every((e) => !/child-invalid/.test(e.id))],
   ['wikilink → /mem/', html.includes('href="/mem/voiles-lego-impression"')],
   ['image resolved with baseDir', html.includes('/api/memory/raw/domaines/diy/projets/voiles-lego-fortuna/assets/inspiration-1.png')],
   ['gallery rendered', html.includes('class="gallery"')],

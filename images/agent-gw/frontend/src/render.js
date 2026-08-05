@@ -24,7 +24,31 @@ export function renderPage(source, { baseDir = '' } = {}) {
     : {};
 
   // Surface schema violations rather than rendering garbage.
-  const errors = Markdoc.validate(ast, config).filter((e) => e.error.level === 'critical');
+  //
+  // `critical` ALONE was not enough, and the gap was silent. Markdoc files a
+  // missing required attribute and an out-of-vocabulary value under `error`,
+  // not `critical` — so the closed vocabulary was enforced in the OUTPUT (a bad
+  // attribute never reaches the HTML) while nobody was ever told about it.
+  // Measured over the 163 fiches of a real memory on 2026-08-05: four `error`,
+  // all the same mistake — `{% callout type="info" %}`, a synonym the contract
+  // does not have. It renders `class="callout info"`, matches no variant, and
+  // since `.callout` sets `border:1px solid` with no colour, those four boxes
+  // were drawing an ink-coloured border on no background. Broken in plain
+  // sight, for weeks, on fiches that were read.
+  //
+  // `warning` stays out, and that is not laziness: the same scan returned 239
+  // of them (`child-invalid` — markdown nesting Markdoc dislikes but renders
+  // correctly). Surfacing those would bury the four that matter.
+  const errors = Markdoc.validate(ast, config)
+    .filter((e) => e.error.level === 'critical' || e.error.level === 'error')
+    .map((e) => ({
+      // Line numbers are 0-based in the AST and 1-based to a human editing a
+      // file. The message stays in Markdoc's own words: precise, searchable,
+      // and a translation invented here would drift from the schema it quotes.
+      ligne: (e.lines?.[0] ?? 0) + 1,
+      id: e.error.id,
+      message: e.error.message,
+    }));
 
   // baseDir lets relative asset paths resolve against the fiche's directory.
   const content = Markdoc.transform(ast, { ...config, variables: { baseDir } });
