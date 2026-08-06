@@ -116,7 +116,11 @@ class _Session:
         if self.state != "awaiting-code" or self._master is None:
             raise HTTPException(409, f"Session pas prête pour un code ({self.state}).")
         self.state = "exchanging"
-        os.write(self._master, code.encode() + b"\n")
+        # \r et non \n : le pty est en mode brut (TUI Ink), la touche Entrée y
+        # est CR. Avec \n le champ ne se soumet jamais (vécu sur l'Antre en
+        # v0.4.1, prouvé en conteneur). En mode cuit (bash du test), icrnl
+        # convertit \r en \n : le faux binaire lit pareil.
+        os.write(self._master, code.encode() + b"\r")
         try:
             await asyncio.wait_for(self._exit_event.wait(), EXCHANGE_TIMEOUT)
         except asyncio.TimeoutError:
