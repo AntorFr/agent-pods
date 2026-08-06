@@ -191,6 +191,12 @@ export function creerCarte(boite, coords, reperes, fondInitial) {
   // (à un cran près) : au-delà, on ne voit plus la balade, on voit la région, et
   // une carte du département avec un fil de 3 km au milieu ne renseigne sur rien.
   let zCadre = null;
+  // La position de Monsieur, quand il l'a autorisée. Gardée ici plutôt que
+  // redessinée à chaque fixe : un `watchPosition` tire toutes les secondes, et
+  // reconstruire la mosaïque à cette cadence ferait clignoter la carte.
+  let pos = null;              // { lat, lng, acc, cap }
+  let suivre = false;          // recentrer quand on sort du cadre
+  let marqueur = null;         // l'élément DOM, déplacé sans redessiner
   const pts = coords.length ? coords : reperes.map((r) => r.pt).filter(Boolean);
   const NS = 'http://www.w3.org/2000/svg';
   let pan = null;                                  // le calque déplaçable
@@ -369,10 +375,41 @@ export function creerCarte(boite, coords, reperes, fondInitial) {
       pan.appendChild(b);
     });
 
+    marqueur = null;
+    if (pos) pan.appendChild(faisMarqueur(enPx([pos.lat, pos.lng]), vue.z));
+
     boite.textContent = '';
     boite.appendChild(pan);
     boite.appendChild(commandes());
     boite.appendChild(el('div', 'pc-credit', fond.credit));
+  }
+
+  /** Le marqueur de position : un point, son cercle de PRÉCISION, et le cap.
+   *  Le cercle n'est pas décoratif — dans une ville close, le GPS donne
+   *  couramment 20 à 40 m, et un point net sans son incertitude ferait croire
+   *  à une exactitude qui n'existe pas. */
+  function faisMarqueur([x, y], z) {
+    const box = el('div', 'pc-moi');
+    box.style.left = `${x}px`;
+    box.style.top = `${y}px`;
+    if (pos.acc) {
+      // Le rayon en pixels au zoom courant : le cercle grandit quand on zoome,
+      // parce que c'est une distance sur le terrain, pas une taille d'écran.
+      const mParPx = (40075016.686 * Math.cos((pos.lat * Math.PI) / 180)) / (TUILE * 2 ** z);
+      const r = Math.max(6, Math.min(pos.acc / mParPx, 400));
+      const cercle = el('span', 'pc-moi-acc');
+      cercle.style.width = `${r * 2}px`;
+      cercle.style.height = `${r * 2}px`;
+      box.appendChild(cercle);
+    }
+    if (pos.cap != null && !Number.isNaN(pos.cap)) {
+      const cap = el('span', 'pc-moi-cap');
+      cap.style.transform = `translate(-50%,-100%) rotate(${pos.cap}deg)`;
+      box.appendChild(cap);
+    }
+    box.appendChild(el('span', 'pc-moi-pt'));
+    marqueur = box;
+    return box;
   }
 
   function commandes() {
@@ -476,11 +513,50 @@ export function creerCarte(boite, coords, reperes, fondInitial) {
   boite.addEventListener('wheel', onWheel, { passive: false });
   boite.addEventListener('dblclick', onDbl);
 
+  /** Le pixel d'une position dans la vue courante — sans redessiner. */
+  function pxDe(lat, lng) {
+    const { w, h } = taille();
+    const [cx, cy] = worldPx(vue.lat, vue.lng, vue.z);
+    const [x, y] = worldPx(lat, lng, vue.z);
+    return [x - (cx - w / 2), y - (cy - h / 2)];
+  }
+
   return {
     dessine,
     recadre: () => { recadre(); dessine(); },
     bascule: (id) => { fondId = id; dessine(); },
     aBouge: () => bouge,
+    /** Une nouvelle position. Déplace le marqueur si possible, redessine sinon. */
+    position(p) {
+      pos = p;
+      if (!vue) { dessine(); return; }
+      if (!p) { if (marqueur) { marqueur.remove(); marqueur = null; } return; }
+      const [x, y] = pxDe(p.lat, p.lng);
+      const { w, h } = taille();
+      // Suivi : on ne recentre que lorsqu'on SORT du tiers central. Recentrer à
+      // chaque fixe ferait glisser la carte en permanence, et rendrait tout
+      // geste de déplacement impossible à tenir.
+      if (suivre && (x < w * 0.33 || x > w * 0.67 || y < h * 0.33 || y > h * 0.67)) {
+        vue = { z: vue.z, lat: p.lat, lng: p.lng };
+        dessine();
+        return;
+      }
+      if (marqueur) {
+        marqueur.remove();
+        marqueur = null;
+      }
+      if (pan) pan.appendChild(faisMarqueur([x, y], vue.z));
+    },
+    suit(v) {
+      suivre = v;
+      if (v && pos) { vue = { z: Math.max(vue.z, zCadre + 1), lat: pos.lat, lng: pos.lng }; dessine(); }
+    },
+    surMoi() {
+      if (!pos) return false;
+      vue = { z: Math.max(vue.z, zCadre + 1), lat: pos.lat, lng: pos.lng };
+      dessine();
+      return true;
+    },
     detruire() {
       boite.removeEventListener('pointerdown', onDown);
       boite.removeEventListener('pointermove', onMove);
@@ -626,6 +702,207 @@ function listeReperes(reperes) {
   return ol;
 }
 
+/* ── Le mode balade ──────────────────────────────────────────────────────────
+   La carte sert EN MARCHANT, pas au bureau. Plein écran, la position de
+   Monsieur dessus, ce qu'il a parcouru, ce qui vient — et l'écran qui reste
+   allumé.
+
+   Trois limites qu'on ne peut pas contourner, et qu'il vaut mieux connaître que
+   découvrir sur le terrain :
+   · une page web ne géolocalise PAS en arrière-plan — écran allumé, app au
+     premier plan. Le wake lock règle le confort, pas la physique ;
+   · dans une ville close (murs hauts, ruelles étroites) le GPS donne couramment
+     20 à 40 m. D'où le cercle de précision, qui dit la vérité ;
+   · `watchPosition` sans `enableHighAccuracy` se rabat sur le réseau : sur un
+     sentier, ça peut faire des centaines de mètres. On le demande, et on paie
+     la batterie que ça coûte. */
+
+/** La distance parcourue le long de la trace, et le repère suivant. */
+function avancement(coords, dist, ancres, pos) {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < coords.length; i += 1) {
+    const d = haversine([pos.lat, pos.lng], coords[i]);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  const suivant = ancres.findIndex((a) => a.i > best);
+  return {
+    fait: dist[best],
+    ecart: bestD,                       // à quelle distance de la trace on est
+    suivant: suivant === -1 ? null : ancres[suivant],
+    resteAuSuivant: suivant === -1 ? null : Math.max(0, dist[ancres[suivant].i] - dist[best]),
+  };
+}
+
+/* ── Emporter une balade ─────────────────────────────────────────────────────
+   Le débit est mauvais là où on marche. Le cache y répond, mais pas à
+   n'importe quel prix :
+
+   ⚠️ SEUL LE PLAN IGN EST EMPORTÉ. La politique d'OpenStreetMap interdit le
+   hors-ligne en toutes lettres — « Offline use is not permitted on
+   tile.openstreetmap.org » — et définit le préchargement d'une zone comme un
+   abus caractérisé. L'IGN ne l'interdit pas, n'affiche aucun quota sur la
+   diffusion WMTS et publie en licence ouverte. Donc : hors de France, pas de
+   hors-ligne. C'est une limite du droit, pas de la technique, et elle se dit.
+
+   ⚠️ UN CORRIDOR, PAS UNE BOÎTE ENGLOBANTE. Sur une rando linéaire de 15 km, la
+   boîte est vide aux trois quarts — on téléchargerait des forêts qu'on ne
+   verra jamais. On ne prend que les tuiles qui touchent la trace.
+
+   Mesuré sur la boucle de Vannes : 122 tuiles, ~5 Mo pour z15→z18. Ce n'est
+   pas le volume qui pose problème, c'est la politesse. */
+
+const ZOOMS_HORS_LIGNE = [15, 16, 17, 18];
+const MARGE_TUILES = 1;             // une tuile autour de la trace : on déborde en marchant
+
+/** Les tuiles qui touchent la trace, à un zoom donné. */
+export function tuilesDuCorridor(coords, z) {
+  const vues = new Set();
+  for (const [lat, lng] of coords) {
+    const [x, y] = worldPx(lat, lng, z);
+    const tx = Math.floor(x / TUILE);
+    const ty = Math.floor(y / TUILE);
+    for (let dx = -MARGE_TUILES; dx <= MARGE_TUILES; dx += 1) {
+      for (let dy = -MARGE_TUILES; dy <= MARGE_TUILES; dy += 1) vues.add(`${tx + dx}/${ty + dy}`);
+    }
+  }
+  return [...vues].map((k) => k.split('/').map(Number));
+}
+
+const enFranceBbox = (b) => b.latMin > FRANCE.lat[0] && b.latMax < FRANCE.lat[1]
+  && b.lngMin > FRANCE.lng[0] && b.lngMax < FRANCE.lng[1];
+
+/** Emporte la balade : les tuiles IGN du corridor + le fichier de parcours.
+ *  `onProgres(fait, total, octets)` est appelé au fil de l'eau. */
+async function emporte(coords, srcParcours, onProgres) {
+  if (!('caches' in window)) throw new Error('ce navigateur ne sait pas mettre en cache');
+  const bbox = bboxDe(coords);
+  if (!enFranceBbox(bbox)) {
+    throw new Error('hors de France : seul le Plan IGN s’emporte, et il ne couvre pas cette zone');
+  }
+  const cache = await caches.open('alfred-balade-v1');
+  const jobs = [];
+  for (const z of ZOOMS_HORS_LIGNE) {
+    for (const [x, y] of tuilesDuCorridor(coords, z)) jobs.push(FONDS.ign.url(z, x, y));
+  }
+  jobs.push(srcParcours);
+
+  let fait = 0;
+  let octets = 0;
+  // En série, volontairement : on tire chez un service public gratuit, pas sur
+  // un CDN qu'on paie. Une centaine de requêtes tranquilles plutôt qu'une rafale.
+  for (const u of jobs) {
+    try {
+      const r = await fetch(u, { cache: 'reload' });
+      if (r.ok) {
+        octets += Number(r.headers.get('content-length') || 0);
+        await cache.put(u, r.clone());
+      }
+    } catch { /* une tuile manquante n'annule pas la balade */ }
+    fait += 1;
+    onProgres(fait, jobs.length, octets);
+  }
+  return { tuiles: jobs.length - 1, octets };
+}
+
+const fmtPoids = (o) => (o > 1048576 ? `${(o / 1048576).toFixed(1)} Mo` : `${Math.round(o / 1024)} ko`);
+
+function modeBalade(hote, carte, coords, reperes, trace) {
+  const dist = cumule(coords);
+  const total = dist[dist.length - 1] || 0;
+  // Où chaque repère tombe sur la trace — même règle que partout : on ne cherche
+  // que vers l'avant, sinon le dernier point d'une boucle revient au départ.
+  const ancres = [];
+  let depuis = 0;
+  reperes.forEach((r, n) => {
+    if (!r.pt) return;
+    depuis = ancre(coords, r.pt, depuis);
+    ancres.push({ i: depuis, n, nom: r.nom || `Repère ${n + 1}` });
+  });
+
+  let veille = null;
+  let watch = null;
+  let suit = true;
+
+  const hud = el('div', 'pc-hud');
+  const ligne1 = el('div', 'pc-hud-1', 'En attente du GPS…');
+  const ligne2 = el('div', 'pc-hud-2', '');
+  const gauche = el('div', 'pc-hud-txt');
+  gauche.appendChild(ligne1); gauche.appendChild(ligne2);
+  hud.appendChild(gauche);
+
+  const bSuit = el('button', 'pc-hud-b on', '🧭 Suivi');
+  bSuit.type = 'button';
+  bSuit.addEventListener('click', () => {
+    suit = !suit;
+    bSuit.classList.toggle('on', suit);
+    carte.suit(suit);
+  });
+  const bSortie = el('button', 'pc-hud-b', '✕');
+  bSortie.type = 'button';
+  bSortie.title = 'Quitter le mode balade';
+  hud.appendChild(bSuit);
+  hud.appendChild(bSortie);
+
+  function stop() {
+    if (watch != null) navigator.geolocation.clearWatch(watch);
+    veille?.release?.().catch(() => {});
+    veille = null;
+    carte.position(null);
+    carte.suit(false);
+    hote.classList.remove('pc-balade');
+    hud.remove();
+    document.removeEventListener('visibilitychange', onVis);
+    carte.recadre();
+  }
+  bSortie.addEventListener('click', stop);
+
+  // Le verrou d'écran se PERD quand l'onglet passe en arrière-plan : sans ce
+  // rattrapage, l'écran se rendort à la première notification lue.
+  async function prendVeille() {
+    try { veille = await navigator.wakeLock?.request('screen'); } catch { veille = null; }
+  }
+  function onVis() { if (document.visibilityState === 'visible' && hote.classList.contains('pc-balade')) prendVeille(); }
+  document.addEventListener('visibilitychange', onVis);
+
+  hote.classList.add('pc-balade');
+  hote.appendChild(hud);
+  prendVeille();
+  carte.suit(true);
+
+  if (!navigator.geolocation) {
+    ligne1.textContent = 'Ce navigateur ne donne pas la position.';
+    return stop;
+  }
+  watch = navigator.geolocation.watchPosition(
+    ({ coords: c }) => {
+      const pos = { lat: c.latitude, lng: c.longitude, acc: c.accuracy, cap: c.heading };
+      carte.position(pos);
+      const a = avancement(coords, dist, ancres, pos);
+      // ⚠️ Hors de la trace, l'avancement ne veut plus rien dire : le point le
+      // plus proche peut être n'importe où sur la boucle. On le dit au lieu de
+      // rendre un chiffre faux.
+      if (a.ecart > 120) {
+        ligne1.textContent = `À ${Math.round(a.ecart)} m du parcours`;
+        ligne2.textContent = 'Hors trace — l’avancement ne veut rien dire ici.';
+        return;
+      }
+      ligne1.textContent = `${fmtKm(Math.round(a.fait))} sur ${fmtKm(total)}`;
+      ligne2.textContent = a.suivant
+        ? `→ ${a.suivant.n + 1}. ${a.suivant.nom} · ${fmtKm(Math.round(a.resteAuSuivant))}`
+        : 'Dernier repère atteint.';
+    },
+    (err) => {
+      ligne1.textContent = err.code === err.PERMISSION_DENIED
+        ? 'Position refusée — autorisez-la dans le navigateur.'
+        : 'Position indisponible pour l’instant.';
+      ligne2.textContent = '';
+    },
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
+  );
+  return stop;
+}
+
 function peindre(hote, data, relPath) {
   const trace = data.trace || {};
   const reperes = (data.reperes || []).map((r) => {
@@ -675,6 +952,44 @@ function peindre(hote, data, relPath) {
       carte.bascule(fondId);
     });
     barre.appendChild(bascule);
+    // Emporter : seulement en France (le Plan IGN est le seul fond qu'on ait le
+    // droit de stocker), et seulement si le navigateur sait cacher.
+    if ('caches' in window && enFranceBbox(bboxDe(pts))) {
+      const bOff = el('button', 'pc-fond', '⤓ Emporter');
+      bOff.type = 'button';
+      bOff.title = 'Télécharger la carte pour marcher sans réseau';
+      bOff.addEventListener('click', async () => {
+        if (bOff.disabled) return;
+        bOff.disabled = true;
+        try {
+          const res = await emporte(coords, hote.dataset.src, (f, t, o) => {
+            bOff.textContent = `⤓ ${Math.round((f / t) * 100)} %${o ? ` · ${fmtPoids(o)}` : ''}`;
+          });
+          bOff.textContent = `✓ Emportée · ${res.tuiles} tuiles${res.octets ? ` · ${fmtPoids(res.octets)}` : ''}`;
+          bOff.title = 'La carte est en cache — cliquez pour la retirer';
+          bOff.disabled = false;
+          bOff.onclick = () => {
+            navigator.serviceWorker?.controller?.postMessage('purge-balade');
+            bOff.textContent = '⤓ Emporter';
+            bOff.onclick = null;
+          };
+        } catch (e) {
+          bOff.textContent = `⤓ Impossible — ${e.message}`;
+          bOff.disabled = false;
+        }
+      });
+      barre.appendChild(bOff);
+    }
+
+    const bBalade = el('button', 'pc-fond', '🥾 Mode balade');
+    bBalade.type = 'button';
+    bBalade.title = 'Plein écran, votre position, ce qui reste à marcher';
+    let quitte = null;
+    bBalade.addEventListener('click', () => {
+      if (quitte) { quitte(); quitte = null; return; }
+      quitte = modeBalade(hote, carte, coords, reperes, trace);
+    });
+    barre.appendChild(bBalade);
     if (relPath) {
       const dl = el('a', 'pc-dl', '↓ Télécharger le GPX');
       dl.href = `/api/parcours/gpx?f=${encodeURIComponent(relPath)}`;

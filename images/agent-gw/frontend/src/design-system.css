@@ -300,3 +300,30 @@
 .agent-doc .callout[data-teinte="rose"]{ --tone:var(--cadeaux,var(--accent)); }
 .agent-doc .callout[data-teinte="gris"]{ --tone:var(--contacts,var(--accent)); }
 .agent-doc .callout[data-teinte="ardoise"]{ --tone:var(--search,var(--accent)); }
+
+/* ── Mode balade : plein ecran, la position, l'ecran qui reste allume ────────
+   La carte sert EN MARCHANT. En mode balade elle prend l'ecran entier — le
+   reste de la fiche n'a aucun interet a mi-parcours — et la barre d'etat dit
+   les deux seules choses utiles : ce qui est fait, ce qui vient. */
+.agent-doc .parcours.pc-balade{ position:fixed; inset:0; z-index:60; margin:0; background:var(--bg); display:flex; flex-direction:column; }
+/* Tout ce qui n'est pas la carte disparait : titre, profil, liste, pied. */
+.agent-doc .parcours.pc-balade>*{ display:none; }
+.agent-doc .parcours.pc-balade>.pc-map{ display:block; flex:1; height:auto!important; border-radius:0; border:0; }
+.agent-doc .parcours.pc-balade>.pc-hud{ display:flex; }
+
+.agent-doc .parcours .pc-hud{ align-items:center; gap:10px; padding:10px 14px; padding-bottom:calc(10px + env(safe-area-inset-bottom)); background:var(--surface); border-top:1px solid var(--line); }
+.agent-doc .parcours .pc-hud-txt{ flex:1; min-width:0; }
+.agent-doc .parcours .pc-hud-1{ font:600 15px/1.25 var(--f-body); color:var(--ink); font-variant-numeric:tabular-nums; }
+.agent-doc .parcours .pc-hud-2{ font:13px/1.35 var(--f-body); color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Cibles tactiles : on les touche en marchant, avec des gants parfois. */
+.agent-doc .parcours .pc-hud-b{ min-width:46px; height:42px; padding:0 12px; border-radius:var(--r-ctl); border:1px solid var(--line); background:var(--surface2); color:var(--ink-soft); font:600 13px var(--f-body); cursor:pointer; }
+.agent-doc .parcours .pc-hud-b.on{ border-color:var(--accent); color:var(--accent); background:var(--accent-lo); }
+
+/* La position : un point, son cercle de PRECISION, et le cap.
+   Le cercle n'est pas decoratif — dans une ville close le GPS donne couramment
+   20 a 40 m, et un point net sans son incertitude ferait croire a une exactitude
+   qui n'existe pas. */
+.agent-doc .parcours .pc-moi{ position:absolute; transform:translate(-50%,-50%); pointer-events:none; z-index:2; }
+.agent-doc .parcours .pc-moi-acc{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); border-radius:50%; background:color-mix(in srgb,var(--proj) 18%,transparent); border:1px solid color-mix(in srgb,var(--proj) 45%,transparent); }
+.agent-doc .parcours .pc-moi-pt{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:15px; height:15px; border-radius:50%; background:var(--proj); border:2.5px solid var(--surface); box-shadow:var(--shadow-sm); }
+.agent-doc .parcours .pc-moi-cap{ position:absolute; left:50%; top:50%; width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:11px solid var(--proj); transform-origin:50% 100%; }

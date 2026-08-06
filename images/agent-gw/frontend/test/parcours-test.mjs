@@ -6,7 +6,7 @@
 import Markdoc from '@markdoc/markdoc';
 import { renderPage } from '../src/render.js';
 import { config } from '../src/blocks.js';
-import { decode } from '../src/parcours.js';
+import { decode, tuilesDuCorridor } from '../src/parcours.js';
 
 const checks = [];
 const check = (name, pass) => checks.push([name, pass]);
@@ -92,6 +92,28 @@ check('les altitudes reviennent en mètres entiers', JSON.stringify(alts) === JS
 
 check('une chaîne vide ne rend rien plutôt que de boucler', decode('').length === 0);
 check('aucun NaN dans un décodage nominal', !got.flat().some((v) => Number.isNaN(v)));
+
+/* ── le corridor hors-ligne ──────────────────────────────────────────── */
+// Ce qu'on emporte doit suivre la TRACE, pas sa boîte englobante : sur une
+// rando linéaire la boîte est vide aux trois quarts, et on tirerait des
+// centaines de tuiles chez un service public gratuit pour rien.
+const diag = [];                      // 5 km en diagonale, le pire cas pour une bbox
+for (let i = 0; i <= 200; i += 1) diag.push([47.60 + i * 0.0002, -2.80 + i * 0.0003]);
+const corridor = tuilesDuCorridor(diag, 16);
+const bboxTuiles = (() => {
+  const xs = diag.map(([, lng]) => Math.floor(((lng + 180) / 360) * 256 * 2 ** 16 / 256));
+  const ys = diag.map(([lat]) => {
+    const s2 = Math.sin((lat * Math.PI) / 180);
+    return Math.floor((0.5 - Math.log((1 + s2) / (1 - s2)) / (4 * Math.PI)) * 256 * 2 ** 16 / 256);
+  });
+  return (Math.max(...xs) - Math.min(...xs) + 3) * (Math.max(...ys) - Math.min(...ys) + 3);
+})();
+check(`le corridor (${corridor.length}) est plus petit que la boîte (${bboxTuiles})`,
+  corridor.length < bboxTuiles);
+check('aucune tuile en double', new Set(corridor.map((t) => t.join('/'))).size === corridor.length);
+check('les tuiles sont des entiers', corridor.every(([x, y]) => Number.isInteger(x) && Number.isInteger(y)));
+// Un point isolé doit rendre la tuile qui le porte plus sa marge : 3x3.
+check('une marge d\'une tuile autour du tracé', tuilesDuCorridor([[47.65, -2.75]], 16).length === 9);
 
 /* ── rapport ─────────────────────────────────────────────────────────── */
 let ok = true;

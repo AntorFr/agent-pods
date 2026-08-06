@@ -127,12 +127,38 @@ domaines/voyages/
   consigné, durable — donc stocké**, contrairement à la météo et aux liaisons qui, elles, se
   dérivent. `web` : lien vers la page du lieu (site officiel, tiré des détails maps ou du mail
   de résa).
+- **`fiche` — le lien INTERNE de la carte** : `"fiche": "vannes-a-pied.md"`, chemin relatif au
+  dossier du voyage. Rendu comme un lien **dans l'app** (« 📄 Voir la fiche »), et une pastille
+  sur la carte du tray dit qu'il existe **sans qu'on ait à l'ouvrir**. La cible se déduit de
+  l'extension : un `.parcours.json` ouvre la carte du parcours en grand (« 🗺 Voir le
+  parcours »), tout le reste ouvre la fiche.
+
+  ⚠️ **`fiche` et `web` ne sont pas la même chose, et coexistent volontiers.** `web` est
+  **externe** par contrat — le site du lieu, nouvel onglet. Avant ce champ, une carte qui
+  voulait pointer une fiche de la mémoire n'avait rien : Alfred y mettait une URL absolue, ce
+  qui marche mais sort de l'app et ment sur le libellé. Le cas normal d'une carte de balade,
+  c'est les deux : le site de l'office de tourisme **et** la fiche qu'Alfred a rédigée.
+
 - **`docs` — les documents de la carte** : `[{ "fichier": "assets/…", "titre": "…" }]`. Les
   fichiers vivent dans `assets/` du dossier voyage, **classés là par Alfred** — typiquement la
   pièce jointe du mail de résa (carte d'embarquement, confirmation, billet, contrat de
   location). Le fil Gmail reste la *source* de la résa ; le document, lui, est un fichier de
   la mémoire, sous la main le jour J. La fiche les rend en cartes de téléchargement (même
   rendu que `{% piece-jointe %}`).
+
+## ⚠️ Une fiche `.md` dans un dossier de voyage est ORPHELINE par défaut
+
+`#/dom/voyages/<id>` rend la **timeline**, pas le listing du dossier. Une fiche posée là
+n'existe donc pour personne tant que rien ne la pointe — **pas même la fiche homonyme du
+voyage**. Constaté le 2026-08-06 : Alfred avait rédigé une balade complète que Monsieur n'a pu
+ouvrir qu'en tapant l'adresse à la main.
+
+Deux réponses, et il faut les deux :
+
+1. une carte peut **pointer** une fiche (`fiche`, ci-dessus) ;
+2. la page du voyage **liste** ce que le dossier contient — fiches `.md` et parcours — qu'on
+   l'ait pointé ou non. Compter sur le seul lien remettrait la découvrabilité à un champ
+   facultatif.
 
 ## L'app-module (front)
 

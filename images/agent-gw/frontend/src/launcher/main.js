@@ -2597,12 +2597,60 @@ async function renderVoyage(path) {
     data = await rd.json(); state = await rs.json();
   } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Voyage illisible (' + esc(String(e)) + ').</div></div>'; return; }
   voy = { path, data, state, filter: null };
+  // L'arbre et l'index alimentent le listing du dossier (vDossier). Un échec
+  // n'empêche pas la timeline : le bloc disparaît, la page vit.
+  await Promise.all([memInfo ? null : loadTree(), loadIndex()].filter(Boolean));
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }, { label: data.titre || 'Voyage', hash: '#/voyage/' + encodeURIComponent(path) }]);
   paintVoyage();
 }
 
 const vItems = () => (voy.data.items || []).map((it) => ({ ...it, ...(({ ts, ...o }) => o)(voy.state.items?.[it.id] || {}) }));
 const vDir = () => voy.path.replace(/assets\/voyage\.json$/, '');
+/* Le lien INTERNE d'une carte de voyage — `fiche` dans voyage.json.
+   ═══════════════════════════════════════════════════════════════════════════
+   Pourquoi un champ à part alors que `web` existe : `web` est EXTERNE par
+   contrat (nouvel onglet, « ↗ Ouvrir la page », le site du lieu). Une carte qui
+   veut pointer une fiche de la mémoire n'avait rien — Alfred a donc mis une URL
+   absolue dans `web`, ce qui marche mais sort de l'app et ment sur le libellé.
+   Les deux coexistent maintenant sur la même carte, et c'est le cas normal :
+   le site du restaurant D'UN côté, la fiche qu'Alfred a rédigée DE l'autre.
+
+   La cible se déduit de l'extension, pas d'un second champ : un `.parcours.json`
+   ouvre la carte en grand, tout le reste ouvre la fiche. */
+function vficheHref(rel) {
+  if (!rel) return null;
+  const chemin = /^[a-z]+:|^\//i.test(rel) ? rel : vDir() + rel;
+  if (/^[a-z]+:/i.test(chemin)) return null;          // une URL n'est pas une fiche
+  const route = /\.parcours\.json$/i.test(chemin) ? '#/parcours/' : '#/mem/';
+  return route + chemin.split('/').map(encodeURIComponent).join('/');
+}
+const vficheLbl = (rel) => (/\.parcours\.json$/i.test(rel || '') ? '🗺 Voir le parcours' : '📄 Voir la fiche');
+
+/* Les fiches du dossier de voyage — le filet anti-ORPHELINES.
+   ═══════════════════════════════════════════════════════════════════════════
+   `#/dom/voyages/<id>` rend la TIMELINE, pas le listing du dossier. Une fiche
+   `.md` posée là n'existe donc pour personne tant que rien ne la pointe — pas
+   même la fiche homonyme du voyage. Alfred a écrit une balade complète que
+   Monsieur n'a pu ouvrir qu'en tapant l'adresse à la main.
+   Une carte peut maintenant y renvoyer (`fiche`), mais compter sur ce lien
+   serait remettre la découvrabilité à un champ facultatif : ce bloc liste ce
+   que le dossier contient, qu'on l'ait pointé ou non. */
+function vDossier() {
+  const dir = vDir().replace(/\/$/, '');
+  if (!dir || !memInfo?.entries) return [];
+  return memInfo.entries
+    .filter((e) => !e.dir && e.path.startsWith(dir + '/')
+      && /\.(md|parcours\.json)$/i.test(e.path)
+      // enfants DIRECTS + les parcours d'assets/ : le reste (pièces jointes,
+      // voyage.json) n'est pas une page qu'on ouvre.
+      && (!e.path.slice(dir.length + 1).includes('/') || /\.parcours\.json$/i.test(e.path)))
+    .map((e) => ({
+      path: e.path,
+      nom: (memIndex?.get(e.path)?.titre) || prettify(e.path.split('/').pop().replace(/\.(parcours\.json|md)$/i, '')),
+      parcours: /\.parcours\.json$/i.test(e.path),
+    }))
+    .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
 async function vgesture(payload) {
   try {
     const r = await fetch('/api/voyage/state', { method: 'POST', headers: headers(true), body: JSON.stringify({ v: voy.path, ...payload }) });
@@ -2619,6 +2667,9 @@ function vitemHTML(it, extra) {
   if (it.duree) chips.push(`<span class="chip">◷ ${esc(it.duree)}</span>`);
   if (it.prix) chips.push(`<span class="chip">${esc(it.prix)}</span>`);
   if (it.gmail) chips.push('<span class="chip due">📧 résa</span>');
+  // Savoir qu'une carte porte une fiche SANS l'ouvrir : sinon le lien n'existe
+  // que pour qui pense à cliquer, et on retombe sur l'orpheline.
+  if (it.fiche) chips.push(`<span class="chip">${/\.parcours\.json$/i.test(it.fiche) ? '🗺 parcours' : '📄 fiche'}</span>`);
   return `<div class="vcard" draggable="true" title="Clic : fiche · Glisser : déplacer" data-vi="${esc(it.id)}" style="--ic:var(${T.c})"><span class="vico">${vicoOf(it)}</span><div class="bd"><div class="vt">${esc(it.titre || it.id)}</div>${chips.length ? `<div class="vmeta">${chips.join('')}</div>` : ''}</div>${extra || ''}</div>`;
 }
 
@@ -2675,7 +2726,10 @@ function paintVoyage() {
     <div class="trayfoot">🖐 Une carte sur un jour = confirmée · une carte du planning ici = rendue aux suggestions${nEc ? ` · <button class="eclink" data-ectoggle>${nEc} écartée${nEc > 1 ? 's' : ''} ${voy.showEc ? '▾' : '▸'}</button>` : ''}</div>
     ${voy.showEc && nEc ? `<div class="traygrid">${items.filter((i) => i.statut === 'ecartee').map((i) => `<div class="traycard ec" data-vi="${esc(i.id)}"><button class="dis" data-rest="${esc(i.id)}" title="Reprendre dans les suggestions" style="opacity:1">↺</button><span class="vico">${vicoOf(i)}</span><div class="bd"><div class="vt">${esc(i.titre || i.id)}</div>${i.hint ? `<div class="vhint">${esc(i.hint)}</div>` : ''}</div></div>`).join('')}</div>` : ''}</aside>`;
 
-  page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div></div>`;
+  const fiches = vDossier();
+  const bloc = fiches.length ? `<div class="grouplabel">Les fiches de ce voyage <span class="hint">— ce que le dossier contient</span></div>
+    <div class="cards vdoss">${fiches.map((f) => `<a class="card" href="${f.parcours ? '#/parcours/' : '#/mem/'}${esc(f.path.split('/').map(encodeURIComponent).join('/'))}"><div class="ct">${f.parcours ? '🗺' : '📄'} ${esc(f.nom)}</div><div class="foot"><span class="tag">${f.parcours ? 'parcours' : 'fiche'}</span></div></a>`).join('')}</div>` : '';
+  page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div>${bloc}</div>`;
 
   // Fiches (clic), tray (filtre, écarter), drag & drop → API d'état.
   page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
@@ -2784,9 +2838,12 @@ function openVFiche(id) {
     ${desc ? `<div class="vby">🎩 la fiche d’Alfred</div><p class="vdesc">${esc(desc)}</p>` : ''}
     ${chips ? `<div class="vmeta">${chips}</div>` : ''}${src}${docs}
     ${it.statut === 'confirme' && !it.debut ? `<div class="vhour"><span class="vby" style="margin:0">Heure</span><input type="time" id="vh-in" value="${esc(String(it.heure || '').replace('h', ':'))}"><button class="vopen" data-sethour>Poser</button>${it.heure ? '<button class="vopen" data-clearhour>Effacer</button>' : ''}<span class="vhint">optionnelle — l’ordre des cartes fait le déroulé, l’heure l’annote</span></div>` : ''}
-    <div class="vactions">${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut !== 'ecartee' && !it.debut ? `<button class="vopen crit" data-ecarter>✕ Écarter</button>` : ''}${it.statut === 'ecartee' ? `<button class="vopen" data-restfiche>↺ Reprendre dans les suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
+    <div class="vactions">${vficheHref(it.fiche) ? `<a class="vopen prim" href="${esc(vficheHref(it.fiche))}" data-closefiche>${vficheLbl(it.fiche)}</a>` : ''}${it.web ? `<a class="vopen" href="${esc(it.web)}" target="_blank" rel="noopener">↗ Ouvrir la page</a>` : ''}${it.statut === 'confirme' && !it.debut ? `<button class="vopen" data-untray>↩ Rendre aux suggestions</button>` : ''}${it.statut !== 'ecartee' && !it.debut ? `<button class="vopen crit" data-ecarter>✕ Écarter</button>` : ''}${it.statut === 'ecartee' ? `<button class="vopen" data-restfiche>↺ Reprendre dans les suggestions</button>` : ''}${it.statut === 'suggestion' ? '<span class="trayfoot" style="padding:0">🖐 glissez la carte sur un jour pour confirmer</span>' : ''}
     <span style="flex:1"></span><button class="vopen" data-close>Fermer</button></div>`;
   body.querySelector('[data-close]').addEventListener('click', () => { vModal.hidden = true; });
+  // Sans ça, la modale reste ouverte par-dessus la fiche, et le retour
+  // arrière ramène sur une carte qu'on croyait avoir quittée.
+  body.querySelector('[data-closefiche]')?.addEventListener('click', () => { vModal.hidden = true; });
   const untray = body.querySelector('[data-untray]');
   if (untray) untray.addEventListener('click', () => { vModal.hidden = true; vgesture({ id: it.id, statut: 'suggestion' }); });
   const ecB = body.querySelector('[data-ecarter]');

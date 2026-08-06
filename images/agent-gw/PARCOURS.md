@@ -209,8 +209,67 @@ dix-neuf emojis sur une carte ne se distinguent pas les uns des autres. La
 pastille garde son **numéro**, qui est de toute façon le seul lien entre elle et
 sa description.
 
+## Le mode balade — la carte sert en marchant
+
+Bouton **🥾 Mode balade** sous la carte : plein écran, la position de Monsieur
+dessus (point, **cercle de précision**, cap), le suivi qui recentre, et une
+barre d'état qui dit les deux seules choses utiles à mi-parcours — *ce qui est
+fait* et *ce qui vient* (« 1,24 km sur 3,04 km · → 7. La Cohue · 180 m »).
+Le **wake lock** garde l'écran allumé, et se **reprend** au retour au premier
+plan : il se perd dès que l'onglet passe derrière, sinon l'écran se rendort à la
+première notification lue.
+
+Trois limites qu'on ne contourne pas, écrites ici pour qu'elles ne se
+découvrent pas sur le terrain :
+
+- une page web **ne géolocalise pas en arrière-plan** — écran allumé, app au
+  premier plan. Le wake lock règle le confort, pas la physique, et il mange la
+  batterie ;
+- dans une ville close, le GPS donne couramment **20 à 40 m**. D'où le cercle de
+  précision : un point net sans son incertitude ferait croire à une exactitude
+  qui n'existe pas ;
+- **au-delà de 120 m de la trace, l'avancement ne veut plus rien dire** (le point
+  le plus proche peut être n'importe où sur une boucle) : la barre le dit au lieu
+  de rendre un chiffre faux.
+
+## Emporter une balade — le hors-ligne
+
+Bouton **⤓ Emporter** : les tuiles du parcours et son fichier passent dans un
+cache que le service worker sert **cache d'abord**. Sur un sentier, un réseau
+qui répond en dix secondes est pire que pas de réseau.
+
+⚠️ **SEUL LE PLAN IGN EST EMPORTÉ, et c'est une limite du droit.** La politique
+d'OpenStreetMap interdit le hors-ligne en toutes lettres — *« Offline use is not
+permitted on tile.openstreetmap.org »* — et nomme le préchargement d'une zone
+comme abus caractérisé. L'IGN ne l'interdit pas, n'affiche **aucun quota** sur la
+diffusion WMTS, et publie en licence ouverte. Conséquence assumée : **hors de
+France, pas de hors-ligne**, et le bouton n'apparaît même pas. Le garde-fou est
+dans la page **et** dans le service worker.
+
+⚠️ **Un corridor, pas une boîte englobante.** Sur une rando linéaire de 15 km, la
+boîte est vide aux trois quarts — on tirerait des forêts qu'on ne verra jamais
+chez un service public gratuit. Seules les tuiles qui touchent la trace, plus une
+de marge. Mesuré : 69 tuiles contre 196 sur un tracé diagonal de 5 km.
+Les requêtes partent **en série**, pas en rafale : on tire chez l'IGN, pas sur un
+CDN qu'on paie.
+
+Volume réel, boucle de Vannes, z15→z18 : **122 tuiles, ~5 Mo**. Ce n'est jamais
+le poids qui pose problème.
+
+⚠️ **iOS purge le stockage** d'un site après quelques jours sans visite. Une PWA
+installée sur l'écran d'accueil est traitée plus généreusement, mais rien ne
+garantit un téléchargement fait trois semaines avant : **emporter la veille**,
+pas le mois d'avant.
+
+Le service worker tient deux caches et deux régimes : la **coque** (l'app) en
+*réseau d'abord* — une PWA qui sert son vieux JS après un déploiement est un bug
+qu'on met des heures à comprendre — et la **balade** en *cache d'abord*. Tout le
+reste (API, mémoire, chat) reste en réseau seul : servir une todo d'hier serait
+pire que ne rien servir.
+
 ## Hors v1
 
 - La génération de boucle (« 8 km au départ d'ici ») : BRouter ne sait pas le
   faire, il faudrait GraphHopper.
+- Le hors-ligne hors de France : bloqué par la politique OSM, pas par le code.
 - La lecture d'une trace importée (Wikiloc, Komoot).

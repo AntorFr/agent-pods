@@ -1,6 +1,48 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-05
+> MàJ : 2026-08-06
+
+**Le mode balade, le hors-ligne, et la fiche qu'on pouvait enfin atteindre — À TAGUER
+(2026-08-06)**. Trois chantiers d'un coup, tous nés d'un usage réel.
+
+**1. Une fiche `.md` dans un dossier de voyage était ORPHELINE par construction.**
+`#/dom/voyages/<id>` rend la timeline, pas le listing du dossier : Alfred avait rédigé une
+balade complète que Monsieur n'a pu ouvrir qu'en tapant l'adresse à la main. Alfred
+contournait en mettant une URL absolue dans `web` — qui est **externe par contrat** (nouvel
+onglet, « ↗ Ouvrir la page »). Deux réponses, et il faut les deux : un champ **`fiche`** sur
+la carte (lien interne, cible déduite de l'extension — `.parcours.json` ouvre la carte en
+grand), **et** la page du voyage qui **liste** ce que le dossier contient. Compter sur le seul
+lien remettrait la découvrabilité à un champ facultatif.
+
+**2. Le mode balade** (bouton 🥾) : plein écran, position + **cercle de précision** + cap,
+suivi qui recentre hors du tiers central, barre d'état « ce qui est fait / ce qui vient », et
+wake lock **repris au retour au premier plan** (il se perd dès que l'onglet passe derrière).
+Au-delà de 120 m de la trace, l'avancement est déclaré **hors trace** au lieu de rendre un
+chiffre faux — sur une boucle, le point le plus proche peut être n'importe où.
+
+**3. Le hors-ligne** (bouton ⤓) : le service worker, jusqu'ici un **bouchon vide** qui
+n'existait que pour rendre la PWA installable, tient maintenant deux caches — la **coque** en
+*réseau d'abord* (une PWA qui sert son vieux JS après un déploiement coûte des heures), la
+**balade** en *cache d'abord* (sur un sentier, un réseau à dix secondes est pire que pas de
+réseau).
+
+⚠️ **SEUL LE PLAN IGN S'EMPORTE, et c'est le DROIT qui tranche, pas la technique.** La
+politique OSM l'interdit en toutes lettres — « Offline use is not permitted on
+tile.openstreetmap.org » — et nomme le préchargement d'une zone comme abus. L'IGN ne
+l'interdit pas, affiche **aucun quota** sur la diffusion WMTS (vérifié dans leurs CGU), rend
+`access-control-allow-origin: *` (donc de vraies réponses en cache, pas des opaques) et publie
+en licence ouverte. Conséquence assumée : **hors de France, pas de hors-ligne**, le bouton
+n'apparaît pas. Garde-fou dans la page ET dans le service worker.
+
+⚠️ **Corridor, pas boîte englobante** : sur une rando linéaire la boîte est vide aux trois
+quarts. Mesuré 69 tuiles contre 196 sur un tracé diagonal de 5 km. Requêtes **en série** — on
+tire chez un service public gratuit, pas sur un CDN qu'on paie. Boucle de Vannes complète,
+z15→z18 : **122 tuiles, ~5 Mo**. Le poids n'a jamais été le sujet.
+
+⚠️ **iOS purge le stockage** après quelques jours sans visite (une PWA installée est traitée
+plus généreusement, mais rien n'est garanti) : **emporter la veille**, pas le mois d'avant.
+
+> MàJ précédente : 2026-08-05
 
 **Les parcours — la moitié pod, ÉCRITE, À TAGUER (2026-08-05)** : Alfred fabriquait ses
 GPX à la main (328 `<trkpt>` tapés au clavier pour la boucle de Vannes, cinq commits en
