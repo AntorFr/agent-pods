@@ -116,16 +116,28 @@ class _Session:
         if self.state != "awaiting-code" or self._master is None:
             raise HTTPException(409, f"Session pas prête pour un code ({self.state}).")
         self.state = "exchanging"
-        # \r et non \n : le pty est en mode brut (TUI Ink), la touche Entrée y
-        # est CR. Avec \n le champ ne se soumet jamais (vécu sur l'Antre en
-        # v0.4.1, prouvé en conteneur). En mode cuit (bash du test), icrnl
-        # convertit \r en \n : le faux binaire lit pareil.
-        os.write(self._master, code.encode() + b"\r")
+        # Deux subtilités du TUI, chacune vécue en prod sur l'Antre :
+        # 1. la touche Entrée d'un pty brut est \r, pas \n ;
+        # 2. un \r collé DANS le même flot que le code est avalé par la garde
+        #    anti-collage — il faut l'envoyer séparément, après une pause (un
+        #    code court y échappe, d'où un test au faux binaire trompeur).
+        os.write(self._master, code.encode())
+        await asyncio.sleep(0.5)
+        os.write(self._master, b"\r")
+        asyncio.get_running_loop().call_later(6.0, self._retry_enter)
         try:
             await asyncio.wait_for(self._exit_event.wait(), EXCHANGE_TIMEOUT)
         except asyncio.TimeoutError:
             # Sur code invalide le CLI re-prompte sans sortir : on retombe ici.
             self._fail("L'échange n'a pas abouti — code invalide ou expiré ?")
+
+    def _retry_enter(self) -> None:
+        """Filet : certains écrans redemandent une validation."""
+        if self.state == "exchanging" and self._master is not None:
+            try:
+                os.write(self._master, b"\r")
+            except OSError:
+                pass
 
     def dispose(self) -> None:
         if self._proc and self._proc.returncode is None:
