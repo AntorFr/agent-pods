@@ -47,8 +47,8 @@ cadre au dessin de débit), `kerf` (mm), `chant`, `installation`.
 - **`connecteurs[].w` est une cote le long de la PROFONDEUR** (la `longueur` de la
   pièce), mesurée depuis le bord AVANT. **Jamais** le long de la largeur.
 - **`abouts` = positions en LARGEUR** des deux lignes de connecteurs.
-- Le rendu mappe donc `w` → axe profondeur, `abouts` → axe largeur, **en tenant compte
-  de `pose.rot`**, qui échange les deux axes sur le dessin de débit.
+- Le rendu mappe donc `w` → axe profondeur, `abouts` → axe largeur. Sur le dessin de
+  **débit**, `pose.rot` échange en plus ces deux axes (cf. `debit[]`).
 
 **Symptôme d'une transposition d'axes** (constatée le 2026-07-23) : une pièce sort **hors
 de la plaque**. Repro — `GAR-B1-DESSOUS`, 480 prof × 620 larg, posée en P4-C4 à `y=1502` :
@@ -76,6 +76,20 @@ en **positions absolues sur la plaque brute**.
 |---|---|---|---|
 | `"court"` (défaut, rétrocompatible) | court le long de `y` | tronçons empilés en `y` | `largeur` en x, `longueur` en y |
 | `"long"` | court le long de `x` | tronçons alignés en `x` | **`longueur` en x, `largeur` en y** |
+
+**Pourquoi `long`** : la refente y fait du **long bord de la bande la façade des pièces** —
+le chant se plaque en une passe, le tronçonnage arase les abouts ensuite. `sens` ne décrit
+donc pas un choix de dessin, mais ce que la bande va devenir.
+
+**`rot` sur une pose de tronçonnage** : `true` tourne la pièce d'un quart de tour — elle
+occupe `longueur` en **x** et `largeur` en **y** (absent ou `false` : `largeur` en x,
+`longueur` en y). Sert à coucher une pièce plus profonde que la bande pour qu'elle y tienne.
+
+⚠️ **`rot` et `sens` sont INDÉPENDANTS et se combinent.** `sens` oriente la **bande**
+(géométrie de la colonne) ; `rot` oriente **une pièce** dans sa bande. Les `x`/`y` d'une pose
+restent absolus et **sens-agnostiques** : c'est toi qui les poses justes, le front ne calcule
+aucun nesting. `rot` n'est lu que par la vue **Débit** — la vue Lamello dessine toujours la
+pièce à plat (`longueur` en x), il n'y entre pas.
 
 ## `calepinage[]` — schéma 1.0, et sa sémantique trompeuse
 

@@ -18,6 +18,7 @@ livré par l'image avec le module qui le lit : ils ne peuvent pas diverger.
 {
   "version": 1,
   "titre": "Corse — été 2026",
+  "status": "prépa",
   "debut": "2026-08-08",
   "fin": "2026-08-22",
   "modes": ["marche", "voiture"],
@@ -36,7 +37,12 @@ livré par l'image avec le module qui le lit : ils ne peuvent pas diverger.
     { "id": "resto-anna", "type": "resto", "statut": "suggestion",
       "titre": "Chez Anna", "creneau": "soir", "lieu": "calvi",
       "place_id": "ChIJxx…", "prix": "~60 €", "web": "https://…",
-      "desc": "Terrasse sous les remparts, cuisine corse simple — réserver dès 19 h." }
+      "hint": "Terrasse sous les remparts",
+      "desc": "Terrasse sous les remparts, cuisine corse simple — réserver dès 19 h." },
+    { "id": "boucle-calvi", "type": "activite", "statut": "suggestion",
+      "titre": "La citadelle à pied", "creneau": "matin", "lieu": "calvi",
+      "hint": "3 km, une heure, tout en haut",
+      "fiche": "assets/citadelle-calvi.parcours.json" }
   ]
 }
 ```
@@ -45,6 +51,14 @@ livré par l'image avec le module qui le lit : ils ne peuvent pas diverger.
 
 - **Types d'item FERMÉS** : `hebergement | resto | activite | visite | trajet`.
 - **Statuts** : `suggestion | confirme | ecartee`.
+- **`status` à la RACINE** — l'état du voyage, à ne pas confondre avec le `statut` d'un
+  item : `idée | prépa | en-cours | clos`. Rendu **tel quel**, en pastille sur la liste
+  des voyages et dans l'en-tête du voyage. **`idée` ⇔ ni `debut` ni `fin`** : sans dates,
+  la page rend le **tray seul**, sans timeline, et le serveur **refuse** toute
+  confirmation. ⚠️ Le module se cale sur les **dates**, jamais sur ce champ : c'est à toi
+  de les tenir d'accord — un `en-cours` sans dates rend une page qui annonce « à l'état
+  d'idée ». La teinte de la pastille connaît `idée`, `en-cours` et `clos` ; `prépa` prend
+  la teinte par défaut, celle d'`en-cours`.
 - **La nature se déduit des champs, pas du type.** `jour` (+ `heure` optionnelle) ⇒
   **ponctuel**, carte dans le flux du jour. `debut` + `fin` ⇒ **continu**, bandeau qui
   court sur la plage. Un stage de voile de trois jours est une `activite` continue.
@@ -65,6 +79,18 @@ livré par l'image avec le module qui le lit : ils ne peuvent pas diverger.
 - **Rien de dérivable ne se stocke.** La météo et les temps de trajet se calculent à
   l'affichage. En revanche `desc` — deux ou trois phrases sur le pourquoi de la
   proposition — est un **jugement, donc durable, donc stocké**.
+- **`hint`** : l'accroche **courte**, affichée sous le titre sur la carte du tray (et en
+  sous-titre des cartes de suggestion d'un voyage sans dates). Distincte de `desc`, la
+  fiche rédigée que rend la modale — à défaut de `desc`, la modale se rabat sur `hint`.
+  Une ligne : **rien ne la tronque**, une accroche trop longue fait grandir la carte.
+- **`fiche`** : le seul lien **INTERNE** d'une carte — chemin **relatif au dossier du
+  voyage** vers la page qu'elle ouvre (`vannes-a-pied.md`,
+  `assets/ile-aux-moines-nord.parcours.json`). La route se déduit de l'**extension** :
+  `.parcours.json` → `#/parcours/…`, sinon `#/mem/…` ; la carte porte alors une pastille
+  `🗺 parcours` ou `📄 fiche`, pour qu'on sache qu'elle mène quelque part sans l'ouvrir.
+  Une **URL y est ignorée** (aucun bouton) : l'externe, c'est `web`, et il le dit
+  (« ↗ Ouvrir la page », nouvel onglet). Sans ce champ, une balade préparée dans le
+  dossier n'est atteignable par aucune carte de la timeline.
 - **`ico`** : un emoji, qui remplace le glyphe du type partout où la carte se rend. Le
   `type` **classe** (couleur, facettes, décompte des nuits) mais ne doit pas dicter le
   dessin — son vocabulaire est fermé et grossier, si bien qu'un marché provençal tombe

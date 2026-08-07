@@ -1,9 +1,45 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-06
+> MàJ : 2026-08-07
 
-**Le mode balade, le hors-ligne, et la fiche qu'on pouvait enfin atteindre — À TAGUER
-(2026-08-06)**. Trois chantiers d'un coup, tous nés d'un usage réel.
+**Le contrat de l'image devient un VRAI sur-ensemble — cinq points, PRÊT À PUBLIER
+(2026-08-07)**. Demande d'Alfred, transmise par `ask_skippy`. Sa décision D45 allège ses
+skills de workspace de tout ce que l'image dit déjà ; la contrepartie est que l'image doit
+dire **tout** ce qu'il retire. Elle ne le disait pas sur cinq champs/blocs que les modules
+**lisent pourtant** — vérifiés un à un dans la source, pas sur parole :
+
+- `voyage.json` — **`status` à la racine** (`app/voyages.py:124` le sert, le front le rend
+  en pastille sur la liste et l'en-tête) ; **`hint`** (accroche de la carte du tray, repli
+  de `desc` dans la modale) ; **`fiche`** (le seul lien interne d'une carte — route déduite
+  de l'extension, `.parcours.json` → `#/parcours/…`, une URL y est ignorée).
+- `fiches-format` — le bloc **`{% parcours %}`** et sa `vue="lien"`, rendus depuis D44 mais
+  absents d'un vocabulaire annoncé **FERMÉ**. Un catalogue fermé qui omet un bloc ne se lit
+  pas comme incomplet : il se lit comme « ce bloc n'existe pas ».
+- `workbook.json` — **`rot`** sur une pose de tronçonnage : `longueur` en x, `largeur` en y
+  (`main.js:1954-1959`), **indépendant de `sens`** qui n'oriente que la bande.
+
+> 🔎 **Deux écarts trouvés en vérifiant, corrigés dans la foulée.** (1) La pastille de
+> `status` colore par mots connus (`sc()`), et **`prépa` n'y est pas** : il prend la teinte
+> par défaut, celle d'`en-cours`. (2) Le contrat lamello disait que le rendu tient compte de
+> `pose.rot` — la **vue Lamello ne lit jamais `rot`**, elle dessine toujours la pièce à plat ;
+> seule la vue Débit l'applique. La phrase est reformulée plutôt que laissée ambiguë.
+
+> ⚠️ **`idée` n'est pas une garde, c'est une déclaration.** Le module se cale sur les
+> **dates** : pas de `debut`/`fin` ⇒ tray seul, confirmation refusée en 400. Le champ et les
+> dates doivent s'accorder à la main — un `en-cours` sans dates rend une page qui annonce
+> « à l'état d'idée ». Écrit tel quel dans le contrat, plutôt que de laisser croire à un
+> invariant tenu par le code.
+
+> 📦 **À publier : 0.57.2** (documentation seule, aucun code touché), puis **les DEUX
+> manifestes** — `clusters/homenode/home/assist/alfred-helm.yml:18` **et**
+> `skippy-helm.yml:40`, tous deux sur `0.57.1`. Une image, deux corps : en oublier un laisse
+> un pod sur l'ancien contrat **sans aucun symptôme**.
+
+> ↩︎ Les mentions « À TAGUER » ci-dessous sont **périmées** : `agent-gw-v0.57.1` (2026-08-07,
+> 00:04) porte la tête de `main`, balade et parcours compris, et les deux corps y sont.
+
+**Le mode balade, le hors-ligne, et la fiche qu'on pouvait enfin atteindre — taguée en
+0.57.1 (2026-08-06)**. Trois chantiers d'un coup, tous nés d'un usage réel.
 
 **1. Une fiche `.md` dans un dossier de voyage était ORPHELINE par construction.**
 `#/dom/voyages/<id>` rend la timeline, pas le listing du dossier : Alfred avait rédigé une

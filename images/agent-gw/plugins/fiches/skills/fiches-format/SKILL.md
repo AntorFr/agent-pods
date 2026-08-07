@@ -3,7 +3,8 @@ name: fiches-format
 description: >
   Le CONTRAT DE FORMAT du contenu affiché par la PWA — frontmatter YAML typé et
   vocabulaire de blocs Markdoc FERMÉ ({% callout %}, {% galerie %}, {% web %},
-  {% piece-jointe %}, {% outil %}, {% graphique %}, wikilinks), zéro HTML, zéro CSS.
+  {% piece-jointe %}, {% outil %}, {% graphique %}, {% parcours %}, wikilinks), zéro
+  HTML, zéro CSS.
   À consulter dès que tu écris ou modifies un fichier destiné à être RENDU par la
   PWA (fiche, projet, todo, index de domaine). Ce document est livré par l'image
   avec le moteur de rendu : il fait foi sur la FORME. Le métier — quoi ranger où,
@@ -97,6 +98,9 @@ Un aparté. type ∈ note | astuce | attention.
 {% piece-jointe fichier="assets/notice.pdf" /%}
 {% outil id="debit" projet="<id-projet>" /%}   ← branche un module codé
 
+{% parcours source="assets/boucle-vannes.parcours.json" /%}   ← trace, profil et repères
+{% parcours source="assets/ile-aux-moines.parcours.json" vue="lien" /%}   ← carte compacte
+
 {% graphique type="barres" titre="…" unite="€" couleur="vert" %}
 libellé: valeur
 {% /graphique %}
@@ -144,6 +148,25 @@ une **courbe à un seul point**.
 3. **Une seule valeur n'est pas un graphique** — c'est une phrase, écris la phrase.
 4. **En `ligne`, les points sont espacés régulièrement** quel que soit l'écart réel entre
    les dates. Sur des relevés irréguliers, dis-le.
+
+### 2.2 Le parcours
+
+| Attribut | Valeurs | Rôle |
+|---|---|---|
+| `source` | chemin d'un `*.parcours.json`, **relatif au dossier de la fiche** | **obligatoire** |
+| `vue` | `carte` (défaut) · `lien` | la carte dessinée, ou une vignette qui y mène |
+
+Rend la trace sur une carte, son profil altimétrique et ses repères numérotés — **tous lus
+dans le `.parcours.json`**, jamais dans la fiche. Le bloc **ancre**, il ne dessine pas : une
+boucle de 3 km fait plus de trois cents points, les inliner remettrait toute la géométrie
+dans le modèle à chaque retouche de la fiche — exactement le coût que le fichier de parcours
+existe pour éviter. Même contrat qu'`outil` : le chemin est résolu au transform, le front
+charge et peint au montage. `source` absente ⇒ le bloc l'écrit à l'écran.
+
+**Un parcours n'a pas de maison.** Il s'accroche à la fiche qui a une raison d'en parler —
+un week-end, une forêt, un voyage — et reste adressable seul par `#/parcours/<chemin>` :
+c'est ce qui évite d'inventer un domaine « balades ». Une fiche qui en cite trois pose trois
+`vue="lien"`, pas trois cartes.
 
 ## 3. Espace multi-pages et habillage
 
