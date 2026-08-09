@@ -1,8 +1,52 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-09
+> MàJ : 2026-08-10
 
-**0.57.2 — le chat reçoit enfin le jeton d'abonnement (2026-08-09)** : `ClaudeAgentOptions`
+**`git-credential-rosetta` — le pod pourra enfin publier son propre travail (2026-08-10,
+ÉCRIT, PAS PUBLIÉ)** : Skippy savait écrire du code et pas le livrer. `repo_commit` passe les
+**contenus en ligne** dans l'appel d'outil — publier 0.57.2 lui demandait de retaper 186 Ko de
+mémoire, dont un `main.py` de 72 Ko. Il a refusé, à raison ; c'est un humain qui a fini par
+sortir ses commits du pod en `git bundle`.
+
+Le hub gagne un proxy git smart-HTTP (**rosetta 0.14.0**, addon `git`) : le pod pousse du vrai
+git, le hub relaie vers GitHub avec le jeton de l'App, et **le credential GitHub ne quitte
+jamais le hub**. L'invariant que `repo_commit` protégeait est intact ; son coût disparaît.
+
+**Ce helper est la moitié qui vit ici, et c'est celle qui décide.** Un `git push` est une
+commande shell : le hook PreToolUse du workspace ne voit que des appels MCP, donc il ne le voit
+pas — et un en-tête portant le canal serait forgeable par le shell qu'on prétend garder. Le
+credential helper n'a ni l'une ni l'autre faiblesse : **il est la seule source du jeton**, donc
+un agent qui le contourne ne contourne pas une garde, il se retrouve sans rien à pousser.
+Sémantique identique à `google_guard.py`, même env, même endpoint de bouclier, même
+fail-closed : canal absent (VS Code) → servi ; `planif` → refus sec ; autre (PWA) → **un
+bouclier consommé par push**.
+
+⚠️ **Le défaut qui aurait rendu tout ça inerte : git ne sait PAS envoyer un `Bearer`.** Un
+credential helper lui rend un couple utilisateur/mot de passe, jamais un en-tête — le hub aurait
+répondu 401 à chaque push. D'où, côté rosetta, l'acceptation du **Basic comme enveloppe du même
+JWT** (convention `x-access-token` de GitHub) : l'enveloppe s'élargit, pas la confiance.
+
+**Éprouvé avec git lui-même**, pas seulement au shell : `git credential fill` invoque bien le
+helper et lit ses credentials ; en `planif` il n'obtient rien et échoue proprement sur
+`terminal prompts disabled` au lieu de pendre sur un prompt. D'où `GIT_TERMINAL_PROMPT=0`, qui
+doit accompagner le câblage.
+
+**Reste à faire :**
+- [ ] Publier **rosetta 0.14.0** (tag → image GHCR multi-arch **vérifiée avant le bump** →
+      `clusters/tantive/home/mcp/rosetta-mcp-helm.yml`). Aucun secret, aucun ExternalSecret,
+      aucune route d'ingress neuve
+- [ ] Publier **agent-gw 0.58.0** (ce helper) et bumper **les DEUX** manifestes
+- [ ] Câbler, par dépôt du pod — deux commandes, rien de plus :
+
+      ```
+      git config credential.https://rosetta.mcp.berard.me.helper rosetta
+      git remote set-url origin https://rosetta.mcp.berard.me/git/AntorFr/<repo>
+      ```
+- [ ] **e2e réel sur un dépôt sans conséquence AVANT de basculer les remotes des pods** :
+      c'est la première fois qu'un push traverse la chaîne entière
+- [ ] Une fois éprouvé : côté Alfred, **D46 se rediscute** — elle est adossée à ce manque précis
+
+**0.57.2 — PUBLIÉE ET DÉPLOYÉE (2026-08-09/10)** : `ClaudeAgentOptions`
 est construit à **deux** endroits et un seul recevait `claude_token.stored_env()`.
 `_run_alfred` (MCP, planif) l'avait depuis le début ; le handler `chat` passait `env=turn_env`
 nu. **Le seul chemin pour lequel la modale « Connexion Claude » a été écrite était le seul
@@ -64,11 +108,10 @@ dire **tout** ce qu'il retire. Elle ne le disait pas sur cinq champs/blocs que l
 > « à l'état d'idée ». Écrit tel quel dans le contrat, plutôt que de laisser croire à un
 > invariant tenu par le code.
 
-> 📦 **À publier : 0.57.2** — ~~documentation seule~~ **plus les deux correctifs du 09/08**
-> (jeton du chat, identité de `memory-sync`), voir en tête de fiche. Puis **les DEUX
-> manifestes** — `clusters/homenode/home/assist/alfred-helm.yml` **et** `skippy-helm.yml`,
-> tous deux sur `0.57.1`. Une image, deux corps : en oublier un laisse un pod sur l'ancien
-> contrat **sans aucun symptôme**.
+> ✅ **0.57.2 publiée et déployée (2026-08-10)** : tag `agent-gw-v0.57.2`, image GHCR
+> **vérifiée présente au registre avant le bump**, et **les DEUX manifestes** bumpés. Les deux
+> pods tournent `agent-gw:0.57.2` — Alfred à 2 conteneurs (son tunnel retiré), Skippy avec le
+> sien. Le rappel « une image, deux corps » reste valable pour la prochaine.
 
 > ↩︎ Les mentions « À TAGUER » ci-dessous sont **périmées** : `agent-gw-v0.57.1` (2026-08-07,
 > 00:04) porte la tête de `main`, balade et parcours compris, et les deux corps y sont.

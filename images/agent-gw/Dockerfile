@@ -84,6 +84,11 @@ COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
 # l'écrit dans son .parcours.json. La géométrie va du hub au disque sans passer
 # par la conversation — 328 points recopiés par un modèle, c'est une trace fausse.
 COPY --chmod=755 trace-geom /usr/local/bin/trace-geom
+# git-credential-rosetta : le pod pousse vers le hub (addon `git`) et ne detient
+# aucun credential GitHub. Le helper est la SEULE source du jeton, donc l'endroit
+# ou se decide si un push part : canal + bouclier PWA, comme google_guard.py. Le
+# nom compte — `credential.helper rosetta` fait chercher git-credential-rosetta.
+COPY --chmod=755 git-credential-rosetta /usr/local/bin/git-credential-rosetta
 # Bundled content engine + launcher shell (built once, never at runtime).
 # scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
 # weighs 116 kB gzipped and is fetched only when the browser has no
