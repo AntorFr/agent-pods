@@ -38,6 +38,21 @@ ensure_auth() {
     '!f() { if [ "$1" = get ]; then printf "username=x-access-token\npassword=%s\n" "$GITHUB_TOKEN"; fi; }; f'
 }
 
+# Identité de l'auteur des commits, même garde que l'entrypoint de claude-pod :
+# on ne pose que ce qui manque. Ce script commite depuis la GATEWAY ; jusqu'ici
+# l'identité venait du conteneur tunnel, qui partageait le home — un pod sans
+# tunnel (Alfred depuis le 2026-08-09) n'a plus personne pour l'écrire, et git
+# refuse de committer sans elle. Env absent (machine de dev, identité déjà là) :
+# on ne touche à rien.
+ensure_identity() {
+  if [ -n "${GIT_USER_NAME:-}" ] && ! git config --global user.name >/dev/null 2>&1; then
+    git config --global user.name "${GIT_USER_NAME}"
+  fi
+  if [ -n "${GIT_USER_EMAIL:-}" ] && ! git config --global user.email >/dev/null 2>&1; then
+    git config --global user.email "${GIT_USER_EMAIL}"
+  fi
+}
+
 # Rejoue notre/nos commit(s) locaux sur la pointe distante, puis pousse.
 # Le cas disjoint (99 %) se fusionne seul ; on retente si une course nous a doublés.
 sync_push() {
@@ -62,6 +77,10 @@ sync_push() {
   echo "memory-sync: échec après 5 tentatives (course persistante sur origin), réessaie." >&2
   return 4
 }
+
+# Avant TOUTE sous-commande : `pull --rebase` et `resolve` créent des commits
+# autant que `commit`, donc l'identité doit être posée pour les quatre.
+ensure_identity
 
 case "${1:-}" in
   pull)
