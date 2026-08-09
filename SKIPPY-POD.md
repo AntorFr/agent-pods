@@ -59,6 +59,50 @@ Donc : les commits sont **locaux** (aucun credential dans le pod, `git push` éc
 lui-même), et la seule écriture réelle est l'appel MCP. Un `repo_commit` = un travail
 publié = un bouclier. Deux ou trois armements par session, pas vingt.
 
+> ⚠️ **AMENDÉ le 2026-08-10 — `git push` fonctionne désormais, et l'unité reste la même.**
+> Ce qui précède reste vrai sur le fond (aucun credential GitHub dans le pod), mais la
+> conclusion « donc les commits restent locaux » est **périmée** : voir la section
+> « Publier son propre travail » ci-dessous. Le 2026-08-09, `repo_commit` a fait échouer une
+> livraison réelle — 186 Ko à retaper dans l'appel d'outil, dont un `main.py` de 72 Ko — et
+> il a fallu un humain pour sortir les commits du pod en `git bundle`.
+
+### Publier son propre travail : `git push` vers le hub (depuis 2026-08-10)
+
+**Le pod ne détient toujours aucun credential GitHub.** Il pousse vers **rosetta**
+(addon `git`, ≥ 0.14.0), qui relaie vers GitHub avec le jeton de l'App. Le credential ne
+quitte jamais le hub — l'invariant de la l. 26 est intact, son coût a disparu.
+
+```
+git config credential.https://rosetta.mcp.berard.me.helper rosetta
+git remote set-url origin https://rosetta.mcp.berard.me/git/AntorFr/<repo>
+```
+
+⚠️ **Ne cherche pas un outil MCP : il n'y en a pas.** La surface de cet addon est du **HTTP
+nu** (`info/refs`, `git-receive-pack`, `git-upload-pack`), donc invisible dans une liste
+d'outils. Chercher `git_*` dans le MCP et conclure que le proxy n'existe pas est l'erreur
+naturelle — elle a été commise le jour même de la mise en service.
+
+**Où est passée la garde**, puisque le hook ne voit pas une commande shell :
+
+1. **`git-credential-rosetta`** (image agent-gw ≥ 0.58.0) est la **seule source du jeton**.
+   Il lit `GW_CHANNEL` — hors d'atteinte du modèle — et applique la sémantique de
+   `google_guard.py` : canal absent → servi ; `planif` → refus sec ; sinon (PWA) → **un
+   bouclier consommé par push**. Le contourner ne contourne pas une garde : ça laisse sans
+   rien à pousser. L'unité « un travail publié = un bouclier » est donc préservée.
+2. **rosetta lit le tuyau, qui n'est pas opaque.** Les commandes de ref voyagent en
+   **pkt-line en clair** avant le pack : le hub refuse suppression de ref, ref hors
+   `refs/heads/*`+`refs/tags/*`, déplacement d'un tag, et push non fast-forward — ce dernier
+   vérifié par `/compare`, **parce que le protocole ne porte aucun drapeau de force et que
+   GitHub accepte un force-push sur une branche non protégée**.
+3. **L'identité doit être humaine** (`identity = "user"`) : le jeton GitHub est rangé par
+   `sub`. Un `ROSETTA_USER_TOKEN` n'existe que dans un tour lancé par la gateway — donc un
+   push ne part **jamais** d'un `kubectl exec`, ni d'une horloge.
+
+> 🔎 **Le repli « pousse depuis le tunnel VS Code » n'a jamais existé.** Le `GITHUB_TOKEN`
+> du pod (`apps/skippy`, `gh_pat_readonly`) est en lecture seule — sondé le 2026-08-10 :
+> `Write access to repository not granted`, 403 sur receive-pack. Avant le proxy, la seule
+> voie de sortie était qu'un humain extraie les commits à la main.
+
 ## Surface de l'addon `github`
 
 ### Lectures — libres
