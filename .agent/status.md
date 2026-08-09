@@ -1,6 +1,40 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-07
+> MàJ : 2026-08-09
+
+**0.57.2 — le chat reçoit enfin le jeton d'abonnement (2026-08-09)** : `ClaudeAgentOptions`
+est construit à **deux** endroits et un seul recevait `claude_token.stored_env()`.
+`_run_alfred` (MCP, planif) l'avait depuis le début ; le handler `chat` passait `env=turn_env`
+nu. **Le seul chemin pour lequel la modale « Connexion Claude » a été écrite était le seul
+qu'elle ne réparait pas** — `main.py:1467`, une ligne.
+
+- **Mesuré, pas déduit** (2026-08-09, sur Alfred) : flux `claude-token` déroulé jusqu'au bout,
+  MCP et planif repartis, chat toujours en `OAuth session expired`. Il a fallu reconstruire
+  `~/.claude/.credentials.json` à la main — un montage qui retombe au premier refresh raté.
+- **Ce que ça répare vraiment.** Le `refreshToken` d'une session Claude a une **échéance
+  absolue d'environ 30 jours depuis le login initial**, que les rafraîchissements ne repoussent
+  pas. Sans ce correctif, chaque corps redevient muet tous les ~30 jours et le flux PWA ne peut
+  pas l'en sortir. Le mur de Skippy : **2026-08-27 22:12**.
+- **Ordre de merge conservé** : le jeton passe **sous** `turn_env`, donc `ROSETTA_USER_TOKEN`
+  et le retag de canal continuent de primer. Même forme qu'au premier site.
+
+**`memory-sync` pose son identité git (2026-08-09)** : il commite depuis la **gateway** mais
+n'a jamais posé `user.name` / `user.email` — elle venait de l'entrypoint de `claude-pod`, le
+conteneur **tunnel**, qui partage le home. Couplage invisible et nulle part écrit, découvert
+en retirant le tunnel d'Alfred (inutilisé). Son `.gitconfig` survit sur le hostPath, donc rien
+ne casse aujourd'hui ; plus rien ne le recréerait. Même garde que l'entrypoint remplacé : on ne
+pose que ce qui manque, et seulement si l'env le donne. Appelé avant les **quatre**
+sous-commandes — `pull --rebase` et `resolve` créent des commits autant que `commit`.
+
+> ⚠️ **`test/claude_token_test.py` : 2 cas rouges, PRÉEXISTANTS.** `flow_bad_code` (« code
+> refusé → erreur », « pas de token stocké sur échec ») échoue déjà à `424f7fa`, donc avant les
+> deux commits `setup-token` de la semaine — ce n'est pas une régression de cette release. Le
+> chemin nominal du même fichier est vert, et les 9 autres fichiers passent. Test à polling sur
+> pty : à rejouer hors du pod avant de conclure au bug.
+
+> 🔎 **Env du pod = faux rouges.** `apps_test.py` et `mcp_async_test.py` échouent tant qu'on les
+> lance depuis un tour d'agent : `GW_APPS` / `GW_FEATURES` / `GW_TRACE` du pod polluent les cas.
+> Verts en `env -i`. Lancer la suite en env vierge, toujours.
 
 **Le contrat de l'image devient un VRAI sur-ensemble — cinq points, PRÊT À PUBLIER
 (2026-08-07)**. Demande d'Alfred, transmise par `ask_skippy`. Sa décision D45 allège ses
@@ -30,10 +64,11 @@ dire **tout** ce qu'il retire. Elle ne le disait pas sur cinq champs/blocs que l
 > « à l'état d'idée ». Écrit tel quel dans le contrat, plutôt que de laisser croire à un
 > invariant tenu par le code.
 
-> 📦 **À publier : 0.57.2** (documentation seule, aucun code touché), puis **les DEUX
-> manifestes** — `clusters/homenode/home/assist/alfred-helm.yml:18` **et**
-> `skippy-helm.yml:40`, tous deux sur `0.57.1`. Une image, deux corps : en oublier un laisse
-> un pod sur l'ancien contrat **sans aucun symptôme**.
+> 📦 **À publier : 0.57.2** — ~~documentation seule~~ **plus les deux correctifs du 09/08**
+> (jeton du chat, identité de `memory-sync`), voir en tête de fiche. Puis **les DEUX
+> manifestes** — `clusters/homenode/home/assist/alfred-helm.yml` **et** `skippy-helm.yml`,
+> tous deux sur `0.57.1`. Une image, deux corps : en oublier un laisse un pod sur l'ancien
+> contrat **sans aucun symptôme**.
 
 > ↩︎ Les mentions « À TAGUER » ci-dessous sont **périmées** : `agent-gw-v0.57.1` (2026-08-07,
 > 00:04) porte la tête de `main`, balade et parcours compris, et les deux corps y sont.
