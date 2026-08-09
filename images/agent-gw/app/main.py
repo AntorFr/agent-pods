@@ -1460,7 +1460,11 @@ async def chat(request: Request):
                 model=model,
                 # Toujours un dict (vide inclus) : le SDK exige un mapping,
                 # env=None casse le spawn (« 'NoneType' object is not a mapping »).
-                env=turn_env,
+                # Le jeton d'abonnement renouvelé depuis la PWA passe SOUS le
+                # rebond rosetta, comme dans _run_alfred : sans lui, le chat est
+                # le seul chemin que la modale « Connexion Claude » ne répare pas
+                # (vécu le 2026-08-09 — flux déroulé, chat toujours muet).
+                env={**claude_token.stored_env(), **turn_env},
                 # Behave like Claude Code: full system prompt + the
                 # workspace CLAUDE.md (that's where the agent lives).
                 system_prompt=_system_prompt(),
