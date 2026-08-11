@@ -2601,16 +2601,22 @@ async function renderVoyagesHub() {
   catch { page.innerHTML = '<div class="wrap"><div class="empty">Voyages indisponibles.</div></div>'; return; }
   let html = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>Voyages</h1><div class="lede">Un dossier par voyage — résas sourcées de Gmail, suggestions d’Alfred, timeline à composer.</div></div></div>`;
   if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun voyage — demandez à Alfred d’en cadrer un (« on part en Corse du 8 au 22 août »).</div></div>'; return; }
-  html += '<div class="cards">';
-  for (const v of list) {
+  const vCard = (v) => {
     const dates = v.debut ? `${vfmtDay(v.debut)} → ${vfmtDay(v.fin)}` : 'sans dates — envie à cadrer';
     const foot = [];
     if (v.status) foot.push(`<span class="stat ${sc(v.status)}">${esc(v.status)}</span>`);
     if (v.confirmes) foot.push(`<span class="tag">${v.confirmes} confirmée${v.confirmes > 1 ? 's' : ''}</span>`);
     if (v.suggestions) foot.push(`<span class="tag">💡 ${v.suggestions}</span>`);
-    html += `<a class="card" href="#/voyage/${encodeURIComponent(v.path)}"><div class="ct">${esc(v.titre)}</div><div class="cmeta">${esc(dates)}${v.lieux?.length ? ' · ' + esc(v.lieux.join(' → ')) : ''}</div>${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
-  }
-  page.innerHTML = html + '</div></div>';
+    return `<a class="card" href="#/voyage/${encodeURIComponent(v.path)}"><div class="ct">${esc(v.titre)}</div><div class="cmeta">${esc(dates)}${v.lieux?.length ? ' · ' + esc(v.lieux.join(' → ')) : ''}</div>${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
+  };
+  // Même règle que les fiches : un voyage `clos` quitte la grille pour le tiroir Archive.
+  // Le tri se fait sur le statut DÉCLARÉ, jamais sur les dates — une fin passée n'archive
+  // pas un voyage encore en consolidation ; c'est la clôture qui range.
+  const vivants = list.filter((v) => sc(v.status) !== 'clos');
+  const clos = list.filter((v) => sc(v.status) === 'clos');
+  if (vivants.length) html += `<div class="cards">${vivants.map(vCard).join('')}</div>`;
+  if (clos.length) html += `<details class="archsec"${vivants.length ? '' : ' open'}><summary>🗄️ Archive <span class="hint">— ${clos.length} voyage${clos.length > 1 ? 's' : ''} clos</span></summary><div class="cards">${clos.map(vCard).join('')}</div></details>`;
+  page.innerHTML = html + '</div>';
 }
 
 async function renderVoyage(path) {

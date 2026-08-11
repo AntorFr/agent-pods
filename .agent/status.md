@@ -2,6 +2,13 @@
 
 > MàJ : 2026-08-11
 
+> ↳ **0.59.1 (2026-08-11)** : le hub Voyages avait échappé au tiroir — c'est un module
+> (`renderVoyagesHub`, `voyage.json`), pas une vue domaine. Même règle, même `<details>` :
+> un voyage `clos` file à l'Archive. **Le tri se fait sur le statut DÉCLARÉ, jamais sur les
+> dates** — une `fin` passée n'archive pas un voyage encore en consolidation ; c'est la
+> clôture qui range (constaté : baden `en-cours` et brocéliande `prépa` avec dates passées
+> restent en grille tant qu'Alfred ne les clôt pas). Vérifié à l'œil sur montage local.
+
 **Les cartes archivées sortent de la grille — PUBLIÉE ET DÉPLOYÉE en 0.59.0 (2026-08-11)** :
 image GHCR vérifiée au manifeste registre (index OCI amd64 + arm64) AVANT le bump, les **TROIS**
 manifestes bumpés (alfred, skippy, **nestor** — lui aussi épingle l'image), et `launcher.js`
