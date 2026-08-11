@@ -2,7 +2,10 @@
 
 > MàJ : 2026-08-11
 
-**Les cartes archivées sortent de la grille — À TAGUER en 0.59.0 (2026-08-11)** : demande de
+**Les cartes archivées sortent de la grille — PUBLIÉE ET DÉPLOYÉE en 0.59.0 (2026-08-11)** :
+image GHCR vérifiée au manifeste registre (index OCI amd64 + arm64) AVANT le bump, les **TROIS**
+manifestes bumpés (alfred, skippy, **nestor** — lui aussi épingle l'image), et `launcher.js`
+servi par alfred ET skippy au SHA-256 exact du build local (`a4a8dcef…`). Demande de
 Monsieur — les fiches au cycle terminé s'affichaient au milieu des vivantes. Dans la vue
 domaine (`renderDomain`), un statut **terminal** (`clos` et ses synonymes tolérés ; `offert` ;
 `acheté` sur un `achat` — un cadeau acheté reste à offrir, donc vivant) range désormais la
