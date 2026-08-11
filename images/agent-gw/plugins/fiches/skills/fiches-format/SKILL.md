@@ -52,6 +52,11 @@ tags: [<mot>, <mot>]
 - `machine`, `savoir-faire`, `outil` : **pas de `status`**
 - `planif` : **pas de `status`** — `actif:` (booléen) fait foi
 
+Un statut **terminal** (`clos` ; `offert` ; `acheté` sur un `achat`) range la carte tout
+seul dans la section **Archive** du domaine, repliée sous les fiches vivantes. N'invente
+donc jamais de statut « archivé » ni de dossier d'archive sous `domaines/` : le statut
+fermé suffit, l'interface fait le rangement.
+
 ⚠️ **Le statut vit en frontmatter, JAMAIS seulement en prose.** Écrire
 « **Statut : en cours** » dans le corps ne produit ni pastille, ni facette, ni filtre :
 l'interface ne lit **que** le frontmatter. Une phrase en prose peut s'y ajouter pour le

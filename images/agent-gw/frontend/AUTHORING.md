@@ -54,7 +54,7 @@ tags: [menuiserie, garage]
 
 | `type` | valeurs possibles, dans l'ordre du cycle de vie |
 |---|---|
-| `projet` | `idée` → `en-cours` → `bloqué` ou `clos` (un projet terminé reste `clos` même archivé de longue date — précise en prose si utile, mais ne crée pas de statut « archivé ») |
+| `projet` | `idée` → `en-cours` → `bloqué` ou `clos` (un projet terminé reste `clos` même archivé de longue date — précise en prose si utile, mais ne crée pas de statut « archivé » : les statuts terminaux — `clos`, `offert`, `acheté` d'un `achat` — filent d'eux-mêmes dans la section **Archive** repliée de la vue domaine) |
 | `achat` | `veille` (en comparaison, rien de tranché) → `à-acheter` (choix fait, pas encore acquis) → `acheté` |
 | `cadeau` | `idée` → `acheté` → `offert` |
 | `tache` | pas de `status` ici — l'état est la case `- [ ]` / `- [x]` dans `todo/taches.md` (contrat séparé, voir plus bas) |

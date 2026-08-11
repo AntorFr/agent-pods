@@ -1,6 +1,21 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-10
+> MàJ : 2026-08-11
+
+**Les cartes archivées sortent de la grille — À TAGUER en 0.59.0 (2026-08-11)** : demande de
+Monsieur — les fiches au cycle terminé s'affichaient au milieu des vivantes. Dans la vue
+domaine (`renderDomain`), un statut **terminal** (`clos` et ses synonymes tolérés ; `offert` ;
+`acheté` sur un `achat` — un cadeau acheté reste à offrir, donc vivant) range désormais la
+carte dans une section **Archive** (`<details>` replié, ouvert d'office quand il n'y a QU'elle).
+La recherche fouille l'archive, les facettes non (elles décrivent les vivantes — `clos` ne
+pollue plus les pastilles de filtre). La vue par catégories compte séparément :
+« n projets · m archivés ». `sc()` gagne `réalisé → clos` (statut hors vocabulaire constaté sur
+le claustra). Doc synchronisée : `fiches-format/SKILL.md` + `AUTHORING.md` disent qu'on
+n'invente **jamais** de statut « archivé » ni de dossier d'archive — le statut fermé suffit,
+l'UI fait le rangement. `sujets/archive/`, lui, reste invisible (autre régime, décision
+inchangée). **Vérifié à l'œil** (leçon 0.52.0) : PWA montée en local sur une copie de la
+mémoire, captures headless des deux vues + dump du DOM du tiroir — les 2 fiches terminées de
+Menuiserie y sont, pastilles justes.
 
 **`git-credential-rosetta` — le pod pourra enfin publier son propre travail (2026-08-10,
 ÉCRIT, PAS PUBLIÉ)** : Skippy savait écrire du code et pas le livrer. `repo_commit` passe les

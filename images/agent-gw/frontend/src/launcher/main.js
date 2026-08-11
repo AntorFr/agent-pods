@@ -22,11 +22,19 @@ const sc = (s) => ({
   'en cours': 'encours', 'en-cours': 'encours', 'encours': 'encours',
   'bloqué': 'bloque', 'bloque': 'bloque', 'en attente': 'bloque',
   'clos': 'clos', 'fait': 'clos', 'terminé': 'clos', 'choix fait': 'clos', 'décidé': 'clos',
+  'réalisé': 'clos', 'realise': 'clos',
   'idée': 'idee', 'idee': 'idee', 'en réflexion': 'idee', 'réflexion': 'idee',
   'acheté': 'achete', 'achete': 'achete', 'offert': 'offert',
   'à acheter': 'aacheter', 'a acheter': 'aacheter',
   'veille': 'veille', 'référence retenue': 'veille', 'reference retenue': 'veille',
 }[String(s || '').toLowerCase().trim()] || 'encours');
+// Statut TERMINAL → la carte est « archivée » : elle sort de la grille des vivantes pour la
+// section Archive repliée en bas de page. `clos` (et ses synonymes) l'est partout, `offert`
+// aussi ; `acheté` ne l'est que pour un achat — un cadeau acheté reste à offrir, donc vivant.
+const isArchived = (fm) => {
+  const k = sc((fm || {}).status);
+  return k === 'clos' || k === 'offert' || (k === 'achete' && (fm || {}).type === 'achat');
+};
 
 /* ── Auth ────────────────────────────────────────────────────────── */
 let token = localStorage.getItem('gw_token') || '';
@@ -1376,14 +1384,21 @@ async function renderDomain(rawSubpath) {
     folders = []; // le regroupement vient du frontmatter, pas des dossiers
     if (!groupSel) {
       const counts = new Map();
-      for (const p of files) { const v = (memIndex.get(p) || {})[grouping.key]; if (v) counts.set(v, (counts.get(v) || 0) + 1); }
+      for (const p of files) {
+        const fm = memIndex.get(p) || {}; const v = fm[grouping.key]; if (!v) continue;
+        const c = counts.get(v) || { on: 0, arch: 0 }; c[isArchived(fm) ? 'arch' : 'on']++; counts.set(v, c);
+      }
       page.innerHTML = `<div class="wrap" style="--dc:var(--${m.color})"><div class="chead"><div class="aico" style="--dc:var(--${m.color})">${m.ico}</div><div><h1>${esc(prettify(segs.at(-1)))}</h1><div class="lede">Par ${grouping.label} — entrez dans une ${grouping.label}.</div></div></div>
-        <div class="grouplabel">Catégories</div><div class="cards">${[...counts.entries()].map(([v, n]) => `<a class="card" href="#/dom/${esc(subpath)}?g=${esc(v)}"><div class="persontop"><span class="avatar">${esc((grouping.labels[v] || v).charAt(0))}</span><span class="ct">${esc(grouping.labels[v] || v)}</span></div><div class="cmeta">${n} projet${n > 1 ? 's' : ''}</div></a>`).join('')}</div></div>`;
+        <div class="grouplabel">Catégories</div><div class="cards">${[...counts.entries()].map(([v, c]) => `<a class="card" href="#/dom/${esc(subpath)}?g=${esc(v)}"><div class="persontop"><span class="avatar">${esc((grouping.labels[v] || v).charAt(0))}</span><span class="ct">${esc(grouping.labels[v] || v)}</span></div><div class="cmeta">${[c.on ? `${c.on} projet${c.on > 1 ? 's' : ''}` : '', c.arch ? `${c.arch} archivé${c.arch > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ')}</div></a>`).join('')}</div></div>`;
       return;
     }
     files = files.filter((p) => (memIndex.get(p) || {})[grouping.key] === groupSel);
   }
   const title = grouping && groupSel ? (grouping.labels[groupSel] || prettify(groupSel)) : (segs.length > 1 ? prettify(segs.at(-1)) : m.label);
+  // Les fiches au cycle terminé sortent de la grille des vivantes : elles vivront dans la
+  // section Archive repliée en bas de page, plus au milieu des autres.
+  const archived = files.filter((p) => isArchived(memIndex.get(p)));
+  files = files.filter((p) => !isArchived(memIndex.get(p)));
   // Facette : statut (cycle de vie) sinon rôle (contacts) sinon type.
   const facetKey = files.some((p) => (memIndex.get(p) || {}).status) ? 'status'
     : files.some((p) => (memIndex.get(p) || {}).role) ? 'role' : 'type';
@@ -1417,45 +1432,59 @@ async function renderDomain(rawSubpath) {
     }
     html += `</div>`;
   }
-  if (files.length) {
+  if (files.length || archived.length) {
     if (folders.length) html += `<div class="grouplabel">Fiches</div>`;
     html += `<div class="toolbar"><label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="dq" placeholder="Rechercher…"></label>`;
     if (facetVals.length > 1) html += `<div class="facets" id="facets"><button class="pill on" data-f="">Tous</button>${facetVals.map((v) => `<button class="pill" data-f="${esc(v)}">${esc(v)}</button>`).join('')}</div>`;
-    html += `</div><div class="cards" id="dcards"></div>`;
+    html += `</div>`;
+    if (files.length) html += `<div class="cards" id="dcards"></div>`;
+    // Repliée par défaut — sauf quand il n'y a QU'elle : une page vide qui cache tout serait pire.
+    if (archived.length) html += `<details class="archsec"${files.length ? '' : ' open'}><summary>🗄️ Archive <span class="hint">— ${archived.length} fiche${archived.length > 1 ? 's' : ''} au cycle terminé</span></summary><div class="cards" id="acards"></div></details>`;
   }
   html += `</div>`;
   page.innerHTML = html;
-  if (!folders.length && !files.length) { page.querySelector('.wrap').insertAdjacentHTML('beforeend', '<div class="empty">Rien ici pour l’instant.</div>'); return; }
+  if (!folders.length && !files.length && !archived.length) { page.querySelector('.wrap').insertAdjacentHTML('beforeend', '<div class="empty">Rien ici pour l’instant.</div>'); return; }
 
-  if (files.length) {
+  if (files.length || archived.length) {
     let activeFacet = null;
-    const cardsEl = $('dcards'), dq = $('dq'), facets = $('facets');
+    const cardsEl = $('dcards'), acardsEl = $('acards'), dq = $('dq'), facets = $('facets');
     const wbs = grouping ? await loadWorkbooks() : [];
+    const cardHTML = (p) => {
+      const fm = memIndex.get(p) || {};
+      const name = fm.titre || prettify(p.split('/').pop());
+      const foot = [];
+      if (fm.status) foot.push(`<span class="stat ${sc(fm.status)}">${esc(fm.status)}</span>`);
+      if (fm.role) foot.push(`<span class="tag">${esc(fm.role)}</span>`);
+      (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 3).forEach((t) => foot.push(`<span class="tag">#${esc(t)}</span>`));
+      const meta = fm.tel ? `<div class="cmeta mono" style="font-size:12px">${esc(fm.tel)}</div>` : '';
+      // Projet-espace avec workbook → barre d'avancement dérivée (pièces débitées).
+      let bar = '';
+      const base = p.split('/').pop().replace(MD_EXT, '');
+      const dir = p.slice(0, p.lastIndexOf('/'));
+      if (dir.endsWith('/' + base)) {
+        const wb = wbs.find((w) => w.path.startsWith(dir + '/'));
+        if (wb && wb.pieces) bar = `<div class="bar"><i style="width:${Math.round(100 * wb.done / wb.pieces)}%"></i></div>`;
+      }
+      return `<a class="card" href="#/mem/${esc(p)}"><div class="ct">${esc(name)}</div>${meta}${bar}${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
+    };
+    const matches = (p, q) => {
+      const fm = memIndex.get(p) || {};
+      return (p + ' ' + (fm.titre || '') + ' ' + (fm.role || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
+    };
     const draw = () => {
       const q = (dq.value || '').toLowerCase();
-      const shown = files.filter((p) => {
-        const fm = memIndex.get(p) || {};
-        if (activeFacet && fm[facetKey] !== activeFacet) return false;
-        return (p + ' ' + (fm.titre || '') + ' ' + (fm.role || '') + ' ' + (Array.isArray(fm.tags) ? fm.tags.join(' ') : '')).toLowerCase().includes(q);
-      });
-      cardsEl.innerHTML = shown.length ? shown.map((p) => {
-        const fm = memIndex.get(p) || {};
-        const name = fm.titre || prettify(p.split('/').pop());
-        const foot = [];
-        if (fm.status) foot.push(`<span class="stat ${sc(fm.status)}">${esc(fm.status)}</span>`);
-        if (fm.role) foot.push(`<span class="tag">${esc(fm.role)}</span>`);
-        (Array.isArray(fm.tags) ? fm.tags : []).slice(0, 3).forEach((t) => foot.push(`<span class="tag">#${esc(t)}</span>`));
-        const meta = fm.tel ? `<div class="cmeta mono" style="font-size:12px">${esc(fm.tel)}</div>` : '';
-        // Projet-espace avec workbook → barre d'avancement dérivée (pièces débitées).
-        let bar = '';
-        const base = p.split('/').pop().replace(MD_EXT, '');
-        const dir = p.slice(0, p.lastIndexOf('/'));
-        if (dir.endsWith('/' + base)) {
-          const wb = wbs.find((w) => w.path.startsWith(dir + '/'));
-          if (wb && wb.pieces) bar = `<div class="bar"><i style="width:${Math.round(100 * wb.done / wb.pieces)}%"></i></div>`;
-        }
-        return `<a class="card" href="#/mem/${esc(p)}"><div class="ct">${esc(name)}</div>${meta}${bar}${foot.length ? `<div class="foot">${foot.join('')}</div>` : ''}</a>`;
-      }).join('') : '<div class="empty">Aucune fiche.</div>';
+      if (cardsEl) {
+        const shown = files.filter((p) => {
+          if (activeFacet && (memIndex.get(p) || {})[facetKey] !== activeFacet) return false;
+          return matches(p, q);
+        });
+        cardsEl.innerHTML = shown.length ? shown.map(cardHTML).join('') : '<div class="empty">Aucune fiche.</div>';
+      }
+      // L'archive ignore les facettes (elles décrivent les vivantes) mais suit la recherche.
+      if (acardsEl) {
+        const shown = archived.filter((p) => matches(p, q));
+        acardsEl.innerHTML = shown.length ? shown.map(cardHTML).join('') : '<div class="empty">Rien dans l’archive ne correspond.</div>';
+      }
     };
     dq.addEventListener('input', draw);
     if (facets) facets.addEventListener('click', (e) => {
