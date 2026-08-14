@@ -48,6 +48,15 @@ Permissions de l'App :
   cause évidente.
 - **jamais** `administration`, ni les secrets, ni les collaborateurs.
 
+> ⚠️ **AMENDÉ le 2026-08-14 — `administration: write` est entrée, pour la seule création.**
+> Monsieur a tranché : le pod doit créer ses dépôts depuis la PWA (sujet
+> `creation-repo-pod` côté Alfred). L'App porte donc « Administration » (écriture) —
+> ajoutée et approuvée sur l'installation le 14/08. Le périmètre effectif reste borné
+> par la surface : un seul outil s'en sert, `repo_create` (rosetta ≥ 0.18.0), qui ne
+> sait faire qu'un dépôt **privé, vide, sous le compte de l'appelant** — création pure,
+> sous bouclier. Suppression, réglages, collaborateurs : toujours aucune surface, et un
+> changement de permissions ne prend effet qu'APPROUVÉ côté installation.
+
 ### Le bouclier garde l'écriture, pas le token
 
 Le périmètre du token est cosmétique : ce qui borne Skippy, c'est la surface exposée
@@ -121,6 +130,7 @@ naturelle — elle a été commise le jour même de la mise en service.
 
 | Outil | Rôle |
 |---|---|
+| `repo_create(nom, description)` | un dépôt NEUF : privé, vide, compte de l'appelant — création pure, nom pris = refus (0.18.0, cf. l'amendement du 2026-08-14) |
 | `repo_commit(repo, branch, message, files[{path, content \| null}])` | créer / modifier / supprimer, atomique. `content: null` = suppression : pas d'outil `delete_file` séparé à débloquer un jour |
 | `repo_tag(repo, tag, sha)` | pose la ref — la release |
 
@@ -134,9 +144,10 @@ une capacité de moins à garder. Relancer un build raté se fait depuis l'UI Gi
 
 ### Jamais écrits — c'est ça, la garantie
 
-Création / suppression de repo, fork, suppression de branche, force-push. Issues, PR,
-commentaires (surface de sortie, aucun besoin). Secrets d'Actions, réglages du repo,
-collaborateurs.
+Suppression de repo, passage d'un dépôt en public, fork, suppression de branche,
+force-push. Issues, PR, commentaires (surface de sortie, aucun besoin). Secrets
+d'Actions, réglages du repo, collaborateurs. *(La création, longtemps de cette liste,
+est passée côté écritures le 2026-08-14 — voir l'amendement.)*
 
 Ouvrir l'un d'eux plus tard = **écrire l'outil**, pas basculer un flag — et relire la
 garde dans la même passe.
