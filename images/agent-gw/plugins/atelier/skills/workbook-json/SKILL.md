@@ -118,15 +118,19 @@ donc pas un choix de dessin, mais ce que la bande va devenir.
 occupe `longueur` en **x** et `largeur` en **y** (absent ou `false` : `largeur` en x,
 `longueur` en y). Sert à coucher une pièce plus profonde que la bande pour qu'elle y tienne.
 
-**`couleur` sur une pose de tronçonnage** (optionnel) : met les **cotes** de ce tronçon en
-évidence — la cote de longueur dans la vue Tronçons, la cote sous le nom dans la vue Débit,
-la longueur dans la fiche colonne. Vocabulaire **FERMÉ**, les douze teintes des fiches :
-`rouge` · `orange` · `ambre` · `vert` · `emeraude` · `turquoise` · `bleu` · `indigo` ·
-`violet` · `rose` · `gris` · `ardoise` — **jamais un hexa**, hors liste → ignoré en silence
-(repli encre sourde). Purement visuel : signaler une cote à vérifier sur place, une coupe
-critique — le front n'en déduit **rien**, c'est toi qui portes le pourquoi dans la fiche du
-projet. Deux colonnes par ailleurs identiques ne se **regroupent pas** si leurs couleurs
-diffèrent : le marquage est une différence réelle à l'établi.
+**`couleur` sur une pose de tronçonnage** (optionnel) : met le **BORD de la forme** en
+évidence — contour épais et teinté du tronçon dans la vue Tronçons et de la pièce dans la
+vue Débit (éteint une fois la pièce débitée), point coloré dans la fiche colonne. **Jamais
+la cote** : les mesures restent à l'encre, c'est la forme qu'on marque. Vocabulaire
+**FERMÉ**, les douze teintes des fiches : `rouge` · `orange` · `ambre` · `vert` ·
+`emeraude` · `turquoise` · `bleu` · `indigo` · `violet` · `rose` · `gris` · `ardoise` —
+**jamais un hexa**, hors liste → ignoré en silence (bord normal). Purement visuel : signaler
+une pièce à traiter à part, une coupe critique — le front n'en déduit **rien**, c'est toi
+qui portes le pourquoi dans la fiche du projet. Choisis une teinte qui **tranche** avec le
+bord normal (sarcelle) : `orange`, `rouge`, `violet` — pas `emeraude`. Deux colonnes par
+ailleurs identiques ne se **regroupent pas** si leurs couleurs diffèrent : le marquage est
+une différence réelle à l'établi. Les deux vues portent la légende du marquage en pied de
+page.
 
 ⚠️ **`rot` et `sens` sont INDÉPENDANTS et se combinent.** `sens` oriente la **bande**
 (géométrie de la colonne) ; `rot` oriente **une pièce** dans sa bande. Les `x`/`y` d'une pose

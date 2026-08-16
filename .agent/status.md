@@ -2,6 +2,18 @@
 
 > MàJ : 2026-08-17
 
+**`couleur` marque le BORD, pas la cote — correctif de lecture (0.63.0, 2026-08-17)** :
+retour de Monsieur sur la 0.61.0 — « je veux que le bord de la forme ayant un champ soit
+représenté dans une couleur bien visible, pas la mesure ». La 0.61.0 teintait la cote ;
+j'avais mal lu. Désormais le champ `couleur` d'une pose teinte le **contour de la forme**,
+épais (2.5) et pleine opacité — le tronçon dans la vue Tronçons, la pièce dans la vue Débit
+(éteint une fois débitée) — et un **point coloré** dans la fiche colonne ; les cotes restent
+à l'encre. Le contrat conseille une teinte qui tranche avec la sarcelle du bord normal
+(`orange`, `rouge`, `violet` — pas `emeraude`). Et la vue **Tronçons gagne sa légende** en
+pied de page (même pied que Plaques), la légende de Plaques mentionne le bord marqué.
+Vérifié à l'œil : bords teintés sur les trois pièces marquées, zéro cote teintée au DOM,
+légendes présentes. Livré avec les stations déclarées de 0.62.0 dans un seul déploiement.
+
 **Workbook — la barre de stations se déclare (0.62.0, 2026-08-17)** : demande de Monsieur —
 la barre `Plaques → Tronçons → … → Suivi` était codée en dur ; il la veut dynamique, chaque
 type **zéro ou plusieurs fois**, dans l'ordre du vrai atelier. Nouveau champ racine optionnel
