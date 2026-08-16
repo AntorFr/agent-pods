@@ -2,6 +2,23 @@
 
 > MàJ : 2026-08-17
 
+**Les CHANTS, enfin lus — `chants[]` remplace `couleur` (0.64.0, 2026-08-17)** : troisième
+lecture, la bonne, confirmée par Monsieur — « pas tout le contour, uniquement le côté avec
+un chant ». Sa demande d'origine (« les cotes avec des champs ») disait « les CÔTÉS avec des
+CHANTS » : les bords qui passent à la plaqueuse. Le champ `couleur` de 0.61.0–0.63.0 (mon
+invention, jamais déployée ni utilisée par un workbook réel) est **retiré** ; à la place,
+**`chants[]` au catalogue de la pièce** — vocabulaire fermé `avant · arriere · gauche ·
+droite · abouts`, repère du dessin Tronçons (longueur en x, avant en haut). La vue Tronçons
+surligne **ces seuls côtés** en trait orange épais (`--warn`) sur l'arête, la fiche pièce et
+la fiche colonne les annoncent, et les chants entrent dans la signature de regroupement des
+colonnes (au poste de plaquage, deux colonnes aux chants différents ne sont pas jumelles).
+La vue Débit ne les dessine pas : ses colonnes tournent les pièces (`sens`, `rot`), le
+repère avant/arrière n'y est plus fiable. La **légende** de Tronçons (ajoutée en 0.63.0)
+reste, avec l'entrée « côté plaqué (chant) ». Vérifié à l'œil : 5 arêtes orange sur le
+claustra d'essai (avant seul, avant+abouts, arrière seul), zéro contour entier, fiche pièce
+« Chants : avant · abouts ». Embarque 0.62.0 (stations déclarées) et 0.63.0 (légendes),
+jamais déployées — un seul bump de manifestes, direct en 0.64.0.
+
 **`couleur` marque le BORD, pas la cote — correctif de lecture (0.63.0, 2026-08-17)** :
 retour de Monsieur sur la 0.61.0 — « je veux que le bord de la forme ayant un champ soit
 représenté dans une couleur bien visible, pas la mesure ». La 0.61.0 teintait la cote ;

@@ -1883,6 +1883,11 @@ let wb = null;       // {path, data, state, byEtq}
 let wbTab = 0;       // index dans wbStations() — la barre est propre à chaque workbook
 const wbDone = (id) => !!(wb.state.fait || {})[id];   // id = identifiant d'ÉTAPE (modèle A)
 const pieceDims = (p) => `${p.longueur}×${p.largeur}`;
+// Côtés plaqués d'une pièce (`chants[]` au catalogue) — vocabulaire fermé, dans le repère
+// du dessin Tronçons : longueur en x, AVANT en haut ; `abouts` = les deux bouts d'un coup.
+// Hors liste → ignoré (on ne surligne pas un côté qu'on ne sait pas placer).
+const CHANTS = ['avant', 'arriere', 'gauche', 'droite', 'abouts'];
+const pieceChants = (p) => (p.chants || []).filter((c) => CHANTS.includes(c));
 
 // Conteneurs créés une fois : modale pièce + mode atelier plein écran.
 const pieceModal = document.createElement('div');
@@ -2009,10 +2014,7 @@ function poseRect(pose) {                     // empreinte (mm) d'une pose depui
   const p = wb.byEtq.get(pose.etiquette) || {};
   const w = pose.rot ? p.longueur : p.largeur;
   const h = pose.rot ? p.largeur : p.longueur;
-  // `couleur` (optionnelle sur une pose de tronçonnage) met le BORD de la forme en
-  // évidence partout où elle se dessine — jamais la cote. Même vocabulaire fermé que les
-  // fiches (HUES, douze teintes) : pas d'hexa, hors liste → repli bord normal, rien interpolé.
-  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0, hue: HUES[pose.couleur] || '' };
+  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0 };
 }
 function plaqueSVG(pl, refL) {
   const mat = wb.matById.get(pl.materiau) || {};
@@ -2052,9 +2054,7 @@ function plaqueSVG(pl, refL) {
       const px = r.x * S, py = r.y * S, pw = r.w * S, ph = r.h * S;
       const short = r.et.replace(/^[^-]+-/, '');
       const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
-      // pièce marquée (`couleur`) → BORD teinté, épais — éteint une fois débitée (le signal a servi)
-      const bp = !done && r.hue ? `var(--${r.hue})` : cc;
-      g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${bp}" stroke-width="${bp === cc ? 1 : 2.5}" stroke-opacity="${bp === cc ? .45 : 1}"/>`;
+      g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${cc}" stroke-width="1" stroke-opacity=".45"/>`;
       g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
       g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
@@ -2094,7 +2094,7 @@ function renderDebit(body, st) {
     const n = (pl.etapes || []).reduce((s, st) => s + (st.type === 'tronconnage' ? (st.pieces || []).length : 0), 0);
     return `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>PLAQUE ${esc(pl.plaque || '')}</b><span>${esc(mat.label || pl.materiau || '')} · ${n} pièces</span></div><div class="cutwrap">${plaqueSVG(pl, refL)}</div></div></div>`;
   }).join('')
-    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span><i class="sw" style="background:none;border:2.5px solid var(--voyage)"></i>bord coloré = pièce marquée</span><span style="color:var(--ink-faint)">clic colonne → détail/débiter · clic sur le nom → la pièce</span></div>`;
+    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span style="color:var(--ink-faint)">clic colonne → détail/débiter · clic sur le nom → la pièce</span></div>`;
   body.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('click', () => showColonne(gEl.dataset.band)));
   body.querySelectorAll('.pname').forEach((t) => t.addEventListener('click', (e) => { e.stopPropagation(); showPiece(t.dataset.et); }));
 }
@@ -2110,10 +2110,10 @@ function renderTronconnage(body, st) {
     for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bandW[b.id] = b.largeur;
     for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
       const largeur = bandW[st.entree] || 0;
-      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '', hue: HUES[po.couleur] || '' }; });
-      // la couleur entre dans la signature : une colonne à pièce marquée ne se fond pas
-      // dans ses jumelles non marquées (le marquage est une différence réelle à l'établi)
-      const sig = largeur + '|' + troncs.map((t) => t.longueur + (t.hue ? ':' + t.hue : '')).join('-');
+      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '', chants: pieceChants(p) }; });
+      // les chants entrent dans la signature : une colonne aux pièces plaquées ne se fond
+      // pas dans des jumelles nues — à l'établi, ce n'est pas la même colonne
+      const sig = largeur + '|' + troncs.map((t) => t.longueur + (t.chants.length ? ':' + t.chants.join('+') : '')).join('-');
       if (!groups.has(sig)) groups.set(sig, { largeur, troncs, colonnes: [] });
       groups.get(sig).colonnes.push({ id: pl.plaque + st.entree.split('-').pop(), stepId: st.id, done: wbDone(st.id), etqs: troncs.map((t) => t.et) });
     }
@@ -2138,10 +2138,16 @@ function renderTronconnage(body, st) {
     for (let i = 0; i < g.troncs.length; i++) {
       const t = g.troncs[i], w = t.longueur * S2, short = t.et.replace(/^[^-]+-/, '');
       const nf = Math.max(9, Math.min(12, w / (short.length * 0.62)));
-      // `couleur` sur la pose → le BORD du tronçon prend la teinte, épais et bien visible
-      // (la cote, elle, reste à l'encre — c'est la forme qu'on marque, pas la mesure).
-      const bc = t.hue ? `var(--${t.hue})` : 'var(--shop)';
-      svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="${bc}" stroke-width="${t.hue ? 2.5 : 1}" stroke-opacity="${t.hue ? 1 : .5}"/>`;
+      svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
+      // chants : SEULS les côtés plaqués se surlignent — trait orange épais posé sur l'arête,
+      // légèrement rentré pour rester dans la forme. Repère : longueur en x, avant en haut.
+      const edge = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--warn)" stroke-width="3" stroke-linecap="round"/>`;
+      for (const c of t.chants) {
+        if (c === 'avant') svg += edge(x + 2.5, 1.5, x + w - 2.5, 1.5);
+        else if (c === 'arriere') svg += edge(x + 2.5, bh - 1.5, x + w - 2.5, bh - 1.5);
+        if (c === 'gauche' || c === 'abouts') svg += edge(x + 1.5, 2.5, x + 1.5, bh - 2.5);
+        if (c === 'droite' || c === 'abouts') svg += edge(x + w - 1.5, 2.5, x + w - 1.5, bh - 2.5);
+      }
       // NOM de la pièce seul au centre (cliquable)
       svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
       // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse
@@ -2156,7 +2162,7 @@ function renderTronconnage(body, st) {
     html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>Guide ${g.largeur} mm</b><span>${g.troncs.length} tronçon${g.troncs.length > 1 ? 's' : ''} · ×${g.colonnes.length} colonne${g.colonnes.length > 1 ? 's' : ''}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
   }
   // même pied de page que Plaques : la légende des conventions de la vue
-  html += `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>tronçon</span><span><i class="sw" style="background:none;border:2.5px solid var(--voyage)"></i>bord coloré = pièce marquée (champ couleur)</span><span style="color:var(--ink-faint)">cocher une pastille = colonne tronçonnée · clic sur le nom → la pièce</span></div>`;
+  html += `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>tronçon</span><span><i class="sw" style="background:var(--warn)"></i>côté plaqué (chant)</span><span style="color:var(--ink-faint)">cocher une pastille = colonne tronçonnée · clic sur le nom → la pièce</span></div>`;
   body.innerHTML = html;
   body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
   body.querySelectorAll('.pname[data-et]').forEach((t) => t.addEventListener('click', () => showPiece(t.dataset.et)));
@@ -2458,13 +2464,13 @@ function showColonne(bandId) {
   const { plaque, mat, band, troncStep } = f;
   const stepId = troncStep && troncStep.id;
   const on = stepId ? wbDone(stepId) : false;
-  const troncs = ((troncStep && troncStep.pieces) || []).map((pose) => { const p = wb.byEtq.get(pose.etiquette) || {}; return { et: pose.etiquette, longueur: p.longueur, hue: HUES[pose.couleur] || '' }; });
+  const troncs = ((troncStep && troncStep.pieces) || []).map((pose) => { const p = wb.byEtq.get(pose.etiquette) || {}; return { et: pose.etiquette, longueur: p.longueur, chants: pieceChants(p) }; });
   const body = pieceModal.querySelector('#piece-body');
   body.innerHTML = `<h2>Colonne ${esc(plaque + bandId.split('-').pop())}</h2>
     <div class="prow"><b>Plaque</b><span>${esc(plaque)}</span></div>
     <div class="prow"><b>Refente</b><span>largeur ${esc(String(band.largeur))} · longueur ${esc(String(Math.round(band.longueur || 0)))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
     <div class="prow"><b>Matière</b><span>${esc(mat.label || '')}</span></div>
-    <div class="prow"><b>Tronçons (${troncs.length})</b><span>${troncs.map((t) => `<button class="lnk" data-piece="${esc(t.et)}" style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit">${esc(t.et.replace(/^[^-]+-/, ''))}</button> <span style="color:var(--ink-faint)">${t.longueur}</span>${t.hue ? ` <span style="color:var(--${t.hue})">●</span>` : ''}`).join('<br>')}</span></div>`;
+    <div class="prow"><b>Tronçons (${troncs.length})</b><span>${troncs.map((t) => `<button class="lnk" data-piece="${esc(t.et)}" style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit">${esc(t.et.replace(/^[^-]+-/, ''))}</button> <span style="color:var(--ink-faint)">${t.longueur}</span>${t.chants.length ? ` <span style="color:var(--warn)" title="chants">▮ ${t.chants.map(esc).join('+')}</span>` : ''}`).join('<br>')}</span></div>`;
   const actions = document.createElement('div'); actions.className = 'actions';
   if (stepId) {
     const btn = document.createElement('button');
@@ -2488,6 +2494,7 @@ function showPiece(etq) {
   const body = pieceModal.querySelector('#piece-body');
   body.innerHTML = `<h2>${esc(etq)}</h2>
     <div class="prow"><b>Dimensions</b><span>${esc(pieceDims(p))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
+    ${pieceChants(p).length ? `<div class="prow"><b>Chants</b><span style="color:var(--warn)">${pieceChants(p).map(esc).join(' · ')}</span></div>` : ''}
     <div class="prow"><b>Matière</b><span>${esc(mat.label || loc.materiau || '—')}</span></div>
     <div class="prow"><b>Colonne</b><span>${esc(step?.entree || '?')} · plaque ${esc(loc.plaque || '?')}</span></div>
     ${sibs.length > 1 ? `<div class="prow"><b>Tronçons</b><span>${sibs.map(esc).join(' · ')}</span></div>` : ''}
