@@ -48,9 +48,11 @@
 */
 
 import createSkippy from './skippy.js';
+import createNestor from './nestor.js';
 
 const FACTORIES = {
   skippy: createSkippy,
+  nestor: createNestor,
 };
 
 /** Le skin neutre : aucun champ, donc tout retombe sur le comportement d'Alfred.

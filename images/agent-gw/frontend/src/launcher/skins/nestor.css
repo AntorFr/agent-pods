@@ -1,0 +1,289 @@
+/* Thème `nestor` — DÉCLARATION DE JETONS, et rien d'autre.
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Contrat : cf. le bloc en tête de `launcher.css`. Une feuille de thème ne
+   contient AUCUNE règle structurelle scopée par agent — `test/theme-lint.mjs`
+   le vérifie au build. La seule chose non-jeton ici est la feuille de style du
+   markup que ce skin est seul à produire : le lapin vivant et son accueil
+   (cf. `skins/nestor.js`), sous des classes `.nst-*` que la coque ne connaît pas.
+
+   TROISIÈME PARTI PRIS, à distance égale des deux autres. Alfred est un salon
+   (clair, sérif, teal). Skippy est un HUD (sombre, monospace, ambre, angles vifs).
+   Nestor est un OBJET : le Nabaztag posé sur la commode, porcelaine blanche, tout
+   en rondeurs, dont le ventre s'allume quand il travaille. D'où les rayons les plus
+   généreux des trois corps, une typo ronde, et l'améthyste des LED d'origine.
+
+   ⚠️ IL SUIT LE RÉGLAGE DU TÉLÉPHONE, contrairement à Skippy qui impose sa nuit.
+   Le public est la famille : porcelaine en journée, veilleuse le soir, sans que
+   personne ait à chercher un bouton. La structure est donc celle du SOCLE, pas
+   celle de skippy.css — jour dans le bloc de base, nuit dans `@media
+   (prefers-color-scheme:dark)`, puis les deux variantes explicites pour que le
+   bouton de thème continue de trancher. Le jeu « nuit » est écrit deux fois : un
+   sélecteur ne peut pas être à la fois dans un `@media` et hors de lui, et le socle
+   se duplique exactement pareil.
+
+   SPÉCIFICITÉ : `:root[data-agent]` (0,2,0) bat `:root` (0,1,0) et la règle
+   `@media (prefers-color-scheme:dark) :root`. Les variantes `[data-agent][data-theme]`
+   (0,3,0) battent le `@media` comme les `:root[data-theme]` du socle. `.agent-doc`
+   est visé dans le MÊME bloc (le moteur de fiches porte ses propres jetons) : un seul
+   jeu de valeurs, deux portées, zéro duplication.
+
+   CONTRASTES MESURÉS (WCAG, sur la couleur de fond du même jeu) :
+     nuit  ink 15,4:1 · ink-soft 6,5:1 · accent 4,8:1 · texte sur bulle 6,1:1
+     jour  ink 11,7:1 · ink-soft 4,7:1 · accent 5,4:1 · texte sur bulle 6,1:1
+   L'améthyste de la maquette (#8B6CE8) tombait à 3,4:1 sur la porcelaine : elle
+   descend à #6B4BC8 le jour. Même teinte, pas une inversion naïve — c'est le même
+   geste que l'ambre de Skippy qui passe à #B0731A en clair. */
+
+/* ══ JOUR — porcelaine ═══════════════════════════════════════════════════
+   Bloc de BASE : c'est aussi le défaut du socle (`:root` est clair), donc un
+   téléphone en mode clair tombe ici sans qu'aucun attribut ne soit posé.
+   Fontes, rayons et signature ne vivent QUE là : la nuit ne surcharge que la
+   palette, et les jetons dérivés (`var(--surface)`, `var(--sink)`…) se résolvent
+   sur la valeur qui gagne la cascade — pas besoin de les réécrire plus bas. */
+:root[data-agent="nestor"],
+:root[data-agent="nestor"][data-theme="light"],
+:root[data-agent="nestor"] .agent-doc,
+:root[data-agent="nestor"][data-theme="light"] .agent-doc {
+  /* ── Palette — crème chaud, blanc laqué, gris chaud (jamais de noir pur) ── */
+  --bg:#F5F1EA; --surface:#FFFFFF; --surface2:#EDE8DE; --raise:#FFFFFF; --sink:#E6E0D4;
+  --ink:#332E3C; --ink-soft:#6F6880; --ink-faint:#A79FB4;
+  --line:#E4DDD0; --line-soft:#EFEAE0;
+
+  /* Un SEUL accent : l'améthyste, la lumière du ventre des Nabaztag d'origine.
+     Acté par Monsieur le 2026-08-15 devant les quatre pastilles de la maquette. */
+  --accent:#6B4BC8; --accent-lo:rgba(107,75,200,.10);
+  --good:#2E9E63; --warn:#B4771B; --crit:#C4402C;
+
+  /* Pas de teintes de domaine : aucun module n'est activé sur ce corps
+     (`GW_APPS=""`), les jetons du socle restent en repli plutôt que d'être
+     redéclarés en douze valeurs mortes. Elles arriveront avec la vue maison. */
+
+  /* Des ombres DOUCES et portées : un objet est posé sur quelque chose. C'est
+     l'exact contraire de Skippy, qui n'émet que de la lumière. */
+  --shadow-sm:0 1px 2px rgba(51,46,60,.05);
+  --shadow:0 6px 18px rgba(51,46,60,.09),0 1px 3px rgba(51,46,60,.06);
+  --shadow-lg:0 18px 44px rgba(51,46,60,.14);
+
+  /* ── Fontes — rondes, et sans webfont (la CSP l'interdirait de toute façon).
+     `ui-rounded` n'existe que chez Apple ; ailleurs on retombe sur la pile du
+     socle, qui reste correcte. La typo n'est pas le geste principal ici, les
+     rayons le sont. ─────────────────────────────────────────────────────── */
+  --f-title:ui-rounded,"SF Pro Rounded","Hiragino Maru Gothic ProN","Arial Rounded MT Bold",var(--f-body);
+  --f-input:var(--f-title);
+
+  /* ── Rayons — l'objet n'a pas un seul angle ────────────────────────────── */
+  --r-micro:6px; --r-xs:9px; --r-sm:11px; --r-ctl:13px;
+  --r:16px; --r-lg:22px; --r-pill:999px;
+  --r-round:50%;
+  --r-bub:18px; --r-bub-tail:6px;
+
+  /* ── Premier plan sur aplat ───────────────────────────────────────────── */
+  --on-accent:#FFFFFF; --on-solid:#FFFFFF;
+  --scrim:rgba(51,46,60,.5); --scrim-soft:rgba(51,46,60,.14);
+
+  /* ── Plaques d'icône : un aplat translucide du ton, cerné — de la porcelaine
+     teintée, pas une pastille pleine. ────────────────────────────────────── */
+  --plate-top:22%; --plate-mix:8%; --plate-base:#FFFFFF;
+  --plate-fg-tint:100%; --plate-fg:var(--accent);
+  --plate-bdw:1px; --plate-bd-tint:22%;
+
+  /* ── Bulles : l'aplat côté famille, comme chez Alfred — mais dans l'améthyste
+     PROFONDE, pas dans l'accent. À #8B6CE8 le blanc tombait à 3,9:1 ; ici il
+     tient 6,1:1 dans les deux heures, et l'accent reste réservé à la lumière. ─ */
+  --bub-me-bg:#6B4BC8; --bub-me-fg:#FFFFFF; --bub-me-bd:0 solid transparent;
+  --bub-al-bg:var(--surface); --bub-al-bd:1px solid var(--line);
+  --bub-al-rule:1px solid var(--line);
+
+  /* ── Code dans le fil ─────────────────────────────────────────────────── */
+  --code-bg:var(--surface2); --code-fg:var(--ink); --code-bd:1px solid var(--line);
+  --code-inline-bg:var(--accent-lo); --code-inline-fg:var(--accent);
+  --code-inline-bd:0 solid transparent;
+
+  /* ── Signature ────────────────────────────────────────────────────────── */
+  --label-track:.14em; --label-size:10.5px;
+  --title-track:-.005em;
+  --caret-display:none;
+
+  /* ── Jetons propres au corps — consommés par le markup du lapin ─────────
+     `--nst-porcelaine` est la coque de l'objet : blanche dans les deux heures,
+     parce qu'un Nabaztag beige n'existe pas. Le jour, c'est l'OMBRE qui la
+     détache du crème ; la nuit, elle claque toute seule sur la prune. */
+  --nst-porcelaine:#FFFFFF;
+  --nst-glow:#B9A3FF;
+  --nst-ombre-objet:drop-shadow(0 10px 18px rgba(51,46,60,.20));
+}
+
+/* ══ NUIT — veilleuse ════════════════════════════════════════════════════
+   Prune profonde. Seule la PALETTE change : rayons, fontes et signature sont
+   posés au-dessus et n'ont pas à bouger. */
+@media (prefers-color-scheme:dark){
+  :root[data-agent="nestor"],
+  :root[data-agent="nestor"] .agent-doc {
+    --bg:#131022; --surface:#1D1836; --surface2:#171331; --raise:#241D42; --sink:#0C0A18;
+    --ink:#ECE7F6; --ink-soft:#9C94B4; --ink-faint:#6B6486;
+    --line:#2C2549; --line-soft:#221C3D;
+    --accent:#8B6CE8; --accent-lo:rgba(139,108,232,.14);
+    --good:#4FC08A; --warn:#E8B45C; --crit:#EA6A7E;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow:0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.3);
+    --shadow-lg:0 20px 52px rgba(0,0,0,.6);
+    --on-accent:#0F0A1E; --on-solid:#FFFFFF;
+    --scrim:rgba(8,6,18,.6); --scrim-soft:rgba(0,0,0,.28);
+    --plate-top:30%; --plate-mix:10%; --plate-base:#241B45;
+    --nst-ombre-objet:none;
+  }
+}
+
+/* La variante explicite : le bouton de thème doit pouvoir imposer la veilleuse
+   à un téléphone réglé en clair. (0,3,0) bat le `@media` ci-dessus. */
+:root[data-agent="nestor"][data-theme="dark"],
+:root[data-agent="nestor"][data-theme="dark"] .agent-doc {
+  --bg:#131022; --surface:#1D1836; --surface2:#171331; --raise:#241D42; --sink:#0C0A18;
+  --ink:#ECE7F6; --ink-soft:#9C94B4; --ink-faint:#6B6486;
+  --line:#2C2549; --line-soft:#221C3D;
+  --accent:#8B6CE8; --accent-lo:rgba(139,108,232,.14);
+  --good:#4FC08A; --warn:#E8B45C; --crit:#EA6A7E;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+  --shadow:0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 52px rgba(0,0,0,.6);
+  --on-accent:#0F0A1E; --on-solid:#FFFFFF;
+  --scrim:rgba(8,6,18,.6); --scrim-soft:rgba(0,0,0,.28);
+  --plate-top:30%; --plate-mix:10%; --plate-base:#241B45;
+  --nst-ombre-objet:none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MARKUP PROPRE AU SKIN — le lapin vivant et son accueil.
+   Ces classes ne sont produites que par `skins/nestor.js` et la coque ne les
+   connaît pas : d'où l'absence de scope, tolérée par le contrôle 3 du lint.
+   Ce n'est pas une surcharge — il n'y a rien à surcharger.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Le lapin vivant ────────────────────────────────────────────────────
+   Trois couches empilées : les oreilles PEINTES SOUS le corps (chacune masquée
+   hors du dôme, pour que rien de caché ne surgisse en tournant), le corps —
+   cloche du profil + bas du glyphe —, puis le visage par-dessus dans la couleur
+   du fond : yeux et museau sont des TROUS, jamais des taches peintes. C'est ce
+   qui rend le lapin lisible sur n'importe quel fond, à n'importe quelle taille. */
+.nst-lapin{
+  position:relative; flex:none;
+  width:var(--nst-taille,240px); aspect-ratio:1;
+  color:var(--nst-porcelaine);
+  --nst-face:var(--bg);
+  filter:var(--nst-ombre-objet);
+}
+.nst-lapin > svg,
+.nst-lapin .nst-oreille svg{
+  position:absolute; inset:0; width:100%; height:100%;
+  fill:currentColor; overflow:visible;
+}
+/* Le visage prend la couleur de ce qu'il y a DERRIÈRE le lapin. Dans le fil, ce
+   n'est plus le fond de page mais celui de la bulle — d'où le modificateur, posé
+   par le JS qui seul sait où il pose l'objet. Viser `.bub .nst-lapin` serait
+   refusé par le lint, et à raison : ce serait la coque repeinte depuis un thème. */
+.nst-lapin .nst-visage{ fill:var(--nst-face); }
+.nst-lapin.nst-sur-bulle{ --nst-face:var(--bub-al-bg); }
+
+/* Deux moteurs pas-à-pas, deux horloges : le grand salut jusqu'à l'horizontale,
+   puis des déclinaisons tenues — et la droite part toujours un souffle après la
+   gauche, parce que deux moteurs ne sont jamais parfaitement d'accord.
+   Rotation PLANE : l'oreille du vrai est une coquille sphérique, sa silhouette
+   de face ne s'amincit jamais pendant la course. */
+.nst-lapin .nst-oreille{
+  position:absolute; inset:0;
+  transform-origin:40% 34%;
+  animation:nst-oreille-g 10s ease-in-out infinite;
+}
+.nst-lapin .nst-od{
+  transform-origin:59.9% 34%;
+  animation-name:nst-oreille-d;
+  animation-delay:.4s;
+}
+@keyframes nst-oreille-g{
+  0%,8%{transform:rotate(0deg)}
+  16%,26%{transform:rotate(-90deg)}
+  34%,42%{transform:rotate(-45deg)}
+  50%,58%{transform:rotate(-67deg)}
+  66%,76%{transform:rotate(-22deg)}
+  84%,100%{transform:rotate(0deg)}
+}
+@keyframes nst-oreille-d{
+  0%,8%{transform:rotate(0deg)}
+  16%,26%{transform:rotate(90deg)}
+  34%,42%{transform:rotate(45deg)}
+  50%,58%{transform:rotate(67deg)}
+  66%,76%{transform:rotate(22deg)}
+  84%,100%{transform:rotate(0deg)}
+}
+
+/* Le ventre — le témoin de travail, et la seule chose que l'objet d'origine
+   savait dire. Il respire au repos, il s'emballe quand un tour tourne. */
+.nst-ventre{
+  position:absolute; left:50%; top:78%; width:27%; aspect-ratio:1;
+  transform:translate(-50%,-50%); border-radius:50%; pointer-events:none;
+  background:radial-gradient(closest-side,
+    var(--nst-glow),
+    color-mix(in srgb, var(--accent) 70%, transparent) 55%,
+    transparent 72%);
+  filter:blur(6px);
+  animation:nst-respire 3.2s ease-in-out infinite;
+}
+@keyframes nst-respire{ 0%,100%{opacity:.5} 50%{opacity:1} }
+.nst-lapin.nst-affaire .nst-ventre{ animation-duration:1s; filter:blur(3px); }
+
+/* ── L'accueil — lapin et invite, rien d'autre ──────────────────────────
+   Pas de jauges, pas de tuiles par défaut : le public est la famille, et ce
+   corps n'a aucun module activé. Les tuiles n'apparaissent que si `GW_APPS` en
+   allume un — un accueil qui masque un module ACTIF est la panne que le
+   commentaire de `main.py` documente déjà. */
+.nst-accueil{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:6px; padding:clamp(18px,5vh,54px) 20px 40px;
+}
+.nst-salut{
+  font-family:var(--f-title); font-weight:800; line-height:1.1;
+  font-size:clamp(26px,4.6vw,38px); letter-spacing:var(--title-track);
+  color:var(--ink);
+}
+.nst-salut em{ font-style:normal; color:var(--accent); }
+.nst-date{
+  font-size:var(--label-size); letter-spacing:var(--label-track);
+  text-transform:uppercase; font-weight:700; color:var(--ink-faint);
+}
+.nst-scene{ display:grid; place-items:center; margin:clamp(8px,3vh,26px) 0; }
+.nst-invite{
+  display:flex; align-items:center; gap:10px; width:100%; max-width:420px;
+  padding:12px 10px 12px 20px; text-align:left; cursor:pointer;
+  font:inherit; font-size:14px; font-family:var(--f-input);
+  color:var(--ink-soft); background:var(--surface);
+  border:1px solid var(--line); border-radius:var(--r-pill);
+  box-shadow:var(--shadow-sm); transition:border-color .18s, box-shadow .18s;
+}
+.nst-invite span{ flex:1; }
+.nst-invite i{
+  flex:none; width:32px; height:32px; display:grid; place-items:center;
+  font-style:normal; font-weight:700;
+  border-radius:var(--r-round); background:var(--accent); color:var(--on-accent);
+}
+.nst-invite:hover{ border-color:var(--accent); box-shadow:var(--shadow); }
+.nst-tuiles{
+  display:flex; flex-wrap:wrap; justify-content:center; gap:10px;
+  margin-top:22px;
+}
+.nst-tuile{
+  display:flex; flex-direction:column; gap:2px; min-width:150px;
+  padding:14px 18px; text-decoration:none; text-align:left;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); box-shadow:var(--shadow-sm);
+}
+.nst-tuile b{ color:var(--ink); font-weight:700; font-size:14px; }
+.nst-tuile span{ color:var(--ink-soft); font-size:12px; }
+.nst-tuile:hover{ border-color:var(--accent); }
+
+/* Le mouvement est la signature de ce corps, pas sa fonction : qui demande moins
+   d'animation garde un lapin, simplement immobile. */
+@media (prefers-reduced-motion:reduce){
+  .nst-lapin .nst-oreille,
+  .nst-ventre{ animation:none; }
+}

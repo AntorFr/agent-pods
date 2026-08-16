@@ -1,6 +1,52 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-11
+> MàJ : 2026-08-16
+
+**Le skin `nestor` existe enfin — ÉCRIT ET VALIDÉ AU BANC, PAS ENCORE PUBLIÉ (2026-08-16)** :
+constat de Monsieur devant sa PWA — « le déploiement de Nestor n'embarque pas son thème, le
+logo et le style sont ceux d'Alfred ». Exact, et ce n'était pas une panne de déploiement :
+`nestor-helm.yml` posait bien `GW_THEME=nestor` depuis le premier jour, mais **aucun skin de
+ce nom n'était livré par l'image** — le commentaire du manifeste l'annonçait lui-même. Un
+thème inconnu retombe proprement sur le socle : PWA fonctionnelle, au nom et à l'icône
+d'Alfred. Cinq fichiers, exactement les trois gestes du contrat (`skins/index.js`) plus les
+deux actifs serveur :
+
+- `skins/nestor.js` — fabrique : blason, invite, `busyNode` (le lapin, ventre qui pulse) et
+  l'accueil. Les tracés sortent de la police « Nestor » ; le glyphe complet étant la
+  **concaténation** du corps et de ses trous, il n'est pas embarqué deux fois.
+- `skins/nestor.css` — jetons des deux heures. ⚠️ Structure du **socle**, pas celle de
+  `skippy.css` : le jour est le bloc de base et la nuit vit dans `@media
+  (prefers-color-scheme:dark)`, donc ce corps **suit le réglage du téléphone**. C'est
+  délibéré — la famille n'a pas à chercher un bouton.
+- `skins/index.js` + `skins/themes.css` — une ligne chacun.
+- `static/skins/nestor/{icon.svg,manifest.json}` — les actifs que le navigateur réclame
+  AVANT tout JavaScript. Sans eux, l'icône d'écran d'accueil resterait celle d'Alfred même
+  avec le reste en place, et les trois corps seraient indiscernables sur un même téléphone.
+
+**Contrastes mesurés, pas jugés à l'œil** : l'améthyste actée (#8B6CE8) tombe à 3,4:1 sur la
+porcelaine — elle descend à #6B4BC8 le jour, même teinte. Les aplats de bulle prennent
+l'améthyste profonde dans les deux heures (texte à 6,1:1) ; l'accent reste la lumière.
+
+**Banc** : `theme-lint` passe (le contrat de thème est respecté — déclaration pure, aucune
+règle qui repeindrait Alfred), `npm test` 30/30 + 9/9, build esbuild OK, `apps_test.py` 71/71.
+Le contrôle des actifs de skin **balayait `skippy` en dur** : il est passé au balayage de tout
+dossier livré sous `static/skins/`, et compare désormais au FICHIER manifeste du skin plutôt
+qu'à des valeurs recopiées. Ajouter un quatrième corps ne réclamera rien ici.
+Au passage, `load()` d'`apps_test.py` neutralise `GW_FEATURES` et `GW_THEME` : le cas
+`/api/version` comparant le dict entier, il lisait l'environnement du pod et **échouait sur
+tout corps réel** — banc rouge sans qu'aucun code soit en cause.
+
+⚠️ **Défaut connu, signalé par Monsieur et assumé pour ce jalon** : en position **horizontale**,
+les oreilles ne sont pas collées au corps. Le masque `hors-cloche` tourne AVEC l'oreille (il est
+posé sur le `<g>` interne du SVG qui subit la rotation), donc sa découpe cesse de coïncider avec
+le dôme dès que l'angle s'éloigne de la verticale — d'où un jour entre l'oreille et le crâne.
+Piste : masquer dans un repère FIXE (masque appliqué en dehors du transform, ou `mask` en
+`objectBoundingBox` sur un calque parent non tourné). Décision de Monsieur : **on déploie en
+l'état, on retravaille l'animation ensuite**.
+
+**Reste à faire** : release de l'image (geste de Monsieur), puis bump du tag dans
+`nestor-helm.yml`. Les manifestes d'alfred et skippy épinglent la même image et suivront à leur
+rythme — le skin est **inerte** chez eux tant que `data-agent` ne vaut pas `nestor`.
 
 > ↳ **0.59.1 (2026-08-11)** : le hub Voyages avait échappé au tiroir — c'est un module
 > (`renderVoyagesHub`, `voyage.json`), pas une vue domaine. Même règle, même `<details>` :

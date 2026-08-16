@@ -27,8 +27,17 @@ def check(name, cond):
 
 
 def load(value):
-    """Recharge le module avec un GW_APPS donné (None = variable absente)."""
-    os.environ.pop("GW_APPS", None)
+    """Recharge le module avec un GW_APPS donné (None = variable absente).
+
+    ⚠️ `GW_FEATURES` et `GW_THEME` sont neutralisés ici AUSSI, alors qu'aucun cas
+    de cette section ne les manipule : le cas `/api/version` compare le dict
+    ENTIER, donc il lisait les valeurs du pod dans lequel on lance le banc. Sur un
+    corps réel (Skippy sert `attach,eph,tunnel,sujets` et le thème `skippy`) le
+    test échouait sans qu'aucun code ne soit en cause — un banc qui dépend de son
+    hôte n'apprend rien à personne.
+    """
+    for var in ("GW_APPS", "GW_FEATURES", "GW_THEME"):
+        os.environ.pop(var, None)
     if value is not None:
         os.environ["GW_APPS"] = value
     return importlib.reload(main)
@@ -223,14 +232,26 @@ print("\n--- actifs d'habillage (favicon, manifeste) ---")
 import json as _json  # noqa: E402
 from xml.etree import ElementTree  # noqa: E402
 
-os.environ["GW_THEME"] = "skippy"
-m = importlib.reload(main)
-icon = m._skin_asset("icon.svg")
-check("skippy sert SON icône", icon and icon.parts[-3:] == ("skins", "skippy", "icon.svg"))
-mf = _json.loads(bytes(asyncio.run(m.manifest()).body).decode())
-check("manifeste au nom du skin", mf["name"] == "Skippy")
-check("couleurs du skin", mf["theme_color"] == "#080A0D")
-check("icône du manifeste = la route thémée", mf["icons"][0]["src"] == "/icon.svg")
+# Balayage de TOUS les skins livrés, et pas d'un nom en dur : le contrôle a été
+# écrit pour `skippy` seul, si bien que le skin `nestor` aurait pu partir sans
+# icône ni manifeste sans qu'une seule assertion ne bronche. Ajouter un corps ne
+# doit rien réclamer ici — c'est le dossier servi qui fait foi.
+_SKINS = sorted(p.name for p in (main.STATIC_DIR / "skins").iterdir() if p.is_dir())
+check("au moins un skin livré par l'image", bool(_SKINS))
+for _skin in _SKINS:
+    os.environ["GW_THEME"] = _skin
+    m = importlib.reload(main)
+    icon = m._skin_asset("icon.svg")
+    check("%s sert SON icône" % _skin,
+          bool(icon) and icon.parts[-3:] == ("skins", _skin, "icon.svg"))
+    # Comparé au FICHIER du skin, pas à des valeurs recopiées : un manifeste
+    # modifié sans que le test suive serait un test qui se ment à lui-même.
+    voulu = _json.loads((m.STATIC_DIR / "skins" / _skin / "manifest.json").read_text(encoding="utf-8"))
+    rendu = _json.loads(bytes(asyncio.run(m.manifest()).body).decode())
+    check("%s : le manifeste écrase bien le socle, champ par champ" % _skin,
+          all(rendu.get(k) == v for k, v in voulu.items()))
+    check("%s : icône du manifeste = la route thémée" % _skin,
+          rendu["icons"][0]["src"] == "/icon.svg")
 
 os.environ["GW_THEME"] = "alfred"
 m = importlib.reload(main)
@@ -253,13 +274,13 @@ check("/icon.svg est publique, comme le /static/ d'où elle vient",
       "/icon.svg" in m._PUBLIC_PATHS)
 check("le manifeste l'est aussi", "/manifest.webmanifest" in m._PUBLIC_PATHS)
 
-for svg in (m.STATIC_DIR / "icon.svg", m.STATIC_DIR / "skins" / "skippy" / "icon.svg"):
+for svg in [m.STATIC_DIR / "icon.svg"] + [m.STATIC_DIR / "skins" / s / "icon.svg" for s in _SKINS]:
     try:
         ElementTree.parse(svg)
         ok = True
     except Exception:
         ok = False
-    check("SVG bien formé : %s" % svg.name if "skins" not in str(svg) else "SVG bien formé : skippy", ok)
+    check("SVG bien formé : %s" % (svg.parent.name if svg.parent.name != "static" else svg.name), ok)
 
 print("\n--- GW_AGENT : l'identité de la surface MCP ---")
 
