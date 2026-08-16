@@ -2,6 +2,25 @@
 
 > MàJ : 2026-08-17
 
+**Lamello en MULTI-VUES — le champ `sur` dit la surface fraisée (0.65.0, 2026-08-17)** :
+demande de Monsieur — des fentes tantôt sur une face, tantôt dans un chant, tantôt de part
+et d'autre, et une seule vue à plat qui ne sait pas le montrer. Une prépa lamello gagne
+**`sur`** (vocabulaire fermé : `face` · `contre-face` · `abouts` · `rive-avant` ·
+`rive-arriere`) ; dès qu'une pièce en déclare un, sa carte passe en **fiche multi-vues** :
+la face au centre, chaque surface fendue **rabattue** en projection alignée (bandes d'about
+à g./d. — `abouts[]` choisit le bout —, rives dessus/dessous, contre-face en dessous **par
+transparence**, même orientation donc mêmes cotes). **Tout à l'échelle commune, jamais de
+zoom local** (principe imposé par Monsieur : un plan se vérifie parce que tout s'y mesure
+pareil) — le viewBox garde une largeur commune avec réserve latérale GLOBALE pour les
+bandes ; dans une bande d'épaisseur la fente est un **trait d'axe**, la vérité est dans les
+cotes écrites, partagées entre les vues alignées. Une prépa sans `sur` garde la carte à
+plat historique (les deux régimes cohabitent, migration au fil de l'eau). Fiche pièce :
+`(sur …)` dans les préparations. Contrat + validateur à jour. Vérifié à l'œil : LAME
+(abouts seuls, face nue), SEMELLE (face + contre-face démo, cotes partagées 10·128·246·364…),
+LISSE (face), et le livre sans `sur` rend comme avant. C'est ce chantier que la remarque
+« on fait des plans, pas du dessin d'art » a cadré : l'idée initiale d'un zoom local sur
+les abouts est morte, et c'est tant mieux.
+
 **Les CHANTS, enfin lus — `chants[]` remplace `couleur` (0.64.0, 2026-08-17)** : troisième
 lecture, la bonne, confirmée par Monsieur — « pas tout le contour, uniquement le côté avec
 un chant ». Sa demande d'origine (« les cotes avec des champs ») disait « les CÔTÉS avec des

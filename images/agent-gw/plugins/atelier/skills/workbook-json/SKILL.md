@@ -89,9 +89,21 @@ politique) ; `chants[]` est la vérité pièce par pièce.
 ### ⚠️ Préparation `lamello` — la convention d'axes, et le piège
 
 ```json
-{ "type": "lamello", "ref": {"long": …, "trav": …}, "abouts": [a1, a2],
+{ "type": "lamello", "sur": "face", "ref": {"long": …, "trav": …}, "abouts": [a1, a2],
   "connecteurs": [{ "t": "tenso|biscuit", "w": … }], "note": "…" }
 ```
+
+**`sur` — la surface fraisée** (optionnel, vocabulaire FERMÉ) : `face` · `contre-face` ·
+`abouts` · `rive-avant` · `rive-arriere`. Dès qu'une prépa d'une pièce le déclare, la vue
+Lamello passe en **fiche multi-vues** pour cette pièce : la face au centre, chaque surface
+fendue **rabattue** autour en projection alignée — bande d'about à gauche/droite (l'`abouts[]`
+choisit le bout : `0` → gauche, `≈longueur` → droite), rive au-dessus/dessous, contre-face en
+dessous **par transparence** (même orientation, mêmes cotes). **Tout à l'échelle commune,
+jamais de zoom local** : dans une bande d'épaisseur la fente est un trait d'axe, et la
+vérification passe par les cotes écrites, mesurées depuis les mêmes références dans toutes
+les vues — on fait des plans, pas du dessin d'art. C'est le seul moyen d'écrire « fentes de
+part et d'autre » (`face` + `contre-face`) : sans `sur`, la donnée ne sait pas le dire, et la
+pièce garde sa carte à plat historique (migration au fil de l'eau).
 
 - **`connecteurs[].w` est une cote le long de la PROFONDEUR** (la `longueur` de la
   pièce), mesurée depuis le bord AVANT. **Jamais** le long de la largeur.

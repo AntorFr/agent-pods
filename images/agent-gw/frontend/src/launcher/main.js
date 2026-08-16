@@ -2197,27 +2197,117 @@ function renderRainurage(body, st) {
   body.innerHTML = html;
   body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
 }
-// Vue LAMELLO (station Zeta P2) : pièces regroupées par implantation, schéma des positions
-// le long de la pièce (côtés : niveaux depuis le bas ; horizontaux : abouts), à l'échelle.
-// Vue LAMELLO — plan d'archi À L'ÉCHELLE (échelle unique S px/mm). Chaque connecteur = une
-// fente localisée (● Tenso, ◆ biscuit), cotée : hauteur depuis le BAS, travers depuis l'AVANT.
-// Côtés dessinés verticaux (hauteurs qui montent) ; horizontaux couchés (abouts aux bouts).
+// Vue LAMELLO (station Zeta P2) — plan par pièce, TOUT à l'échelle commune S2 : un plan se
+// vérifie parce que tout s'y mesure pareil, JAMAIS de zoom local. Deux régimes :
+//  • une prépa déclare `sur` (face / contre-face / abouts / rive-avant / rive-arriere) →
+//    fiche MULTI-VUES par pièce : la face au centre, chaque surface fendue RABATTUE autour
+//    en projection alignée (axes partagés — une position se suit à la règle d'une vue à
+//    l'autre). Dans une bande d'épaisseur le glyphe ne tient pas : la fente y est un TRAIT
+//    D'AXE, et la vérité est dans les cotes écrites, mesurées depuis les mêmes références.
+//  • aucune prépa ne déclare `sur` (l'existant) → carte à plat historique, par prépa.
+const LAM_SURS = ['face', 'contre-face', 'abouts', 'rive-avant', 'rive-arriere'];
+const pieceEp = (p) => p.ep || (wb.matById.get((wb.pieceStep.get(p.etiquette) || {}).materiau) || {}).ep || 19;
 function renderLamello(body, st) {
-  const groups = new Map();
-  for (const p of wb.data.pieces || []) if (stModOk(st, p.module)) for (const pr of p.preparations || []) if (pr.type === 'lamello') {
-    const sig = JSON.stringify({ n: pr.niveaux, a: pr.abouts, c: pr.connecteurs, L: p.longueur, l: p.largeur, rep: p.role === 'CÔTÉ' ? p.repere : 0 });
-    if (!groups.has(sig)) groups.set(sig, { p0: p, pr, pieces: [] });
-    groups.get(sig).pieces.push(p);
+  const legacy = new Map(), multi = new Map();
+  for (const p of wb.data.pieces || []) {
+    if (!stModOk(st, p.module)) continue;
+    const preps = (p.preparations || []).filter((pr) => pr.type === 'lamello');
+    if (!preps.length) continue;
+    if (preps.some((pr) => LAM_SURS.includes(pr.sur))) {
+      // fiche PAR PIÈCE : toutes ses surfaces ensemble (jumelles = même jeu complet de prépas)
+      const sig = JSON.stringify({ L: p.longueur, l: p.largeur, e: pieceEp(p), pr: preps, rep: p.role === 'CÔTÉ' ? p.repere : 0 });
+      if (!multi.has(sig)) multi.set(sig, { p0: p, preps, pieces: [] });
+      multi.get(sig).pieces.push(p);
+    } else for (const pr of preps) {
+      const sig = JSON.stringify({ n: pr.niveaux, a: pr.abouts, c: pr.connecteurs, L: p.longueur, l: p.largeur, rep: p.role === 'CÔTÉ' ? p.repere : 0 });
+      if (!legacy.has(sig)) legacy.set(sig, { p0: p, pr, pieces: [] });
+      legacy.get(sig).pieces.push(p);
+    }
   }
-  if (!groups.size) { body.innerHTML = '<div class="empty">Aucun lamello.</div>'; return; }
-  // MÊME format que Plaques/Tronçons : pièce HORIZONTALE, échelle commune S2, remplit la largeur.
-  const S2 = 0.33, padL = 50, padR = 14, padT = 24;   // padL large : les cotes de travers décalées ne doivent pas être coupées
-  const W = Math.max(...[...groups.values()].map((g) => g.p0.longueur || 1)) * S2 + padL + padR;
+  if (!legacy.size && !multi.size) { body.innerHTML = '<div class="empty">Aucun lamello.</div>'; return; }
+  // MÊME format que Plaques/Tronçons : pièce HORIZONTALE, échelle commune S2, et un viewBox
+  // de largeur COMMUNE à toutes les cartes (même largeur affichée ⇒ même px/mm partout).
+  const S2 = 0.33, padL = 50, padR = 14, padT = 24, gap = 8;   // padL large : cotes de travers décalées
+  const all = [...multi.values(), ...legacy.values()];
+  // réserve latérale pour les bandes d'about — GLOBALE, sinon l'échelle bougerait d'une carte à l'autre
+  const ext = [...multi.values()].some((g) => g.preps.some((pr) => pr.sur === 'abouts'))
+    ? Math.max(...[...multi.values()].map((g) => pieceEp(g.p0))) * S2 + gap : 0;
+  const W = Math.max(...all.map((g) => g.p0.longueur || 1)) * S2 + padL + padR + 2 * ext;
   const mk = (x, y, t) => t === 'biscuit'
     ? `<path d="M${x} ${y - 4.5} L${x + 4.5} ${y} L${x} ${y + 4.5} L${x - 4.5} ${y} Z" fill="var(--warn)" stroke="var(--warn)" stroke-width="1"/>`
     : `<circle cx="${x}" cy="${y}" r="3.6" fill="var(--shop)" fill-opacity=".45" stroke="var(--shop)" stroke-width="1.4"/>`;
-  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>à l'échelle</b> (même format que Plaques/Tronçons). Connecteur coté : longueur depuis la <b>gauche (bas)</b>, travers depuis le <b>haut (avant)</b>. <span style="color:var(--shop)">●</span> Tenso · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond. <i>Positions Tenso proposées — à valider.</i></div>`;
-  for (const g of groups.values()) {
+  const chipsOf = (pieces) => pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
+  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>tout à la même échelle</b> — y compris les bandes d'épaisseur (about, rive), rabattues en projection alignée : la fente y est un trait, la cote fait foi. Connecteur coté : longueur depuis la <b>gauche (bas)</b>, travers depuis le <b>haut (avant)</b>. <span style="color:var(--shop)">●</span> Tenso/Clamex · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond.</div>`;
+  // ——— fiches multi-vues (prépas avec `sur`) ———
+  const SURLBL = { face: 'face', 'contre-face': 'contre-face', abouts: 'abouts', 'rive-avant': 'rive av.', 'rive-arriere': 'rive ar.' };
+  for (const g of multi.values()) {
+    const { p0, preps } = g, len = p0.longueur || 0, larg = p0.largeur || 0, ep = pieceEp(p0);
+    const isCote = p0.role === 'CÔTÉ';
+    const bh = larg * S2, es = Math.max(ep * S2, 4);
+    // fentes par surface, en mm dans le repère de la FACE (x = longueur, y = largeur/travers)
+    const M = { face: [], contre: [], aG: [], aD: [], rAv: [], rAr: [] }, surs = [];
+    for (const pr of preps) {
+      const sur = LAM_SURS.includes(pr.sur) ? pr.sur : 'face';
+      if (!surs.includes(sur)) surs.push(sur);
+      if (sur === 'face' || sur === 'contre-face') {
+        const dst = sur === 'face' ? M.face : M.contre;
+        if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs || []) dst.push({ x: n.h, y: c.w, t: c.t });
+        else for (const a of pr.abouts || []) for (const c of pr.connecteurs || []) dst.push(isCote ? { x: a, y: c.w, t: c.t } : { x: c.w, y: a, t: c.t });
+      } else if (sur === 'abouts') {
+        // `abouts[]` choisit le bout (0 → gauche, ≈longueur → droite) ; w court le long de la largeur
+        for (const a of pr.abouts || []) { const dst = a <= len / 2 ? M.aG : M.aD; for (const c of pr.connecteurs || []) dst.push({ y: c.w, t: c.t }); }
+      } else {
+        const dst = sur === 'rive-avant' ? M.rAv : M.rAr;
+        if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs || []) dst.push({ x: n.h, t: c.t });
+        else for (const c of pr.connecteurs || []) dst.push({ x: c.w, t: c.t });
+      }
+    }
+    const topE = M.rAv.length ? es + gap : 0;
+    const coteBase = bh + (M.rAr.length ? es + gap : 0);   // les cotes x passent SOUS la rive arrière
+    const hasContre = M.contre.length > 0;
+    const yC = coteBase + 38;                              // origine de la contre-face (sous les cotes)
+    const Hc = padT + topE + (hasContre ? yC + bh + 12 : coteBase + 30);
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(Hc)}" style="max-width:100%;height:auto"><g transform="translate(${padL + ext},${padT + topE})">`;
+    // la FACE — le repère commun : tout le reste se rabat autour d'elle, axes partagés
+    svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
+    svg += `<text x="3" y="10" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">face</text>`;
+    const rain = (p0.preparations || []).find((x) => x.type === 'rainure');
+    if (rain) {
+      const roff = +((String(rain.pos).match(/(\d+)\s*mm/) || [])[1]) || 10;
+      const rwd = +((String(rain.cotes).match(/largeur\s*(\d+)/) || [])[1]) || 8;
+      const gy = bh - (roff + rwd) * S2;
+      svg += `<rect x="0" y="${gy}" width="${len * S2 - roff * S2}" height="${Math.max(rwd * S2, 2)}" fill="var(--proj)" fill-opacity=".6" stroke="var(--proj)" stroke-width="1"/>`;
+    }
+    for (const c of M.face) svg += mk(c.x * S2, c.y * S2, c.t);
+    // bandes d'about rabattues (axe largeur partagé) — la fente est un trait qui traverse
+    const strip = (x0, marks) => { let s = `<rect x="${x0}" y="0" width="${es}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) s += `<line x1="${x0}" y1="${(m.y * S2).toFixed(1)}" x2="${x0 + es}" y2="${(m.y * S2).toFixed(1)}" stroke="var(--shop)" stroke-width="2"/>`; return s; };
+    if (M.aG.length) svg += strip(-gap - es, M.aG) + `<text x="${-gap - es}" y="-4" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">ab. G</text>`;
+    if (M.aD.length) svg += strip(len * S2 + gap, M.aD) + `<text x="${len * S2 + gap + es}" y="-4" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">ab. D</text>`;
+    // rives rabattues (axe longueur partagé)
+    const rive = (y0, marks) => { let s = `<rect x="0" y="${y0}" width="${len * S2}" height="${es}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) s += `<line x1="${(m.x * S2).toFixed(1)}" y1="${y0}" x2="${(m.x * S2).toFixed(1)}" y2="${y0 + es}" stroke="var(--shop)" stroke-width="2"/>`; return s; };
+    if (M.rAv.length) svg += rive(-gap - es, M.rAv) + `<text x="2" y="${-gap - es - 3}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">rive av.</text>`;
+    if (M.rAr.length) svg += rive(bh + gap, M.rAr) + `<text x="2" y="${bh + gap + es + 9}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">rive ar.</text>`;
+    // contre-face — dessinée PAR TRANSPARENCE (même orientation) : les cotes se lisent pareil
+    if (hasContre) {
+      svg += `<rect x="0" y="${yC}" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5" stroke-dasharray="6 3"/>`;
+      svg += `<text x="3" y="${yC + 10}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">contre-face (par transparence)</text>`;
+      for (const c of M.contre) svg += mk(c.x * S2, yC + c.y * S2, c.t);
+    }
+    // cotes écrites — l'axe x sous l'ensemble, l'axe y au-delà de la bande gauche : les MÊMES
+    // références servent toutes les vues alignées (c'est ça qui rend le plan vérifiable)
+    const xs = [...new Set([...M.face, ...M.contre, ...M.rAv, ...M.rAr].filter((m) => m.x != null).map((m) => m.x))].sort((a, b) => a - b);
+    const ys = [...new Set([...M.face, ...M.contre, ...M.aG, ...M.aD].filter((m) => m.y != null).map((m) => m.y))].sort((a, b) => a - b);
+    svg += `<line x1="0" y1="${coteBase + 7}" x2="${len * S2}" y2="${coteBase + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    for (const xv of xs) { const x = xv * S2; svg += `<line x1="${x}" y1="${coteBase + 4}" x2="${x}" y2="${coteBase + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${coteBase + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${xv}</text>`; }
+    const lx0 = -(M.aG.length ? es + gap : 0) - 9;
+    svg += `<line x1="${lx0}" y1="0" x2="${lx0}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    ys.forEach((wv, i) => { const y = wv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); svg += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${wv}</text>`; });
+    svg += `<text x="${lx0 + 3}" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">${isCote ? 'avant↓' : 'largeur↓'}</text>`;
+    svg += `</g></svg>`;
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role)} · ${len} × ${larg} mm</b><span>${surs.map((s) => esc(SURLBL[s])).join(' + ')} · ×${g.pieces.length}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chipsOf(g.pieces)}</div></div></div>`;
+  }
+  // ——— cartes à plat historiques (prépas sans `sur`) ———
+  for (const g of legacy.values()) {
     const { p0, pr } = g, len = p0.longueur, larg = p0.largeur;
     const bh = larg * S2, botC = 30;
     // Axes selon le RÔLE (cf. contrat) : la barre a x = longueur (= profondeur d'un horizontal), y = largeur.
@@ -2498,7 +2588,7 @@ function showPiece(etq) {
     <div class="prow"><b>Matière</b><span>${esc(mat.label || loc.materiau || '—')}</span></div>
     <div class="prow"><b>Colonne</b><span>${esc(step?.entree || '?')} · plaque ${esc(loc.plaque || '?')}</span></div>
     ${sibs.length > 1 ? `<div class="prow"><b>Tronçons</b><span>${sibs.map(esc).join(' · ')}</span></div>` : ''}
-    ${(p.preparations || []).length ? `<div class="prow"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
+    ${(p.preparations || []).length ? `<div class="prow"><b>Préparations</b><span>${p.preparations.map((pr) => esc(`${pr.type}${pr.sur ? ' (sur ' + pr.sur + ')' : ''} ${pr.cotes || ''} ${pr.pos || ''}`)).join('<br>')}</span></div>` : ''}
     ${p.placeAssemblage ? `<div class="prow"><b>Assemblage</b><span>${esc(p.placeAssemblage)}</span></div>` : ''}`;
   const actions = document.createElement('div'); actions.className = 'actions';
   if (stepId) {
