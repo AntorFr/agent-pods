@@ -2,6 +2,20 @@
 
 > MàJ : 2026-08-17
 
+**Workbook — la barre de stations se déclare (0.62.0, 2026-08-17)** : demande de Monsieur —
+la barre `Plaques → Tronçons → … → Suivi` était codée en dur ; il la veut dynamique, chaque
+type **zéro ou plusieurs fois**, dans l'ordre du vrai atelier. Nouveau champ racine optionnel
+**`stations[]`** : `{type, titre?, plaques?|modules?}` — vocabulaire fermé des six types,
+`titre` pour distinguer les doublons (« Tronçons CP » / « Tronçons MDF »), portée `plaques`
+sur debit/tronconnage et `modules` sur rainure/lamello/assemblage (une scène sans `module`
+n'apparaît que dans une station non scopée — on ne devine pas). `wbTab` passe de type à
+**index**, remis à zéro au changement de livre. **Sans `stations[]`** : barre dérivée —
+l'ordre historique **moins les stations sans contenu** (le claustra perd son onglet Rainures
+vide). La progression d'en-tête et le Mode atelier ne bougent pas (étapes du débit). Contrat
+dans `atelier:workbook-json`, validateur du workspace étendu (types, portées, références).
+Vérifié à l'œil : montage local, barre déclarée avec Tronçons en double (« Tronçons lames » /
+« Structure ») + barre dérivée du claustra d'origine, captures + dump des onglets.
+
 **Workbook — cotes mises en évidence par `couleur` (0.61.0, 2026-08-17)** : demande de
 Monsieur — pouvoir afficher certaines cotes dans une autre couleur, au premier chef à
 l'étape Tronçons. Une pose de tronçonnage gagne un champ **`couleur`** optionnel, le

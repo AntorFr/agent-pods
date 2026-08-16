@@ -22,7 +22,40 @@ JSON.**
 ## Racine
 
 `schemaVersion` (`"2.0"`), `projet` (trigramme), `titre`, `note`, `materiaux[]`, `meta`,
-`pieces[]`, `debit[]`, `assemblage[]`.
+`pieces[]`, `debit[]`, `assemblage[]`, `stations[]` (optionnel).
+
+## `stations[]` — la barre du workbook, déclarée
+
+La barre d'onglets n'est plus figée : **`stations[]` la déclare**, dans l'ordre du fichier —
+chaque type **zéro, une ou plusieurs fois**. C'est toi qui écris l'ordre réel de l'atelier.
+
+```json
+"stations": [
+  { "type": "debit", "titre": "Plaques CP", "plaques": ["P1", "P2"] },
+  { "type": "tronconnage", "titre": "Tronçons CP", "plaques": ["P1", "P2"] },
+  { "type": "rainure" },
+  { "type": "lamello", "modules": ["B1"] },
+  { "type": "assemblage", "modules": ["B1", "B2"] },
+  { "type": "suivi" }
+]
+```
+
+- **`type`** — vocabulaire FERMÉ : `debit` · `tronconnage` · `rainure` · `lamello` ·
+  `assemblage` · `suivi`. Inconnu → station ignorée en silence.
+- **`titre`** (optionnel) — le libellé de l'onglet ; défaut : Plaques / Tronçons / Rainures /
+  Lamello / Assemblage / Suivi. Indispensable quand un type revient deux fois (« Tronçons
+  CP » / « Tronçons MDF »).
+- **Portée** (optionnelle) — ce que l'instance montre : **`plaques: [ids]`** pour `debit` et
+  `tronconnage` ; **`modules: [ids]`** pour `rainure`, `lamello` (filtre les pièces par leur
+  `module`) et `assemblage` (filtre les entrées par leur `module` — une scène du contrat
+  ouvert **sans** champ `module` n'apparaît que dans une station non scopée). Absente → tout.
+- `suivi` est toujours global. La progression d'en-tête et le Mode atelier ne dépendent pas
+  des stations : ils suivent les étapes du débit, comme avant.
+
+**Sans `stations[]`** (tous les workbooks existants) : barre **dérivée** — l'ordre historique
+Plaques → Tronçons → Rainures → Lamello → Assemblage → Suivi, **moins les stations sans
+contenu** (pas de rainure dans le projet ⇒ pas d'onglet Rainures). Déclare `stations[]` dès
+que l'ordre réel s'écarte de ça, pas pour reproduire le défaut.
 
 **`meta`** : `matiere`, `decorUni`, `sensFil`, `plaque` (ex. `"2800 × 2070 mm"` — sert de
 cadre au dessin de débit), `kerf` (mm), `chant`, `installation`.

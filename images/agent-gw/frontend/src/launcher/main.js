@@ -1880,7 +1880,7 @@ async function renderPlanif() {
 
 /* ── App Atelier / workbook menuiserie (port de l'ancienne UI) ───── */
 let wb = null;       // {path, data, state, byEtq}
-let wbTab = 'debit';
+let wbTab = 0;       // index dans wbStations() — la barre est propre à chaque workbook
 const wbDone = (id) => !!(wb.state.fait || {})[id];   // id = identifiant d'ÉTAPE (modèle A)
 const pieceDims = (p) => `${p.longueur}×${p.largeur}`;
 
@@ -1926,6 +1926,7 @@ async function renderWorkbook(path) {
     if (!rd.ok) throw new Error(rd.status);
     data = await rd.json(); state = await rs.json();
   } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
+  if (!wb || wb.path !== path) wbTab = 0;   // autre workbook = autre barre, l'index ne se transpose pas
   wb = { path, data, state, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
   buildWbIndex();
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: data.titre || data.projet || 'Workbook', hash: '#/atelier/' + encodeURIComponent(path) }]);
@@ -1952,25 +1953,49 @@ function buildWbIndex() {
     }
   }
 }
+// La barre de stations. DÉCLARÉE par Alfred (`stations[]` à la racine : ordre libre, zéro ou
+// plusieurs fois chaque type, `titre` et portée optionnels) ; à défaut, DÉRIVÉE — la barre
+// historique, moins les stations sans contenu (« zéro fois » sans rien déclarer). Le type est
+// un vocabulaire fermé : inconnu → station ignorée, on ne dessine pas un onglet mort.
+const ST_LABELS = { debit: 'Plaques', tronconnage: 'Tronçons', rainure: 'Rainures', lamello: 'Lamello', assemblage: 'Assemblage', suivi: 'Suivi' };
+function wbStations() {
+  const d = wb.data;
+  const declared = (Array.isArray(d.stations) ? d.stations : []).filter((s) => s && ST_LABELS[s.type]);
+  if (declared.length) return declared.map((s) => ({ ...s, titre: s.titre || ST_LABELS[s.type] }));
+  const hasPrep = (t) => (d.pieces || []).some((p) => (p.preparations || []).some((pr) => pr.type === t));
+  const out = [];
+  if ((d.debit || []).length) out.push({ type: 'debit' }, { type: 'tronconnage' });
+  if (hasPrep('rainure')) out.push({ type: 'rainure' });
+  if (hasPrep('lamello')) out.push({ type: 'lamello' });
+  if ((d.assemblage || []).length) out.push({ type: 'assemblage' });
+  out.push({ type: 'suivi' });
+  return out.map((s) => ({ ...s, titre: ST_LABELS[s.type] }));
+}
+// Portée d'une station : `plaques` restreint le débit (Plaques/Tronçons), `modules` les
+// pièces (Rainures/Lamello) et les entrées d'assemblage. Absente → tout, comme avant.
+const stPlaques = (st) => { const all = wb.data.debit || []; return Array.isArray(st?.plaques) && st.plaques.length ? all.filter((pl) => st.plaques.includes(pl.plaque)) : all; };
+const stModOk = (st, m) => !(Array.isArray(st?.modules) && st.modules.length) || st.modules.includes(m);
 function renderWb() {
   const d = wb.data;
   const total = (wb.steps || []).length;
   const done = (wb.steps || []).filter((s) => wbDone(s.id)).length;
   const pct = total ? Math.round(100 * done / total) : 0;
-  const tabs = [['debit', 'Plaques'], ['tronconnage', 'Tronçons'], ['rainure', 'Rainures'], ['lamello', 'Lamello'], ['assemblage', 'Assemblage'], ['suivi', 'Suivi']];
+  const stations = wbStations();
+  if (wbTab >= stations.length) wbTab = 0;
+  const cur = stations[wbTab] || { type: 'suivi', titre: 'Suivi' };
   page.innerHTML = `<div class="wrap" style="--dc:var(--shop)">
     <div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} étapes</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
     <div class="prog"><i style="width:${pct}%"></i></div>
-    <div class="wbtabs">${tabs.map(([id, l]) => `<button class="wbtab${wbTab === id ? ' on' : ''}" data-w="${id}">${l}</button>`).join('')}</div>
+    <div class="wbtabs">${stations.map((s, i) => `<button class="wbtab${wbTab === i ? ' on' : ''}" data-w="${i}">${esc(s.titre)}</button>`).join('')}</div>
     <div id="wbbody"></div></div>`;
   const body = $('wbbody');
-  if (wbTab === 'debit') renderDebit(body);
-  else if (wbTab === 'tronconnage') renderTronconnage(body);
-  else if (wbTab === 'rainure') renderRainurage(body);
-  else if (wbTab === 'lamello') renderLamello(body);
-  else if (wbTab === 'assemblage') renderAsm(body);
+  if (cur.type === 'debit') renderDebit(body, cur);
+  else if (cur.type === 'tronconnage') renderTronconnage(body, cur);
+  else if (cur.type === 'rainure') renderRainurage(body, cur);
+  else if (cur.type === 'lamello') renderLamello(body, cur);
+  else if (cur.type === 'assemblage') renderAsm(body, cur);
   else renderSuivi(body);
-  page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = t.dataset.w; renderWb(); }));
+  page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = +t.dataset.w; renderWb(); }));
   $('shopmode').addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
 }
 
@@ -2059,8 +2084,8 @@ function plaqueSVG(pl, refL) {
   const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
   return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
 }
-function renderDebit(body) {
-  const plaques = wb.data.debit || [];
+function renderDebit(body, st) {
+  const plaques = stPlaques(st);
   if (!plaques.length) { body.innerHTML = '<div class="empty">Pas de plan de débit.</div>'; return; }
   const refL = Math.max(...plaques.map((pl) => (wb.matById.get(pl.materiau)?.plaque?.l) || 2800));
   body.innerHTML = plaques.map((pl) => {
@@ -2076,10 +2101,10 @@ function renderDebit(body) {
 // colonnes identiques (même largeur + mêmes longueurs de tronçons) → une bande horizontale
 // cotée par type, avec la longueur de chaque tronçon ET la position de coupe cumulée (butée),
 // et une pastille cochable par colonne (= son tronçonnage fait).
-function renderTronconnage(body) {
+function renderTronconnage(body, st) {
   const troncon = wb.data.meta?.tronconnage || 10;
   const groups = new Map();
-  for (const pl of wb.data.debit || []) {
+  for (const pl of stPlaques(st)) {
     const bandW = {};
     for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bandW[b.id] = b.largeur;
     for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
@@ -2133,9 +2158,9 @@ function renderTronconnage(body) {
 }
 // Vue RAINURAGE (station) : pièces rainurées regroupées par réglage, schéma coté de la
 // rainure (section + position), pastille cochable par pièce (clé synthétique rainure-<étq>).
-function renderRainurage(body) {
+function renderRainurage(body, st) {
   const groups = new Map();
-  for (const p of wb.data.pieces || []) for (const pr of p.preparations || []) if (pr.type === 'rainure') {
+  for (const p of wb.data.pieces || []) if (stModOk(st, p.module)) for (const pr of p.preparations || []) if (pr.type === 'rainure') {
     const sig = (pr.pos || '') + '|' + (pr.cotes || '');
     if (!groups.has(sig)) groups.set(sig, { pos: pr.pos || '', cotes: pr.cotes || '', pieces: [] });
     groups.get(sig).pieces.push(p);
@@ -2166,9 +2191,9 @@ function renderRainurage(body) {
 // Vue LAMELLO — plan d'archi À L'ÉCHELLE (échelle unique S px/mm). Chaque connecteur = une
 // fente localisée (● Tenso, ◆ biscuit), cotée : hauteur depuis le BAS, travers depuis l'AVANT.
 // Côtés dessinés verticaux (hauteurs qui montent) ; horizontaux couchés (abouts aux bouts).
-function renderLamello(body) {
+function renderLamello(body, st) {
   const groups = new Map();
-  for (const p of wb.data.pieces || []) for (const pr of p.preparations || []) if (pr.type === 'lamello') {
+  for (const p of wb.data.pieces || []) if (stModOk(st, p.module)) for (const pr of p.preparations || []) if (pr.type === 'lamello') {
     const sig = JSON.stringify({ n: pr.niveaux, a: pr.abouts, c: pr.connecteurs, L: p.longueur, l: p.largeur, rep: p.role === 'CÔTÉ' ? p.repere : 0 });
     if (!groups.has(sig)) groups.set(sig, { p0: p, pr, pieces: [] });
     groups.get(sig).pieces.push(p);
@@ -2363,8 +2388,10 @@ function renderScenes(body, scenes) {
     if (cur) { cur.classList.add('active'); asmHi(bp, (cur.dataset.cible || '').split(',').filter(Boolean)); }
   });
 }
-function renderAsm(body) {
-  const items = wb.data.assemblage || [];
+function renderAsm(body, st) {
+  // Portée par module ; une scène (contrat ouvert) sans champ `module` n'appartient
+  // qu'aux stations non scopées — on ne devine pas à qui elle est.
+  const items = (wb.data.assemblage || []).filter((x) => x && stModOk(st, x.module));
   const scenes = items.filter((x) => x && (x.noeuds || x.cadre));   // contrat ouvert v0.1
   if (scenes.length) return renderScenes(body, scenes);
   const mods = items;
