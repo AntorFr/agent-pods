@@ -65,7 +65,7 @@ en **positions absolues sur la plaque brute**.
 
 - `derasage`
 - `refente` : `{ entree, sens, bandes: [{ id, largeur, x, y, longueur }] }`
-- `tronconnage` : `{ entree, pieces: [{ etiquette, x, y, rot? }] }`
+- `tronconnage` : `{ entree, pieces: [{ etiquette, x, y, rot?, couleur? }] }`
 
 `x`/`y` sont **absolus sur la plaque brute**, origine au coin haut-gauche : `x` le long de
 `materiaux[].plaque.l`, `y` le long de `.h`.
@@ -84,6 +84,16 @@ donc pas un choix de dessin, mais ce que la bande va devenir.
 **`rot` sur une pose de tronçonnage** : `true` tourne la pièce d'un quart de tour — elle
 occupe `longueur` en **x** et `largeur` en **y** (absent ou `false` : `largeur` en x,
 `longueur` en y). Sert à coucher une pièce plus profonde que la bande pour qu'elle y tienne.
+
+**`couleur` sur une pose de tronçonnage** (optionnel) : met les **cotes** de ce tronçon en
+évidence — la cote de longueur dans la vue Tronçons, la cote sous le nom dans la vue Débit,
+la longueur dans la fiche colonne. Vocabulaire **FERMÉ**, les douze teintes des fiches :
+`rouge` · `orange` · `ambre` · `vert` · `emeraude` · `turquoise` · `bleu` · `indigo` ·
+`violet` · `rose` · `gris` · `ardoise` — **jamais un hexa**, hors liste → ignoré en silence
+(repli encre sourde). Purement visuel : signaler une cote à vérifier sur place, une coupe
+critique — le front n'en déduit **rien**, c'est toi qui portes le pourquoi dans la fiche du
+projet. Deux colonnes par ailleurs identiques ne se **regroupent pas** si leurs couleurs
+diffèrent : le marquage est une différence réelle à l'établi.
 
 ⚠️ **`rot` et `sens` sont INDÉPENDANTS et se combinent.** `sens` oriente la **bande**
 (géométrie de la colonne) ; `rot` oriente **une pièce** dans sa bande. Les `x`/`y` d'une pose

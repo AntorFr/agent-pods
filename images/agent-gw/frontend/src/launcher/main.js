@@ -1984,7 +1984,10 @@ function poseRect(pose) {                     // empreinte (mm) d'une pose depui
   const p = wb.byEtq.get(pose.etiquette) || {};
   const w = pose.rot ? p.longueur : p.largeur;
   const h = pose.rot ? p.largeur : p.longueur;
-  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0 };
+  // `couleur` (optionnelle sur une pose de tronçonnage) met les COTES de ce tronçon en
+  // évidence, partout où elles se dessinent. Même vocabulaire fermé que les fiches (HUES,
+  // douze teintes) : jamais d'hexa, hors liste → repli encre sourde sans rien interpoler.
+  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0, hue: HUES[pose.couleur] || '' };
 }
 function plaqueSVG(pl, refL) {
   const mat = wb.matById.get(pl.materiau) || {};
@@ -2026,7 +2029,8 @@ function plaqueSVG(pl, refL) {
       const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
       g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${cc}" stroke-width="1" stroke-opacity=".45"/>`;
       g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
-      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
+      const dk = !done && r.hue ? `var(--${r.hue})` : 'var(--ink-faint)';   // cote teintée — sauf débité : le signal a servi
+      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="${dk}" font-family="var(--f-mono)" font-size="9"${!done && r.hue ? ' font-weight="700"' : ''}>${pc.longueur}×${pc.largeur}</text>`;
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
     }
     // Cotes façon plan — l'axe suit le SENS : id + LARGEUR sur l'arête courte, LONGUEUR (flèches) sur l'axe long.
@@ -2080,8 +2084,10 @@ function renderTronconnage(body) {
     for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bandW[b.id] = b.largeur;
     for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
       const largeur = bandW[st.entree] || 0;
-      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '' }; });
-      const sig = largeur + '|' + troncs.map((t) => t.longueur).join('-');
+      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '', hue: HUES[po.couleur] || '' }; });
+      // la couleur entre dans la signature : une colonne à cote marquée ne se fond pas
+      // dans ses jumelles non marquées (le marquage est une différence réelle à l'établi)
+      const sig = largeur + '|' + troncs.map((t) => t.longueur + (t.hue ? ':' + t.hue : '')).join('-');
       if (!groups.has(sig)) groups.set(sig, { largeur, troncs, colonnes: [] });
       groups.get(sig).colonnes.push({ id: pl.plaque + st.entree.split('-').pop(), stepId: st.id, done: wbDone(st.id), etqs: troncs.map((t) => t.et) });
     }
@@ -2109,10 +2115,11 @@ function renderTronconnage(body) {
       svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
       // NOM de la pièce seul au centre (cliquable)
       svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
-      // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse
-      const cy = bh + 15;
-      svg += `<line x1="${x + 2}" y1="${cy}" x2="${x + w - 2}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + 2}" y1="${cy - 3}" x2="${x + 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + w - 2}" y1="${cy - 3}" x2="${x + w - 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${t.longueur} mm</text>`;
+      // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse.
+      // `couleur` sur la pose → ligne + valeur teintées et graissées, au lieu de l'encre sourde.
+      const cy = bh + 15, ck = t.hue ? `var(--${t.hue})` : 'var(--ink-soft)';
+      svg += `<line x1="${x + 2}" y1="${cy}" x2="${x + w - 2}" y2="${cy}" stroke="${ck}" stroke-width="1"/><line x1="${x + 2}" y1="${cy - 3}" x2="${x + 2}" y2="${cy + 3}" stroke="${ck}" stroke-width="1"/><line x1="${x + w - 2}" y1="${cy - 3}" x2="${x + w - 2}" y2="${cy + 3}" stroke="${ck}" stroke-width="1"/>`;
+      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="${ck}" font-family="var(--f-mono)" font-size="9"${t.hue ? ' font-weight="700"' : ''}>${t.longueur} mm</text>`;
       x += w;
       if (i < g.troncs.length - 1) x += troncon * S2;
     }
@@ -2419,13 +2426,13 @@ function showColonne(bandId) {
   const { plaque, mat, band, troncStep } = f;
   const stepId = troncStep && troncStep.id;
   const on = stepId ? wbDone(stepId) : false;
-  const troncs = ((troncStep && troncStep.pieces) || []).map((pose) => { const p = wb.byEtq.get(pose.etiquette) || {}; return { et: pose.etiquette, longueur: p.longueur }; });
+  const troncs = ((troncStep && troncStep.pieces) || []).map((pose) => { const p = wb.byEtq.get(pose.etiquette) || {}; return { et: pose.etiquette, longueur: p.longueur, hue: HUES[pose.couleur] || '' }; });
   const body = pieceModal.querySelector('#piece-body');
   body.innerHTML = `<h2>Colonne ${esc(plaque + bandId.split('-').pop())}</h2>
     <div class="prow"><b>Plaque</b><span>${esc(plaque)}</span></div>
     <div class="prow"><b>Refente</b><span>largeur ${esc(String(band.largeur))} · longueur ${esc(String(Math.round(band.longueur || 0)))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
     <div class="prow"><b>Matière</b><span>${esc(mat.label || '')}</span></div>
-    <div class="prow"><b>Tronçons (${troncs.length})</b><span>${troncs.map((t) => `<button class="lnk" data-piece="${esc(t.et)}" style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit">${esc(t.et.replace(/^[^-]+-/, ''))}</button> <span style="color:var(--ink-faint)">${t.longueur}</span>`).join('<br>')}</span></div>`;
+    <div class="prow"><b>Tronçons (${troncs.length})</b><span>${troncs.map((t) => `<button class="lnk" data-piece="${esc(t.et)}" style="background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit">${esc(t.et.replace(/^[^-]+-/, ''))}</button> <span style="color:${t.hue ? `var(--${t.hue})` : 'var(--ink-faint)'}${t.hue ? ';font-weight:700' : ''}">${t.longueur}</span>`).join('<br>')}</span></div>`;
   const actions = document.createElement('div'); actions.className = 'actions';
   if (stepId) {
     const btn = document.createElement('button');

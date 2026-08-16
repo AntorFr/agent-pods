@@ -1,6 +1,22 @@
 # Status — agent-pods
 
-> MàJ : 2026-08-16
+> MàJ : 2026-08-17
+
+**Workbook — cotes mises en évidence par `couleur` (0.61.0, 2026-08-17)** : demande de
+Monsieur — pouvoir afficher certaines cotes dans une autre couleur, au premier chef à
+l'étape Tronçons. Une pose de tronçonnage gagne un champ **`couleur`** optionnel, le
+**même vocabulaire fermé que les fiches** (les douze teintes, résolues par `HUES` → jetons
+d'app thémés clair/sombre ; jamais d'hexa, hors liste → repli encre sourde). Effet : la
+cote de longueur teintée et graissée dans la vue **Tronçons**, la cote sous le nom dans la
+vue **Débit** (sauf pièce débitée — le signal a servi), la longueur dans la fiche colonne.
+La couleur entre dans la **signature de regroupement** : une colonne marquée ne se fond pas
+dans ses jumelles non marquées. Purement visuel, le front n'en déduit rien — le pourquoi du
+marquage vit dans la fiche projet. Contrat documenté dans `atelier:workbook-json` ;
+validateur du workspace d'Alfred mis à jour (contrôle du vocabulaire). Vérifié à l'œil
+(leçon 0.52.0) : PWA montée en local sur un claustra patché de trois teintes, captures
+headless des deux vues + dump DOM du popup colonne. Au passage, le bundle commité
+`app/static/launcher.js` est **rebuildé depuis les sources** : il rattrape le skin nestor
+de 0.60.0, que le pod avait livré en source sans pouvoir builder.
 
 **Le skin `nestor` existe enfin — ÉCRIT ET VALIDÉ AU BANC, PAS ENCORE PUBLIÉ (2026-08-16)** :
 constat de Monsieur devant sa PWA — « le déploiement de Nestor n'embarque pas son thème, le
