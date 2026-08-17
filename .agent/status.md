@@ -2,6 +2,13 @@
 
 > MàJ : 2026-08-17
 
+**Le demi-millimètre des cotes de scène (0.67.0, 2026-08-17)** : `sceneSVG` arrondissait les
+cotes mesurées au millimètre entier — la colonne de 331,5 du meuble imp3d affichait
+« 332 mm ». Mesure au 0,5 près désormais, virgule française. Déclencheur : la première
+VRAIE scène du contrat ouvert, écrite ce jour pour imp3d (élévation de face, cotes ancrées,
+séquence 8 étapes) — dans la mémoire d'Alfred, commit `memoire:`, pas dans cette image.
+0.66.0 (élévation héritée assagie) n'a jamais été épinglée : on déploie direct en 0.67.0.
+
 **L'élévation héritée cesse de faire du dessin d'art (0.66.0, 2026-08-17)** : signalement de
 Monsieur sur l'Assemblage du workbook imp3d — « des trucs très étranges ». Trois défauts du
 chemin élévation (assemblage sans scène ouverte) : le viewBox se dimensionnait sur le côté du

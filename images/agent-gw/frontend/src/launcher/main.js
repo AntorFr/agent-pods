@@ -2402,7 +2402,8 @@ function sceneSVG(scene) {
     } else if (n.type === 'cote') {
       const a = anc(n.de), b = anc(n.a), off = n.offset == null ? 28 : n.offset;
       const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
-      const dist = Math.round(L), nx = -dy / L, ny = dx / L;
+      // le demi-millimètre existe (une colonne de 331,5) — on mesure au 0,5 près, pas à l'entier
+      const dist = String(Math.round(L * 2) / 2).replace('.', ','), nx = -dy / L, ny = dx / L;
       const a2 = [a[0] + nx * off, a[1] + ny * off], b2 = [b[0] + nx * off, b[1] + ny * off];
       const mx = (a2[0] + b2[0]) / 2, my = (a2[1] + b2[1]) / 2, ang = Math.atan2(dy, dx) * 180 / Math.PI;
       g += `<line x1="${X(a[0])}" y1="${X(a[1])}" x2="${X(a2[0])}" y2="${X(a2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
