@@ -2497,7 +2497,7 @@ function renderAsm(body, st) {
   if (scenes.length) return renderScenes(body, scenes);
   const mods = items;
   if (!mods.length) { body.innerHTML = '<div class="empty">Pas de séquence d’assemblage.</div>'; return; }
-  const S2 = 0.33, padL = 34, padR = 16, padT = 20, botC = 20;   // MÊME format que Plaques/Tronçons
+  const S2 = 0.33, padL = 34, padR = 16, padT = 20, botC = 32;   // MÊME format que Plaques/Tronçons ; botC : 2 rangs de cotes
   const coteOf = (mod) => (wb.data.pieces || []).find((p) => p.role === 'CÔTÉ' && p.module === mod) || { longueur: 1920, largeur: 620 };
   const W = Math.max(...mods.map((m) => coteOf(m.module).longueur || 1)) * S2 + padL + padR;
   const abbr = (s) => String(s || '').replace(/Tenso/g, 'T').replace(/biscuit/g, 'B').replace(/\s*\+\s*/g, '+').replace(/\s+/g, '').trim();
@@ -2505,19 +2505,28 @@ function renderAsm(body, st) {
   for (const m of mods) {
     const c = coteOf(m.module), len = c.longueur, larg = c.largeur, bh = larg * S2;
     const niv = (m.niveaux || []).slice().sort((a, b) => a.h - b.h);
-    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
+    // plafond d'étirement : un petit meuble ne se dessine pas en géant — au plus ×2 du
+    // naturel, la MÊME règle pour toutes les cartes de la vue (W commun ⇒ px/mm commun)
+    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:min(100%,${Math.round(W * 2)}px);height:auto;display:block"><g transform="translate(${padL},${padT})">`;
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".05" stroke="var(--shop)" stroke-width="1.5"/>`;
     svg += `<line x1="0" y1="${bh + 7}" x2="${len * S2}" y2="${bh + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+    let lastX = -1e9, row = 0;
     for (const n of niv) {
       const x = n.h * S2;
+      row = x - lastX < 26 ? 1 - row : 0;   // cotes proches → étagées sur deux rangs, jamais l'une sur l'autre
+      lastX = x;
       svg += `<line x1="${x}" y1="0" x2="${x}" y2="${bh}" stroke="var(--shop)" stroke-width="2"/>`;
-      svg += `<text x="${x}" y="-4" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8">${esc(abbr(n.connecteurs))}</text>`;
-      svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 18}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${n.h}</text>`;
+      const lbl = abbr(n.connecteurs);
+      if (lbl) svg += `<text x="${x}" y="-4" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8">${esc(lbl)}</text>`;
+      svg += `<line x1="${x}" y1="${bh + 4}" x2="${x}" y2="${bh + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${bh + 18 + row * 11}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${n.h}</text>`;
     }
     svg += `</g></svg>`;
+    // les notes de niveaux — le contenu réel quand il n'y a pas de connecteurs : on ne jette rien
+    const notes = niv.filter((n) => n.note);
+    const noteHtml = notes.length ? `<div style="margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--ink-soft)">${notes.map((n) => `<div><b style="font-family:var(--f-mono)">${n.h}</b> — ${esc(n.note)}</div>`).join('')}</div>` : '';
     const seq = (m.sequence || []).map((s) => `<li>${esc(s)}</li>`).join('');
     const dk = 'asm-' + m.module;
-    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(m.titre || m.module)}</b><span>fond ${esc(m.fond || '')}</span></div><div class="cutwrap">${svg}</div><ol style="margin:10px 0 0;padding-left:20px;font-size:12.5px;line-height:1.5">${seq}</ol><div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${dk}">${wbDone(dk) ? '✓ ' : ''}Meuble ${esc(m.module)} monté</button></div></div></div>`;
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(m.titre || m.module)}</b><span>fond ${esc(m.fond || '')}</span></div><div class="cutwrap">${svg}</div>${noteHtml}<ol style="margin:10px 0 0;padding-left:20px;font-size:12.5px;line-height:1.5">${seq}</ol><div class="tgcols"><button class="colchip${wbDone(dk) ? ' done' : ''}" data-tick="${dk}">${wbDone(dk) ? '✓ ' : ''}Meuble ${esc(m.module)} monté</button></div></div></div>`;
   }
   body.innerHTML = html;
   body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));

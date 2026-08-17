@@ -2,6 +2,20 @@
 
 > MàJ : 2026-08-17
 
+**L'élévation héritée cesse de faire du dessin d'art (0.66.0, 2026-08-17)** : signalement de
+Monsieur sur l'Assemblage du workbook imp3d — « des trucs très étranges ». Trois défauts du
+chemin élévation (assemblage sans scène ouverte) : le viewBox se dimensionnait sur le côté du
+module (721 mm → ~288 px) puis s'étirait pleine carte, ×3, traits gras et chiffres géants —
+le garage (côté 1920) ne l'avait jamais montré ; les cotes proches (702/721) s'imprimaient
+l'une sur l'autre ; et les `note` des niveaux — tout le contenu qu'Alfred avait écrit, sans
+`connecteurs` — étaient jetées. Correctifs : **plafond d'étirement ×2 du naturel** (même
+règle pour toutes les cartes de la vue, W commun ⇒ px/mm commun — la cohérence interne
+tient), **cotes étagées sur deux rangs** quand elles se touchent, **notes de niveaux
+rendues** sous le dessin (`h — note`), et les libellés de connecteurs vides ne s'émettent
+plus. Vérifié à l'œil sur imp3d monté en local. Le vrai remède reste côté auteur : la scène
+du contrat ouvert existe pour dessiner un VRAI montage — l'élévation héritée n'est que la
+béquille des assemblages sans scène.
+
 **Lamello en MULTI-VUES — le champ `sur` dit la surface fraisée (0.65.0, 2026-08-17)** :
 demande de Monsieur — des fentes tantôt sur une face, tantôt dans un chant, tantôt de part
 et d'autre, et une seule vue à plat qui ne sait pas le montrer. Une prépa lamello gagne
