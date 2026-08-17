@@ -78,12 +78,20 @@ Déclare-la sur toute pièce qui n'est pas symétrique haut/bas.
   fixé ; ses points donnent l'autre coordonnée. Le type peut varier ligne à ligne — on
   n'éclate JAMAIS une prépa pour ça : une pièce, une surface, une préparation.
 
+  ⚠️ **UNE LIGNE = UNE PLANCHE QUI ARRIVE.** Pas « une rangée de fentes ». Trois montants
+  qui se plantent sur un fond, ce sont **trois lignes** (une par montant), chacune portant
+  ses points de connecteur — et non une ligne par rangée de profondeur avec les montants en
+  points. La clé de la ligne (`u:`/`v:`) nomme donc l'axe **le long duquel se mesure la
+  position de cette planche**. Se tromper d'axe se voit à l'écran : les pointillés
+  n'affleurent pas les bords qu'ils devraient affleurer.
+
   ⚠️ **LE SABOT — une ligne dit où arrive la PLANCHE, pas où passe l'axe.** La Zeta se cale
   au sabot contre une face de la planche voisine ; on ne vise jamais un axe. Donc la valeur
   de `u:`/`v:` est la **distance du bord de référence à la face la plus proche de la planche
   qui arrive** — une planche posée en butée sur le bord vaut **0**. Deux attributs de ligne
-  accompagnent ça : **`ep`** (épaisseur de la planche qui arrive ; défaut : celle de la
-  pièce) et **`depuis`** (le bord de référence ; défaut `about-gauche` pour une ligne `u:`,
+  accompagnent ça : **`ep`** (la dimension que la planche qui arrive occupe SUR CETTE SURFACE —
+  son épaisseur quand elle arrive de chant, sa largeur quand elle est couchée à plat ;
+  défaut : l'épaisseur de la pièce) et **`depuis`** (le bord de référence ; défaut `about-gauche` pour une ligne `u:`,
   `rive-avant` pour une `v:`). Mesure-t-on depuis le haut ? `depuis: "about-droit"`, et la
   cote redevient 0 pour une planche en butée en haut. Le front dessine la planche en
   pointillé, cote son bord de référence, et place la fente **au milieu** de la bande.

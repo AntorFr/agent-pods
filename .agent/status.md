@@ -2,6 +2,26 @@
 
 > MàJ : 2026-08-17
 
+**Graduations par bloc + le contrat dit ce qu'est une ligne (0.73.0)** : deux retours de
+Monsieur sur la vue Lamello.
+
+- **La contre-face se dessinait sans aucune cote** — donc invérifiable, ce qui est
+  rédhibitoire pour un plan. Chaque bloc porte désormais ses propres graduations (u sous
+  lui, v à sa gauche, son axe `avant↓`), et les graduations serrées s'étagent.
+- **« Sur le BAS les pointillés laissent une marge au lieu d'affleurer les bords »** — ce
+  n'est PAS un défaut de rendu : la donnée est **transposée**. Le BAS déclare 3 lignes en
+  `v` (50/335/620 = les rangées de profondeur) avec les montants en points `u`
+  (9,5/360/710,5 = leurs AXES). Or une ligne représente **une planche qui arrive** : trois
+  montants = trois lignes en `u`, aux faces 0 / 350,5 / 701 — et les deux extrêmes
+  affleurent alors les bords, exactement ce que Monsieur attendait. Même transposition sur
+  le FOND ; et sur les TRAV, l'axe est bon mais la valeur est le centre (341) au lieu de la
+  face (331,5) — l'erreur d'ép/2 que le sabot vient corriger.
+
+Contrat précisé en conséquence : **une ligne = UNE planche qui arrive** (pas une rangée de
+fentes), et **`ep` est la dimension occupée SUR CETTE SURFACE** — l'épaisseur quand la
+planche arrive de chant, sa largeur quand elle est couchée à plat (le cas des traverses sur
+le fond). Correction des données confiée à Alfred.
+
 **Lisibilité d'atelier : cotes, sabot, haut, et l'échelle enfin honnête (0.72.0)** — série de
 retours de Monsieur sur la 3.0, tous traités :
 

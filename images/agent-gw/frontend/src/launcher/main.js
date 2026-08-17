@@ -2594,16 +2594,29 @@ function renderLamello(body, st) {
       svg += planche(yC, 'contre-face');
       for (const c of M.contre) svg += mk(c.u * S2, yC + c.v * S2, c.t);
     }
-    // cotes écrites — u sous l'ensemble, v au-delà de la bande gauche : les MÊMES références
-    // servent toutes les vues alignées (c'est ce qui rend le plan vérifiable)
-    const us = [...new Set([...M.face, ...M.contre, ...M.rAv, ...M.rAr].map((m) => m.u))].sort((a2, b2) => a2 - b2);
-    const vs = [...new Set([...M.face, ...M.contre, ...M.aG, ...M.aD].map((m) => m.v))].sort((a2, b2) => a2 - b2);
-    svg += `<line x1="0" y1="${coteBase + 7}" x2="${len * S2}" y2="${coteBase + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    for (const uv of us) { const x = uv * S2; svg += `<line x1="${x}" y1="${coteBase + 4}" x2="${x}" y2="${coteBase + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${coteBase + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${uv}</text>`; }
+    // cotes écrites — u sous le bloc, v à sa gauche. CHAQUE bloc porte les siennes : une
+    // contre-face sans graduations est un dessin qu'on ne peut pas vérifier.
     const lx0 = -es - gap - 9;
-    svg += `<line x1="${lx0}" y1="0" x2="${lx0}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    vs.forEach((vv, i) => { const y = vv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); svg += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${vv}</text>`; });
-    svg += `<text x="${lx0 + 3}" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">avant↓</text>`;
+    const grads = (yOff, base, pts, axe) => {
+      let o = '';
+      if (axe !== 'v') {
+        const us = [...new Set(pts.filter((m) => m.u != null).map((m) => m.u))].sort((a2, b2) => a2 - b2);
+        o += `<line x1="0" y1="${base + 7}" x2="${len * S2}" y2="${base + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+        let lastG = -1e9, grow = 0;
+        for (const uv of us) {
+          const x = uv * S2;
+          grow = x - lastG < 26 ? 1 - grow : 0; lastG = x;
+          o += `<line x1="${x}" y1="${base + 4}" x2="${x}" y2="${base + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${base + 19 + grow * 10}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${uv}</text>`;
+        }
+      }
+      const vs = [...new Set(pts.filter((m) => m.v != null).map((m) => m.v))].sort((a2, b2) => a2 - b2);
+      o += `<line x1="${lx0}" y1="${yOff}" x2="${lx0}" y2="${yOff + bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
+      vs.forEach((vv, i) => { const y = yOff + vv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); o += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${vv}</text>`; });
+      o += `<text x="${lx0 + 3}" y="${yOff - 6}" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">avant↓</text>`;
+      return o;
+    };
+    svg += grads(0, coteBase, [...M.face, ...M.rAv, ...M.rAr, ...M.aG, ...M.aD]);
+    if (hasContre) svg += grads(yC, yC + bh, M.contre);
     svg += `</g></svg>`;
     const npts = Object.values(M).reduce((n2, l) => n2 + l.length, 0);
     const hautTxt = p0.haut ? ` · haut : ${esc(SURLBL[p0.haut] || p0.haut)}` : '';
