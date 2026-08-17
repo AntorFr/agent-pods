@@ -2,6 +2,35 @@
 
 > MàJ : 2026-08-17
 
+**L'établi manipule aussi les COLONNES (0.69.0, 2026-08-17)** : « pourquoi je peux pas le
+faire moi ? » — parce que mon calque ne savait qu'écraser des valeurs, jamais **ajouter ou
+retirer un objet**. Une pièce est une feuille (quatre valeurs) ; une bande est un nœud de la
+chaîne : la redimensionner change un réglage de guide, la supprimer orpheline ses pièces ET
+son étape de tronçonnage, en créer une réclame une étape avec son `entree`. Le calque gagne
+donc une section **`bandes`** — `{amendée} | {cree:true} | {supprime:true}` — et l'endpoint
+accepte une écriture GROUPÉE (déplacer une bande écrit la bande **et** toutes ses pièces d'un
+coup, sinon elle les laisserait derrière au premier geste).
+
+À l'établi : colonne **sélectionnable et déplaçable** (elle emporte ses pièces), **guide et
+longueur au clavier** — un réglage de guide se saisit au chiffre, pas à la souris, et c'est ce
+qui marche au doigt —, **sens** debout/couchée, **créer** (posée à droite de l'existant, d'un
+trait de scie) et **supprimer** (refusé tant qu'elle porte des pièces). Les colonnes vides
+apparaissent en mode établi pour qu'on puisse y déposer.
+
+⚠️ **Le piège du dégrossissage** : les colonnes vivent DANS leur bande mère — un contrôle de
+chevauchement naïf aurait condamné le claustra. Le contrôle ne compare que les bandes
+**feuilles** (celles que plus aucune refente ne reprend), seules tenues de paver la plaque.
+
+🔎 **Gotcha d'ergonomie trouvé par le banc, pas par l'œil** : une bande **pleine** est
+entièrement recouverte par ses tronçons — elle n'était plus attrapable. D'où une **poignée**
+dessinée APRÈS les pièces (donc au-dessus), au coin haut-gauche de chaque colonne.
+
+☠️ **Et la leçon 0.52.0, apprise une troisième fois** : `long` supprimé de `plaqueSVG` en
+passant par `bandBox`, mais encore lu vingt lignes plus bas par les cotes → `ReferenceError`,
+`#wbbody` VIDE, build vert, `npm test` 5/5 vert. Seul le navigateur l'a vu — et seulement
+parce que le harnais **assertait sur le DOM** au lieu de se contenter d'une capture. Un test
+headless qui ne vérifie rien ne vaut pas mieux qu'un build vert.
+
 **L'ÉTABLI — le calepinage se remanie à la main (0.68.0, 2026-08-17)** : grosse demande de
 Monsieur — glisser les pièces sur les plaques, les tourner, aimanter bord à bord, et voir les
 chants dès le calepinage pour optimiser l'orientation. Livré en quatre couches.

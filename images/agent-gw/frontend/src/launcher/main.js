@@ -2037,8 +2037,21 @@ function renderWb() {
    frontière que les cases cochées : le front ne réécrit jamais un fichier de mémoire, et
    Alfred consolide sur demande. `wbPlaqueBands` / `wbPlaquePoses` rendent l'état EFFECTIF
    (fichier + calque), seul état que le dessin et les contrôles connaissent. */
-let wbEditOn = false, wbSel = null;
+let wbEditOn = false, wbSel = null, wbSelB = null;
 const wbPoses = () => (wb.layout && wb.layout.poses) || {};
+const wbBandes = () => (wb.layout && wb.layout.bandes) || {};
+// L'empreinte d'une bande sur la plaque : le `sens` dit lequel de ses deux côtés court en x.
+const bandBox = (b) => b.sens === 'long'
+  ? { x: b.x || 0, y: b.y || 0, w: b.longueur || 0, h: b.largeur || 0 }
+  : { x: b.x || 0, y: b.y || 0, w: b.largeur || 0, h: b.longueur || 0 };
+// Les bandes FEUILLES : celles que personne ne reprend. Dans un dégrossissage, les colonnes
+// vivent DANS leur bande mère — comparer les deux se solderait par un faux chevauchement.
+// Seules les feuilles doivent paver la plaque sans se toucher.
+function wbLeafIds(pl) {
+  const consumed = new Set();
+  for (const st of pl.etapes || []) if (st.type === 'refente' && st.entree && st.entree !== 'plaque') consumed.add(st.entree);
+  return consumed;
+}
 const wbUZ = (pl) => {                        // zone utile de la plaque, après dérasage
   const m = wb.matById.get(pl.materiau) || {};
   const L = m.plaque?.l || 2800, H = m.plaque?.h || 2070, d = m.derasage || 0;
@@ -2048,7 +2061,39 @@ function wbPlaqueBands(pl) {
   const bands = new Map();
   for (const st of pl.etapes || []) if (st.type === 'refente')
     for (const b of st.bandes || []) bands.set(b.id, { ...b, sens: st.sens || 'court', poses: [], done: false });
+  // Le calque AMENDE une bande du fichier, en CRÉE de neuves, ou en RETIRE. C'est la seule
+  // partie du calepinage qui ajoute et supprime des OBJETS, là où les poses n'écrasent que
+  // des valeurs — d'où une section à part, et une consolidation plus riche côté Alfred.
+  for (const [id, ov] of Object.entries(wbBandes())) {
+    if (ov.supprime) { bands.delete(id); continue; }
+    const base = bands.get(id);
+    if (base) bands.set(id, { ...base, ...ov, poses: [], done: false });
+    else if (ov.cree && ov.plaque === pl.plaque)
+      bands.set(id, { id, sens: 'court', x: 0, y: 0, largeur: 0, longueur: 0, ...ov, poses: [], done: false });
+  }
   return bands;
+}
+// Contrôles propres aux bandes — mêmes règles physiques que pour les pièces, mais entre
+// FEUILLES seulement (une colonne est censée vivre dans sa bande mère).
+function wbBandIssues(pl) {
+  const kerf = wb.data.meta?.kerf ?? 4, uz = wbUZ(pl), parents = wbLeafIds(pl);
+  const leaves = [...wbPlaqueBands(pl).values()].filter((b) => !parents.has(b.id));
+  const iss = new Map();
+  const add = (id, m) => { if (!iss.has(id)) iss.set(id, []); if (!iss.get(id).includes(m)) iss.get(id).push(m); };
+  for (const b of leaves) {
+    const r = bandBox(b);
+    if (!(r.w > 0) || !(r.h > 0)) { add(b.id, 'largeur ou longueur nulle'); continue; }
+    if (r.x < uz.x0 - 0.01 || r.y < uz.y0 - 0.01 || r.x + r.w > uz.x1 + 0.01 || r.y + r.h > uz.y1 + 0.01) add(b.id, 'hors zone utile');
+  }
+  for (let i = 0; i < leaves.length; i++) for (let j = i + 1; j < leaves.length; j++) {
+    const a = bandBox(leaves[i]), b = bandBox(leaves[j]);
+    if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) { add(leaves[i].id, `chevauche ${leaves[j].id}`); add(leaves[j].id, `chevauche ${leaves[i].id}`); continue; }
+    const gx = Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w);
+    const gy = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+    const m = `trait de scie < ${kerf} mm`;
+    if ((gy < -0.01 && gx > -0.01 && gx < kerf - 0.01) || (gx < -0.01 && gy > -0.01 && gy < kerf - 0.01)) { add(leaves[i].id, m); add(leaves[j].id, m); }
+  }
+  return iss;
 }
 // Poses effectives : celles du fichier, chacune écrasée par le calque s'il en porte une.
 // `bande` est modifiable — faire glisser une pièce dans une autre colonne, c'est ça.
@@ -2081,10 +2126,9 @@ function wbSnap(pl, et, x, y, w, h) {
     xs.push(o.x + o.w + kerf, o.x - w - kerf, o.x, o.x + o.w - w);
     ys.push(o.y + o.h + kerf, o.y - h - kerf, o.y, o.y + o.h - h);
   }
-  for (const b of bands.values()) {
-    const bw = b.sens === 'long' ? b.longueur : b.largeur;
-    const bh = b.sens === 'long' ? b.largeur : b.longueur;
-    xs.push(b.x, b.x + bw - w); ys.push(b.y, b.y + bh - h);
+  for (const b of bands.values()) {   // affleurement dans la bande : pas de kerf, son bord EST la coupe
+    const r = bandBox(b);
+    xs.push(r.x, r.x + r.w - w); ys.push(r.y, r.y + r.h - h);
   }
   const near = (v, cands) => { let bv = v, bd = tol; for (const c of cands) { const d = Math.abs(c - v); if (d < bd) { bd = d; bv = c; } } return bv; };
   return { x: Math.round(near(x, xs) * 2) / 2, y: Math.round(near(y, ys) * 2) / 2 };
@@ -2138,25 +2182,29 @@ function plaqueSVG(pl, refL) {
   const bands = wbPlaqueBands(pl);
   wbPlaquePoses(pl, bands);              // remplit band.poses avec l'état EFFECTIF (fichier + calque)
   const issues = wbEditOn ? wbIssues(pl) : new Map();
+  const bIss = wbEditOn ? wbBandIssues(pl) : new Map();
+  const parents = wbLeafIds(pl);
   const vw = (refL || L) * S + pad * 2, vh = SH + top + pad;
   let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
   if (d > 0) g += `<rect x="${d * S}" y="${d * S}" width="${(L - 2 * d) * S}" height="${(H - 2 * d) * S}" rx="2" fill="none" stroke="var(--ink)" stroke-width="1.5"/>`;
   for (const band of bands.values()) {
-    if (!band.poses.length) continue;
+    // en lecture on ne montre que ce qui porte des pièces ; à l'établi on montre aussi les
+    // colonnes VIDES (pour y déposer), mais jamais les bandes mères, qui seront recoupées
+    if (!band.poses.length && !(wbEditOn && !parents.has(band.id))) continue;
     const done = band.done;
     // à débiter = sarcelle vif ; débité = gris estompé + ✓ (contraste par la clarté, pas la teinte).
-    const cc = done ? 'var(--ink-faint)' : 'var(--shop)';
+    const badB = bIss.has(band.id), selB = wbEditOn && wbSelB === band.id;
+    const cc = badB ? 'var(--crit)' : selB ? 'var(--proj)' : done ? 'var(--ink-faint)' : 'var(--shop)';
     // Géométrie de la colonne selon le SENS de sa refente (défaut « court », rétrocompatible) :
     //   court → largeur en x, longueur en y (tronçons empilés) ; long → longueur en x, largeur en y.
-    // Les POSES sont déjà en coordonnées absolues justes (Alfred les pose) : sens-agnostiques.
-    const long = band.sens === 'long';
-    const bx = band.x * S, byo = band.y * S;
-    const bw = (long ? band.longueur : band.largeur) * S;
-    const bh = (long ? band.largeur : band.longueur) * S;
-    const cid = pl.plaque + band.id.split('-').pop(), len = Math.round(band.longueur || 0);  // id unique : P1C1
-    g += `<g class="colc" data-band="${esc(band.id)}">`;
+    // Les POSES sont déjà en coordonnées absolues justes : sens-agnostiques.
+    const long = band.sens === 'long';   // lu plus bas par les cotes (l'axe des flèches suit le sens)
+    const bb = bandBox(band);
+    const bx = bb.x * S, byo = bb.y * S, bw = bb.w * S, bh = bb.h * S;
+    const cid = pl.plaque + String(band.id).split('-').pop(), len = Math.round(band.longueur || 0);  // id unique : P1C1
+    g += `<g class="colc" data-band="${esc(band.id)}"${wbEditOn ? ' style="cursor:move"' : ''}>`;
     // le conteneur = LA colonne (contour fort, cliquable)
-    g += `<rect class="colbox" x="${bx}" y="${byo}" width="${bw}" height="${bh}" rx="3" fill="${cc}" fill-opacity="${done ? .07 : .09}" stroke="${cc}" stroke-width="2.5"/>`;
+    g += `<rect class="colbox" x="${bx}" y="${byo}" width="${bw}" height="${bh}" rx="3" fill="${cc}" fill-opacity="${done ? .07 : .09}" stroke="${cc}" stroke-width="${selB || badB ? 3.5 : 2.5}"${selB || badB ? '' : ''}/>`;
     // tronçons (pièces) — subordonnés : bloc + nom CLIQUABLE + cote (positions absolues)
     for (const r of band.poses) {
       const pc = wb.byEtq.get(r.et) || {};
@@ -2178,6 +2226,10 @@ function plaqueSVG(pl, refL) {
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
       g += `</g>`;
     }
+    // POIGNÉE de colonne — dessinée APRÈS les pièces, donc toujours au-dessus : une bande
+    // pleine est entièrement recouverte par ses tronçons, sans elle on ne peut plus l'attraper.
+    // (Elle n'arrête pas la propagation : le glissé de bande est câblé sur le groupe.)
+    if (wbEditOn) g += `<rect class="bgrab" x="${bx + 2.5}" y="${byo + 2.5}" width="13" height="13" rx="2.5" fill="${cc}" fill-opacity=".95" stroke="var(--surface)" stroke-width="1.5"/>`;
     // Cotes façon plan — l'axe suit le SENS : id + LARGEUR sur l'arête courte, LONGUEUR (flèches) sur l'axe long.
     const a = 4;
     if (long) {
@@ -2207,12 +2259,27 @@ function plaqueSVG(pl, refL) {
 // Quelle colonne accueille une pièce lâchée ici ? Celle qui contient son CENTRE — à défaut,
 // la pièce garde la sienne (une pièce posée dans la chute n'est pas orpheline, elle est fausse).
 function wbBandAt(pl, cx, cy) {
+  const parents = wbLeafIds(pl);   // on ne dépose pas dans une bande mère : elle sera recoupée
   for (const b of wbPlaqueBands(pl).values()) {
-    const bw = b.sens === 'long' ? b.longueur : b.largeur;
-    const bh = b.sens === 'long' ? b.largeur : b.longueur;
-    if (cx >= b.x && cx <= b.x + bw && cy >= b.y && cy <= b.y + bh) return b.id;
+    if (parents.has(b.id)) continue;
+    const r = bandBox(b);
+    if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) return b.id;
   }
   return null;
+}
+// Aimantation d'une BANDE : contre ses sœurs feuilles, toujours avec le trait de scie —
+// deux bandes jointives sont le même défaut que deux pièces jointives, à l'échelle du dessus.
+function wbSnapB(pl, id, x, y, w, h) {
+  const kerf = wb.data.meta?.kerf ?? 4, uz = wbUZ(pl), tol = 14, parents = wbLeafIds(pl);
+  const xs = [uz.x0, uz.x1 - w], ys = [uz.y0, uz.y1 - h];
+  for (const b of wbPlaqueBands(pl).values()) {
+    if (b.id === id || parents.has(b.id)) continue;
+    const r = bandBox(b);
+    xs.push(r.x + r.w + kerf, r.x - w - kerf, r.x, r.x + r.w - w);
+    ys.push(r.y + r.h + kerf, r.y - h - kerf, r.y, r.y + r.h - h);
+  }
+  const near = (v, c) => { let bv = v, bd = tol; for (const q of c) { const d = Math.abs(q - v); if (d < bd) { bd = d; bv = q; } } return bv; };
+  return { x: Math.round(near(x, xs) * 2) / 2, y: Math.round(near(y, ys) * 2) / 2 };
 }
 function wbWireEdit(scope, plaques) {
   const S = 0.30;
@@ -2247,6 +2314,37 @@ function wbWireEdit(scope, plaques) {
       gEl.addEventListener('pointerup', onUp, { once: true });
       gEl.addEventListener('pointercancel', onUp, { once: true });
     }));
+    // La BANDE se déplace aussi — et elle EMPORTE ses pièces : la lâcher sur place en les
+    // laissant derrière viderait la colonne de son contenu au premier geste.
+    bp.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const id = gEl.dataset.band;
+      const bands = wbPlaqueBands(pl); wbPlaquePoses(pl, bands);
+      const b0 = bands.get(id); if (!b0) return;
+      wbSelB = id; wbSel = null;
+      const r0 = bandBox(b0);
+      const kids = b0.poses.map((p) => ({ et: p.et, x: p.x, y: p.y, rot: p.rot, bande: p.bande }));
+      const box = svgEl.getBoundingClientRect();
+      const mmPerPx = ((svgEl.viewBox.baseVal.width || box.width) / box.width) / S;
+      const sx = ev.clientX, sy = ev.clientY;
+      let cur = { x: r0.x, y: r0.y }, moved = false;
+      try { gEl.setPointerCapture(ev.pointerId); } catch {}
+      const onMove = (e2) => {
+        const nx = r0.x + (e2.clientX - sx) * mmPerPx, ny = r0.y + (e2.clientY - sy) * mmPerPx;
+        if (Math.abs(nx - r0.x) > 1.5 || Math.abs(ny - r0.y) > 1.5) moved = true;
+        cur = wbSnapB(pl, id, nx, ny, r0.w, r0.h);
+        gEl.setAttribute('transform', `translate(${((cur.x - r0.x) * S).toFixed(2)},${((cur.y - r0.y) * S).toFixed(2)})`);
+      };
+      const onUp = () => {
+        gEl.removeEventListener('pointermove', onMove);
+        if (!moved) { renderWb(); return; }
+        const dx = cur.x - r0.x, dy = cur.y - r0.y;
+        wbSavePose({ bande: { id, x: cur.x, y: cur.y }, poses: Object.fromEntries(kids.map((k) => [k.et, { x: k.x + dx, y: k.y + dy, rot: k.rot, bande: k.bande }])) });
+      };
+      gEl.addEventListener('pointermove', onMove);
+      gEl.addEventListener('pointerup', onUp, { once: true });
+      gEl.addEventListener('pointercancel', onUp, { once: true });
+    }));
   });
 }
 function renderDebit(body, st) {
@@ -2257,13 +2355,36 @@ function renderDebit(body, st) {
   // La ROTATION est bridée par la matière : sur un panneau à fil, tourner une pièce change
   // le sens du veinage — ce n'est pas un choix de calepinage, c'est un défaut.
   const libre = !wb.data.meta?.sensFil || wb.data.meta.sensFil === 'libre' || wb.data.meta.decorUni;
+  // la bande sélectionnée, avec ses pièces résolues (pour savoir si elle est vide)
+  let selB = null, selPl = null;
+  if (wbEditOn && wbSelB) for (const pl of plaques) {
+    const bs = wbPlaqueBands(pl); wbPlaquePoses(pl, bs);
+    if (bs.has(wbSelB)) { selB = bs.get(wbSelB); selPl = pl; break; }
+  }
+  const inp = 'style="width:5em;background:transparent;border:0;border-bottom:1px solid currentColor;color:inherit;font:inherit;text-align:right"';
   let bar = `<div class="tgcols" style="margin-bottom:10px"><button class="colchip${wbEditOn ? ' done' : ''}" id="wbedit">${wbEditOn ? '✓ Établi ouvert' : '✎ Remanier'}</button>`;
   if (wbEditOn) {
     bar += `<button class="colchip" id="wbrot"${wbSel && libre ? '' : ' disabled style="opacity:.45"'} title="${libre ? 'Quart de tour' : 'Interdit : ' + esc(String(wb.data.meta.sensFil)) + ' — le fil du panneau impose le sens'}">⟲ Tourner${wbSel ? ' ' + esc(wbSel.replace(/^[^-]+-/, '')) : ''}</button>`;
+    if (selB) {
+      // La LARGEUR d'une bande est un réglage de guide : ça se saisit au chiffre, pas à la
+      // souris — et c'est ce qui marche au doigt sur la tablette d'atelier.
+      bar += `<span class="colchip" style="border-color:var(--proj);color:var(--proj)">▭ ${esc(selB.id)}</span>`;
+      bar += `<span class="colchip">guide <input id="wbbl" type="number" step="0.5" min="1" value="${+(selB.largeur || 0)}" ${inp}></span>`;
+      bar += `<span class="colchip">long. <input id="wbbL" type="number" step="0.5" min="1" value="${+(selB.longueur || 0)}" ${inp}></span>`;
+      bar += `<button class="colchip" id="wbbsens" title="Bande debout (tronçons empilés) ou couchée">⇄ ${selB.sens === 'long' ? 'couchée' : 'debout'}</button>`;
+      bar += selB.poses.length
+        ? `<span class="colchip" style="opacity:.45" title="Sortez d’abord ses ${selB.poses.length} pièce(s)">✕ Supprimer</span>`
+        : `<button class="colchip" id="wbbdel">✕ Supprimer</button>`;
+    }
+    bar += `<button class="colchip" id="wbbnew">＋ Colonne</button>`;
     if (remanie) bar += `<button class="colchip" id="wbreset" title="Reprendre la proposition d'Alfred">↺ Rendre la main (${remanie})</button>`;
   }
   bar += '</div>';
-  const allIss = wbEditOn ? plaques.map((pl) => [pl, wbIssues(pl)]).filter(([, m]) => m.size) : [];
+  const allIss = wbEditOn ? plaques.map((pl) => {
+    const m = new Map(wbIssues(pl));
+    for (const [id, ms] of wbBandIssues(pl)) m.set('▭ ' + id, ms);
+    return [pl, m];
+  }).filter(([, m]) => m.size) : [];
   body.innerHTML = bar + plaques.map((pl) => {
     const mat = wb.matById.get(pl.materiau) || {};
     const n = (pl.etapes || []).reduce((s, st) => s + (st.type === 'tronconnage' ? (st.pieces || []).length : 0), 0);
@@ -2271,7 +2392,7 @@ function renderDebit(body, st) {
   }).join('')
     + (allIss.length ? `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b style="color:var(--crit)">À corriger</b><span>le débit ne passera pas en l'état</span></div><div style="font-size:12.5px;line-height:1.6;margin-top:8px">${allIss.map(([pl, m]) => [...m.entries()].map(([et, ms]) => `<div><b style="font-family:var(--f-mono)">${esc(pl.plaque)} · ${esc(et.replace(/^[^-]+-/, ''))}</b> — ${esc(ms.join(' · '))}</div>`).join('')).join('')}</div></div></div>` : '')
     + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span><i class="sw" style="background:var(--warn)"></i>arête à plaquer (chant)</span><span style="color:var(--ink-faint)">${wbEditOn ? 'glisser une pièce · les bords s’aimantent en ajoutant le trait de scie' : 'clic colonne → détail/débiter · clic sur le nom → la pièce'}</span></div>`;
-  $('wbedit').addEventListener('click', () => { wbEditOn = !wbEditOn; wbSel = null; renderWb(); });
+  $('wbedit').addEventListener('click', () => { wbEditOn = !wbEditOn; wbSel = null; wbSelB = null; renderWb(); });
   if (wbEditOn) {
     wbWireEdit(body, plaques);
     $('wbrot')?.addEventListener('click', () => {
@@ -2279,8 +2400,26 @@ function renderDebit(body, st) {
       const p0 = pl && wbPlaquePoses(pl).find((q) => q.et === wbSel);
       if (p0) wbSavePose({ etiquette: wbSel, pose: { x: p0.x, y: p0.y, rot: !p0.rot, bande: p0.bande } });
     });
+    const bnum = (el, key) => el?.addEventListener('change', () => {
+      const v = parseFloat(el.value);
+      if (Number.isFinite(v) && v > 0) wbSavePose({ bande: { id: selB.id, [key]: v } });
+    });
+    bnum($('wbbl'), 'largeur'); bnum($('wbbL'), 'longueur');
+    $('wbbsens')?.addEventListener('click', () => wbSavePose({ bande: { id: selB.id, sens: selB.sens === 'long' ? 'court' : 'long' } }));
+    $('wbbdel')?.addEventListener('click', () => { const id = selB.id; wbSelB = null; wbSavePose({ bande: { id, supprime: true } }); });
+    $('wbbnew')?.addEventListener('click', () => {
+      const pl = selPl || plaques[0]; if (!pl) return;
+      const kerf = wb.data.meta?.kerf ?? 4, uz = wbUZ(pl), parents = wbLeafIds(pl);
+      const leaves = [...wbPlaqueBands(pl).values()].filter((b) => !parents.has(b.id)).map(bandBox);
+      // à droite de ce qui existe, d'un trait de scie — sinon au bord de la zone utile
+      const x = Math.min(leaves.reduce((m, r) => Math.max(m, r.x + r.w + kerf), uz.x0), Math.max(uz.x0, uz.x1 - 100));
+      let n = 1; while (wbBandes()[`${pl.plaque}-N${n}`]) n++;
+      const id = `${pl.plaque}-N${n}`;
+      wbSelB = id;
+      wbSavePose({ bande: { id, cree: true, plaque: pl.plaque, sens: 'court', x, y: uz.y0, largeur: 100, longueur: Math.min(600, uz.y1 - uz.y0) } });
+    });
     $('wbreset')?.addEventListener('click', () => {
-      if (confirm('Abandonner votre calepinage et reprendre celui d’Alfred ?')) { wbSel = null; wbSavePose({ reset: true }); }
+      if (confirm('Abandonner votre calepinage et reprendre celui d’Alfred ?')) { wbSel = null; wbSelB = null; wbSavePose({ reset: true }); }
     });
   } else {
     body.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('click', () => showColonne(gEl.dataset.band)));

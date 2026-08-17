@@ -188,22 +188,47 @@ pièces, les tourne, les change de colonne. Ses gestes atterrissent dans un
 frontière que `workbook-state.json` :
 
 ```jsonc
-{ "poses": { "IMP-C1-BAS": { "x": 690, "y": 54, "rot": true, "bande": "P2-C3" } },
+{ "poses":  { "IMP-C1-BAS": { "x": 690, "y": 54, "rot": true, "bande": "P2-C3" } },
+  "bandes": { "P2-C3": { "largeur": 260 },                        // amendée
+              "P2-N1": { "cree": true, "plaque": "P2", "sens": "court",
+                         "x": 1604, "y": 50, "largeur": 100, "longueur": 600 },
+              "P2-C7": { "supprime": true } },
   "maj": "2026-08-17T…" }
 ```
 
+⚠️ **`poses` écrase des valeurs ; `bandes` ajoute et retire des OBJETS.** C'est toute la
+différence de traitement à la consolidation.
+
 **Ce que tu dois en faire — le consolider, comme les cases de todo (D28).** Quand Monsieur te
-le demande (« range mon calepinage », « valide ce que j'ai bougé ») : tu lis le calque, tu
-reportes chaque pose dans le `debit[]` du workbook — `x`, `y`, `rot`, et le **rattachement à
-la bonne étape de tronçonnage** si `bande` a changé —, tu **vides le calque**, et tu commites.
+le demande (« range mon calepinage », « valide ce que j'ai bougé ») :
+
+1. **Les poses** : reporte `x`, `y`, `rot` dans le `debit[]`, et **rattache la pose à la bonne
+   étape de tronçonnage** si `bande` a changé (la déplacer d'un `pieces[]` à l'autre).
+2. **Une bande amendée** : reporte sa géométrie dans la `refente` qui la produit. Si sa
+   **largeur** a changé, c'est un **réglage de guide** qui change — vérifie que la fiche du
+   projet dit toujours vrai (tableau FS-PA, stratégie de débit).
+3. **Une bande `cree: true`** n'existe dans aucune étape : crée-lui sa `refente` (avec la
+   bonne `entree` dans la chaîne) **et** son étape de `tronconnage` — sans elle, la colonne
+   n'a pas de case à cocher, et l'interface le signale en grisé.
+4. **Une bande `supprime`** : retire-la de sa refente et supprime son étape de tronçonnage.
+   L'établi refuse déjà de supprimer une bande qui porte des pièces.
+5. **Vide le calque** et commite. Puis **repasse le validateur** : l'établi contrôle beaucoup,
+   mais c'est le fichier consolidé qui fait foi.
+
 Tant que tu ne l'as pas fait, l'affichage montre son calepinage et ton fichier garde le tien :
 c'est voulu, il peut revenir en arrière d'un bouton.
 
 **Ce que l'établi refuse déjà à sa place** (mêmes règles que le validateur, appliquées sous
-le doigt) : sortir de la zone utile, chevaucher une autre pièce, déborder de sa colonne,
-manger le trait de scie. Les bords **s'aimantent en ajoutant le kerf** automatiquement. Une
-pièce fautive est peinte en rouge et son grief écrit sous le plan — mais rien n'empêche de
-sauvegarder un état fautif : c'est un établi, pas un gendarme. **Revalide en consolidant.**
+le doigt) : sortir de la zone utile, chevaucher une autre pièce ou une autre colonne,
+déborder de sa colonne, manger le trait de scie. Les bords **s'aimantent en ajoutant le kerf**
+automatiquement. Une pièce ou une colonne fautive est peinte en rouge et son grief écrit sous
+le plan — mais rien n'empêche de sauvegarder un état fautif : c'est un établi, pas un
+gendarme. **Revalide en consolidant.**
+
+⚠️ **Les colonnes d'un dégrossissage sont IMBRIQUÉES dans leur bande mère** — c'est le modèle
+enchaîné, pas un chevauchement. Le contrôle ne compare donc que les bandes **feuilles**
+(celles que plus aucune refente ne reprend) : ce sont elles qui doivent paver la plaque sans
+se toucher.
 
 **La rotation est bridée par la matière** : elle n'est offerte que si `meta.decorUni` ou
 `meta.sensFil === "libre"`. Sur un panneau à fil, tourner une pièce n'est pas un choix de

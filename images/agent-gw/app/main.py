@@ -500,7 +500,42 @@ def _load_wb_layout(wb: Path) -> dict:
     except (OSError, ValueError):
         lay = {}
     lay.setdefault("poses", {})
+    lay.setdefault("bandes", {})
     return lay
+
+
+def _clean_pose(pose: dict) -> dict:
+    """Only the geometry we own — never free-form keys coming from a browser."""
+    out: dict = {}
+    for k in ("x", "y"):
+        if k in pose:
+            if not isinstance(pose[k], (int, float)) or isinstance(pose[k], bool):
+                raise HTTPException(status_code=400, detail=f"{k} must be a number (mm)")
+            out[k] = pose[k]
+    if "rot" in pose:
+        out["rot"] = bool(pose["rot"])
+    if isinstance(pose.get("bande"), str):
+        out["bande"] = pose["bande"][:64]
+    return out
+
+
+def _clean_bande(b: dict) -> dict:
+    """A band amended (or created) by hand. `supprime` wins over everything else."""
+    out: dict = {}
+    if b.get("supprime"):
+        return {"supprime": True}
+    for k in ("x", "y", "largeur", "longueur"):
+        if k in b:
+            if not isinstance(b[k], (int, float)) or isinstance(b[k], bool):
+                raise HTTPException(status_code=400, detail=f"bande.{k} must be a number (mm)")
+            out[k] = b[k]
+    if b.get("sens") in ("court", "long"):
+        out["sens"] = b["sens"]
+    if isinstance(b.get("plaque"), str):
+        out["plaque"] = b["plaque"][:64]
+    if b.get("cree"):
+        out["cree"] = True
+    return out
 
 
 @app.get("/api/workbook/list")
@@ -576,31 +611,42 @@ async def workbook_layout_set(request: Request):
     body = await request.json()
     p = _workbook_file(body.get("wb") or "")
     lay = _load_wb_layout(p)
-    poses = lay["poses"]
+    poses, bandes = lay["poses"], lay["bandes"]
     if body.get("reset"):
         poses.clear()
+        bandes.clear()
     else:
+        # One piece…
         et = (body.get("etiquette") or "").strip()
-        if not et:
-            raise HTTPException(status_code=400, detail="etiquette required")
-        pose = body.get("pose")
-        if pose is None:
-            poses.pop(et, None)
-        elif not isinstance(pose, dict):
-            raise HTTPException(status_code=400, detail="pose must be an object")
-        else:
-            # Only the geometry we own — never free-form keys coming from a browser.
-            kept = {}
-            for k in ("x", "y"):
-                if k in pose:
-                    if not isinstance(pose[k], (int, float)) or isinstance(pose[k], bool):
-                        raise HTTPException(status_code=400, detail=f"{k} must be a number (mm)")
-                    kept[k] = pose[k]
-            if "rot" in pose:
-                kept["rot"] = bool(pose["rot"])
-            if isinstance(pose.get("bande"), str):
-                kept["bande"] = pose["bande"][:64]
-            poses[et] = kept
+        if et:
+            pose = body.get("pose")
+            if pose is None:
+                poses.pop(et, None)
+            elif not isinstance(pose, dict):
+                raise HTTPException(status_code=400, detail="pose must be an object")
+            else:
+                poses[et] = _clean_pose(pose)
+        # …or several at once (moving a band carries its pieces along).
+        for k, pose in (body.get("poses") or {}).items():
+            if not isinstance(k, str) or not k:
+                continue
+            if pose is None:
+                poses.pop(k, None)
+            elif isinstance(pose, dict):
+                poses[k] = _clean_pose(pose)
+        b = body.get("bande")
+        if isinstance(b, dict):
+            bid = (b.get("id") or "").strip()
+            if not bid:
+                raise HTTPException(status_code=400, detail="bande.id required")
+            # A band created here and dropped again leaves no trace; one that exists in the
+            # workbook must keep a tombstone, otherwise the file would resurrect it.
+            if b.get("supprime") and bandes.get(bid, {}).get("cree"):
+                bandes.pop(bid, None)
+            else:
+                bandes[bid] = {**bandes.get(bid, {}), **_clean_bande(b)} if not b.get("supprime") else {"supprime": True}
+        if not et and not body.get("poses") and not isinstance(b, dict):
+            raise HTTPException(status_code=400, detail="nothing to do")
     lay["maj"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     p.with_name("workbook-layout.json").write_text(
         json.dumps(lay, ensure_ascii=False, indent=1)
