@@ -2,7 +2,7 @@
 // fichiers externes — les fixtures encodent ici les variantes réelles des trois livres.
 import assert from 'node:assert/strict';
 import { normalise } from '../src/atelier/convert.js';
-import { valide, lamPoints, bandGuide, poseRect, chantEdges, issuesPlaque } from '../src/atelier/regles.js';
+import { valide, lamPoints, lamLignes, ligneBande, bandGuide, poseRect, chantEdges, issuesPlaque, epOf } from '../src/atelier/regles.js';
 
 let n = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); n++; };
@@ -75,16 +75,24 @@ eq(poseRect(cote, poses[0]), { x: 10, y: 10, w: 400, h: 800 }, 'empreinte 3.0 : 
 /* ── lamello : chaque écriture aboutit aux mêmes points, bien placés ── */
 const surs = (p) => p.preparations.map((x) => x.sur).sort();
 eq(surs(cote), ['about-droit', 'about-gauche', 'face'], 'CÔTÉ : face + un prépa PAR bout');
-const ptsCote = cote.preparations.flatMap(lamPoints);
+const pts = (p) => p.preparations.flatMap((pr) => lamPoints(pr, p, epOf(wb, p)));
+const ptsCote = pts(cote);
 eq(ptsCote.length, 4, 'CÔTÉ : 4 points préservés');
 ok(ptsCote.every((q) => q.u >= 0 && q.u <= 800 && q.v >= 0 && q.v <= 400), 'CÔTÉ : tous les points dans la pièce');
 eq(surs(tab), ['rive-arriere', 'rive-avant'], 'tablette du garage : lignes d’extrémité routées vers les RIVES');
-ok(tab.preparations.flatMap(lamPoints).every((q) => q.u <= 600 && q.v <= 408), 'tablette : plus de w=550 hors pièce');
+ok(pts(tab).every((q) => q.u <= 600 && q.v <= 408), 'tablette : plus de w=550 hors pièce');
 const basPr = bas.preparations[0];
 eq(basPr.lignes.length, 2, 'BAS : lignes-objets conservées');
-eq(lamPoints(basPr).map((q) => q.t).sort(), ['biscuit', 'tenso', 'tenso'], 'BAS : types mêlés par ligne');
-ok(lamPoints(basPr).every((q) => q.v === 50 || q.v === 250), 'BAS : la clé v des lignes bien fixée');
-eq(lamPoints(trav.preparations[0]), [{ u: 250, v: 0, t: 'biscuit' }], 'rive : connecteurs nus repris en u');
+eq(pts(bas).map((q) => q.t).sort(), ['biscuit', 'tenso', 'tenso'], 'BAS : types mêlés par ligne');
+// LE SABOT : la fente tombe au MILIEU de la planche qui arrive, la cote reste son bord
+ok(pts(bas).every((q) => q.v === 59.5 || q.v === 259.5), 'BAS : fente au milieu de la planche (bord + ép/2)');
+{ const li = lamLignes(basPr, 19)[0], b = ligneBande(li, bas.largeur);
+  eq({ pos: li.pos, a: b.a, b: b.b, mid: b.mid }, { pos: 50, a: 50, b: 69, mid: 59.5 }, 'bande de planche depuis le bord de référence');
+  const but = ligneBande({ axe: 'v', pos: 0, ep: 19, depuis: 'rive-avant' }, bas.largeur);
+  eq(but.a, 0, 'planche en butée : cote 0');
+  const haut = ligneBande({ axe: 'v', pos: 0, ep: 19, depuis: 'rive-arriere' }, bas.largeur);
+  eq(haut.b, bas.largeur, 'butée depuis l’autre bord : la planche colle à ce bord'); }
+eq(pts(trav), [{ u: 250, v: 0, t: 'biscuit' }], 'rive : connecteurs nus repris en u');
 
 /* ── assemblage hérité → scène minimale valide ──────────────────────── */
 const sc = wb.assemblage[0];

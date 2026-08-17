@@ -120,6 +120,8 @@ var CHANTS = ["rive-avant", "rive-arriere", "about-gauche", "about-droit", "abou
 var GESTES = ["poser", "coller", "assembler", "visser", "serrer", "verifier"];
 var ST_TYPES = ["debit", "tronconnage", "rainure", "lamello", "assemblage", "suivi"];
 var matOf = (wb2, id) => (wb2.materiaux || []).find((m) => m.id === id) || {};
+var pieceMat = (wb2, p) => matOf(wb2, p.materiau).id ? matOf(wb2, p.materiau) : (wb2.materiaux || [])[0] || {};
+var epOf = (wb2, p) => p.ep || pieceMat(wb2, p).ep || 19;
 var kerfOf = (wb2) => wb2.meta?.kerf ?? 4;
 function zoneUtile(wb2, pl) {
   const m = matOf(wb2, pl.materiau);
@@ -131,15 +133,35 @@ function poseRect(piece, pose) {
   const u = piece?.longueur || 0, v = piece?.largeur || 0;
   return { x: pose.x || 0, y: pose.y || 0, w: pose.rot ? v : u, h: pose.rot ? u : v };
 }
-function lamPoints(pr) {
+var ligneAxe = (l) => l.u != null ? "u" : "v";
+function lamLignes(pr, epDefaut) {
+  return (pr.lignes || []).map((l) => {
+    const axe = ligneAxe(l);
+    return {
+      axe,
+      pos: (axe === "u" ? l.u : l.v) || 0,
+      ep: l.ep ?? epDefaut,
+      depuis: l.depuis || (axe === "u" ? "about-gauche" : "rive-avant"),
+      points: l.points || []
+    };
+  });
+}
+function ligneBande(li, dim) {
+  const loin = li.depuis === "about-droit" || li.depuis === "rive-arriere";
+  const a = loin ? dim - li.pos - li.ep : li.pos;
+  return { a, b: a + li.ep, mid: a + li.ep / 2, loin };
+}
+function lamPoints(pr, piece, epDefaut) {
   const out = [];
-  for (const l of pr.lignes || []) {
-    const fixU = l.u != null;
-    for (const q of l.points || []) out.push({ u: fixU ? l.u : q.u ?? 0, v: fixU ? q.v ?? 0 : l.v ?? 0, t: q.t });
+  const L = piece?.longueur || 0, V = piece?.largeur || 0;
+  for (const li of lamLignes(pr, li0(epDefaut, piece))) {
+    const { mid } = ligneBande(li, li.axe === "u" ? L : V);
+    for (const q of li.points) out.push(li.axe === "u" ? { u: mid, v: q.v ?? 0, t: q.t } : { u: q.u ?? 0, v: mid, t: q.t });
   }
   for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t });
   return out;
 }
+var li0 = (epDefaut, piece) => Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19;
 function plaqueBands(wb2, pl, layout) {
   const bands = /* @__PURE__ */ new Map();
   for (const st of pl.etapes || []) if (st.type === "refente")
@@ -251,7 +273,7 @@ function valide(wb2) {
         const libre = pr.sur.startsWith("about") ? "v" : "u";
         if (q[libre] == null) E.push(`${p.etiquette} : sur ${pr.sur}, un point porte \xAB ${libre} \xBB`);
       }
-      for (const q of lamPoints(pr)) {
+      for (const q of lamPoints(pr, p, epOf(wb2, p))) {
         if (q.u < -0.01 || q.u > (p.longueur || 0) + 0.01 || q.v < -0.01 || q.v > (p.largeur || 0) + 0.01)
           E.push(`${p.etiquette} : point lamello (${q.u}, ${q.v}) hors de la pi\xE8ce`);
       }

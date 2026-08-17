@@ -196,6 +196,20 @@ des petits objets passe par les cotes écrites, pas par la loupe.
    qu'Alfred redessine une vraie scène pour le garage ? Recommandé : minimale pour les
    deux, une vraie scène le jour où le garage rebouge.
 
+## 7. Amendements post-livraison (2026-08-17)
+
+- **D6 — Le sabot.** Une ligne lamello de face décrit **où arrive la planche voisine**, pas
+  l'axe des fentes : `pos` = distance du bord de référence à sa face la plus proche (butée
+  = 0), + `ep` et `depuis`. La fente tombe au milieu de la bande. Corrige une lecture qui
+  aurait fait fraiser à ép/2 près.
+- **D7 — `haut`.** La surface qui regarde le plafond une fois monté ; non déductible du débit.
+- **L'échelle, jusqu'au bout.** `min-width:480px` sur les SVG remontait de force les petits
+  dessins (une plaque de 700 rendait au DOUBLE d'une de 2800) et la scène d'assemblage,
+  partagée avec sa séquence, tournait à la moitié. Chaque carte porte désormais un viewBox
+  à sa taille réelle et une largeur CSS proportionnelle : px/mm identique partout, sans
+  espace mort. Mesuré carte par carte : 0,267 sur les quatre vues.
+- **Une échelle typographique** (`FS`), trois niveaux, partagée par les quatre vues.
+
 ## 6. Ordre de chantier (après votre relecture)
 
 1. `regles.js` + `valide.mjs` + `migre.mjs` (le socle, testable sans front).

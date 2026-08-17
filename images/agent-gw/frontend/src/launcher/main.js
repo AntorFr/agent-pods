@@ -18,7 +18,7 @@ import { FORMATS, createBasket, scanFrame, dropCode, composeMessage } from '../s
 import { normalise } from '../atelier/convert.js';
 import {
   SURFACES, CHANTS, epOf, kerfOf, zoneUtile, bandBox, bandGuide, bandLong,
-  chantEdges, lamPoints, plaqueBands, plaquePoses, bandesMeres, issuesPlaque,
+  chantEdges, lamPoints, lamLignes, ligneBande, plaqueBands, plaquePoses, bandesMeres, issuesPlaque,
 } from '../atelier/regles.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1893,11 +1893,37 @@ const pieceDims = (p) => `${p.longueur}×${p.largeur}`;
 // Côtés plaqués d'une pièce — vocabulaire 3.0 (rive-avant/rive-arriere/about-gauche/
 // about-droit/abouts), repère et arêtes résolus par le socle (atelier/regles.js).
 const pieceChants = (p) => (p.chants || []).filter((c) => CHANTS.includes(c));
+/* Le HAUT en configuration montée (`haut` sur la pièce) : la surface qui regarde le plafond.
+   Sur une arête, on pose un liseré et un « ▲ HAUT » ; sur une face, la mention suffit (la
+   pièce est vue de dessus, on ne peut pas la flécher). Rendu dans le repère du DESSIN :
+   `uAlongX` dit si la longueur de la pièce court à l'horizontale. */
+function hautMark(haut, r, uAlongX, fs) {
+  if (!haut || haut === 'face' || haut === 'contre-face') return '';
+  const [e] = chantEdges([haut], r, uAlongX);
+  if (!e) return '';
+  const [x1, y1, x2, y2] = e, mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const vertical = Math.abs(x2 - x1) < 0.5;   // arête verticale → texte couché
+  const tr = vertical ? ` transform="rotate(-90 ${mx} ${my})"` : '';
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--proj)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 3"/>`
+    + `<text x="${mx}" y="${my + (vertical ? 0 : (y1 < r.y + r.h / 2 ? 9 : -3))}"${tr} text-anchor="middle" fill="var(--proj)" font-family="var(--f-mono)" font-size="${fs}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">▲ HAUT</text>`;
+}
 const chantSVG = (edges, sw) => edges.map(([x1, y1, x2, y2]) =>
   `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="var(--warn)" stroke-width="${sw}" stroke-linecap="round"/>`).join('');
 // L'échelle 3.0 : UN px/mm pour tout le workbook — chaque vue compose son viewBox sur la
 // même largeur de référence wb.WG (calculée à l'index), au même WS mm→unités.
 const WS = 0.33;
+// …et UNE échelle typographique, en unités de viewBox. Puisque toutes les vues partagent le
+// même px/mm, un corps donné rend à la même taille partout : trois niveaux, pas plus.
+//   T1 = ce qu'on lit pour scier (cotes chiffrées, noms de pièce)
+//   T2 = les repères (identifiant de colonne, graduations)
+//   T3 = les mentions (nom de surface, butée, axes)
+const FS = { cote: 11.5, nom: 11.5, rep: 9.5, note: 8 };
+// Chaque dessin n'occupe que la FRACTION de largeur qui lui revient : son viewBox fait sa
+// taille réelle, et sa largeur CSS vaut sa part de la référence commune. Le px/mm reste
+// identique partout (c'est l'invariant), mais une petite pièce cesse de flotter au milieu
+// d'un cadre taillé pour la plus grande plaque.
+const wbPart = (vbW) => `style="width:${Math.min(100, vbW / wb.WG * 100).toFixed(2)}%;height:auto;display:block"`;
+const fitNom = (place, txt) => Math.max(8.5, Math.min(FS.nom, place / (String(txt).length * 0.68)));
 
 // Conteneurs créés une fois : modale pièce + mode atelier plein écran.
 const pieceModal = document.createElement('div');
@@ -2085,7 +2111,7 @@ function plaqueSVG(pl) {
   wbPosesEff(pl, bands);                 // remplit band.poses avec l'état EFFECTIF (fichier + calque)
   const issues = wbEditOn ? wbIssues(pl) : new Map();
   const parents = bandesMeres(pl);
-  const vw = wb.WG, vh = SH + top + pad;   // largeur de référence COMMUNE : même px/mm partout
+  const vw = SW + pad * 2, vh = SH + top + pad;   // taille réelle ; la part de largeur fait l'échelle
   let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
   if (d > 0) g += `<rect x="${d * S}" y="${d * S}" width="${(L - 2 * d) * S}" height="${(H - 2 * d) * S}" rx="2" fill="none" stroke="var(--ink)" stroke-width="1.5"/>`;
   for (const band of bands.values()) {
@@ -2109,18 +2135,28 @@ function plaqueSVG(pl) {
       const pc = wb.byEtq.get(r.et) || {};
       const px = r.x * S, py = r.y * S, pw = r.w * S, ph = r.h * S;
       const short = r.et.replace(/^[^-]+-/, '');
-      const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
+      // Pièce plus haute que large (une lame de 100 debout) : le texte se couche le long
+      // d'elle, comme le fait déjà la cote d'une bande verticale — sinon nom et cote
+      // débordent sur les voisines et se mélangent en bouillie.
+      const vert = ph > pw * 1.25;
+      const cx = px + pw / 2, cy = py + ph / 2;
+      const tr = vert ? ` transform="rotate(-90 ${cx} ${cy})"` : '';
+      const fontE = fitNom(vert ? ph : pw, short);
       const bad = issues.has(r.et), sel = wbEditOn && wbSel === r.et;
       const pk = bad ? 'var(--crit)' : sel ? 'var(--proj)' : cc;
       // en mode établi chaque pièce est son propre <g> : le glissé la déplace par transform,
       // sans redessiner la plaque à chaque pixel
       g += `<g class="dragp" data-et="${esc(r.et)}" data-band="${esc(r.bande || '')}"${wbEditOn ? ' style="cursor:grab"' : ''}>`;
       g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${pk}" fill-opacity="${bad ? .3 : done ? .12 : .2}" stroke="${pk}" stroke-width="${bad || sel ? 2.5 : 1}" stroke-opacity="${bad || sel ? 1 : .45}"/>`;
-      g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
-      g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
+      g += `<text class="pname" data-et="${esc(r.et)}" x="${cx}" y="${cy - 1}"${tr} text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(short)}</text>`;
+      // La cote de la pièce se lit à l'établi, penché sur une tablette : même corps et même
+      // encre que les cotes de bande (11,5 gras, halo sur le fond de colonne), pas le gris
+      // discret d'une mention secondaire — c'est un chiffre qu'on va scier.
+      g += `<text x="${cx}" y="${cy + 15}"${tr} text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${pc.longueur}×${pc.largeur}</text>`;
       // CHANTS sur la plaque : ce sont eux qui décident de l'orientation au calepinage (un
       // chant sur le long bord d'une bande se plaque en UNE passe avant tronçonnage).
       if (!done && r.chants.length) g += chantSVG(chantEdges(r.chants, { x: px, y: py, w: pw, h: ph }, !r.rot), 2.5);
+      if (!done) g += hautMark(pc.haut, { x: px, y: py, w: pw, h: ph }, !r.rot, FS.note);
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
       g += `</g>`;
     }
@@ -2134,25 +2170,28 @@ function plaqueSVG(pl) {
       // largeur = arête gauche (verticale) ; longueur = arête haute (horizontale, flèches)
       const lx = Math.max(bx - 5, 9);
       g += `<line x1="${lx - 3}" y1="${byo + 1}" x2="${lx + 3}" y2="${byo + 1}" stroke="${cc}" stroke-width="1.5"/><line x1="${lx - 3}" y1="${byo + bh - 1}" x2="${lx + 3}" y2="${byo + bh - 1}" stroke="${cc}" stroke-width="1.5"/>`;
-      g += `<text x="${lx}" y="${byo + bh / 2}" transform="rotate(-90 ${lx} ${byo + bh / 2})" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${bandGuide(band)}</text>`;
+      g += `<text x="${lx}" y="${byo + bh / 2}" transform="rotate(-90 ${lx} ${byo + bh / 2})" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="${FS.rep}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${bandGuide(band)}</text>`;
       const dy = byo + 15, mx = bx + bw / 2;
       g += `<line x1="${bx + 1}" y1="${dy}" x2="${bx + bw - 1}" y2="${dy}" stroke="var(--ink-soft)" stroke-width="1"/>`;
       g += `<path d="M${bx} ${dy} l${a} ${-a} M${bx} ${dy} l${a} ${a} M${bx + bw} ${dy} l${-a} ${-a} M${bx + bw} ${dy} l${-a} ${a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
-      g += `<text x="${mx}" y="${dy - 4}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+      g += `<text x="${mx}" y="${dy - 4}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
     } else {
       // court : id + largeur en tête (arête haute) ; longueur en flèches verticales
       const wy = Math.max(byo - 4, 9);
       g += `<line x1="${bx + 1}" y1="${wy + 3}" x2="${bx + 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/><line x1="${bx + bw - 1}" y1="${wy + 3}" x2="${bx + bw - 1}" y2="${wy - 3}" stroke="${cc}" stroke-width="1.5"/>`;
-      g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="10.5" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${bandGuide(band)}</text>`;
-      const dx = bx + 17, my = byo + bh / 2;
+      g += `<text x="${bx + bw / 2}" y="${wy}" text-anchor="middle" fill="${cc}" font-family="var(--f-mono)" font-size="${FS.rep}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(cid)} · ${bandGuide(band)}</text>`;
+      // colonne étroite : l'étiquette de pièce occupe déjà l'axe médian — la cote de bande
+      // remonte en tête plutôt que de s'imprimer par-dessus (la ligne de cote, elle, court
+      // sur toute la hauteur, comme il se doit)
+      const dx = bx + 17, my = byo + (bw < 46 ? bh * 0.18 : bh / 2);
       g += `<line x1="${dx}" y1="${byo + 1}" x2="${dx}" y2="${byo + bh - 1}" stroke="var(--ink-soft)" stroke-width="1"/>`;
       g += `<path d="M${dx} ${byo} l${-a} ${a} M${dx} ${byo} l${a} ${a} M${dx} ${byo + bh} l${-a} ${-a} M${dx} ${byo + bh} l${a} ${-a}" stroke="var(--ink-soft)" stroke-width="1.2" fill="none"/>`;
-      g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="11.5" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
+      g += `<text x="${dx}" y="${my}" transform="rotate(-90 ${dx} ${my})" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${len} mm</text>`;
     }
     g += `</g>`;
   }
   const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
-  return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
+  return `<svg viewBox="0 0 ${vw} ${vh}" ${wbPart(vw)}><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
 }
 // Quelle colonne accueille une pièce lâchée ici ? Celle qui contient son CENTRE — à défaut,
 // la pièce garde la sienne (une pièce posée dans la chute n'est pas orpheline, elle est fausse).
@@ -2347,11 +2386,12 @@ function renderTronconnage(body, st) {
         al: long ? r.w : r.h, cr: long ? r.h : r.w,
         swap: long ? !r.rot : !!r.rot,   // la longueur (u) de la pièce court-elle le long de la bande ?
         chants: r.chants,
+        haut: (wb.byEtq.get(r.et) || {}).haut,
       })).sort((u, v) => u.a0 - v.a0 || u.c0 - v.c0);
       const largeur = bandGuide(band);
       // la GÉOMÉTRIE entre dans la signature (et les chants) : deux colonnes ne se regroupent
       // que si elles se débitent vraiment pareil
-      const sig = largeur + '|' + troncs.map((t) => `${t.a0},${t.c0},${t.al},${t.cr}${t.chants.length ? ':' + t.chants.join('+') : ''}`).join('-');
+      const sig = largeur + '|' + troncs.map((t) => `${t.a0},${t.c0},${t.al},${t.cr}${t.chants.length ? ':' + t.chants.join('+') : ''}${t.haut ? '^' + t.haut : ''}`).join('-');
       if (!groups.has(sig)) groups.set(sig, { largeur, troncs, colonnes: [] });
       groups.get(sig).colonnes.push({ id: pl.plaque + (band.label || String(band.id).split('-').pop()), stepId: band.stepId, done: band.done, etqs: troncs.map((t) => t.et) });
     }
@@ -2360,26 +2400,29 @@ function renderTronconnage(body, st) {
   const S2 = WS, pad = 24;
   const sorted = [...groups.values()].sort((a, b) => b.largeur - a.largeur);
   const tot = (g) => g.troncs.reduce((m, t) => Math.max(m, t.a0 + t.al), 0);   // étendue réelle de la bande
-  const W = wb.WG;   // largeur de référence COMMUNE au workbook : même px/mm que les autres vues
+  const W0 = Math.max(...sorted.map(tot)) * S2 + pad * 2;   // le plus large des groupes
   let html = `<div class="lede" style="margin-bottom:12px">Plaques refendues → tronçonnage. Chaque type de colonne (identiques regroupées ×N), ses tronçons cotés, et la position de coupe cumulée (butée) — <b>à la même échelle</b> d'une bande à l'autre. Cocher une colonne = tronçonnée.</div>`;
   for (const g of sorted) {
     const total = tot(g);
-    const bh = Math.round(g.largeur * S2), top = 12, Hc = bh + top + 50;   // hauteur = largeur RÉELLE (même échelle) → ratio fidèle ; +place pour les cotes et la butée
-    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Hc}"><g transform="translate(${pad},${top})">`;
+    const bh = Math.round(g.largeur * S2), top = 12, Hc = bh + top + 62;   // hauteur = largeur RÉELLE (même échelle) → ratio fidèle ; +place pour les cotes et la butée
+    let svg = `<svg viewBox="0 0 ${Math.round(W0)} ${Hc}" ${wbPart(W0)}><g transform="translate(${pad},${top})">`;
     svg += `<rect x="0" y="0" width="${total * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".07" stroke="var(--shop)" stroke-width="2"/>`;
     // largeur cotée sur le flanc (façon plan : largeur en Y, longueur en X)
     // COTE largeur sur le flanc — style cote : ligne + empattements + valeur (unité incluse)
     const fx = -7;
     svg += `<line x1="${fx}" y1="0" x2="${fx}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="0" x2="${fx + 3}" y2="0" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="${bh}" x2="${fx + 3}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-    svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${g.largeur} mm</text>`;
+    svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${g.largeur} mm</text>`;
     for (const t of g.troncs) {
       const x = t.a0 * S2, y = t.c0 * S2, w = t.al * S2, h = t.cr * S2;
       const short = t.et.replace(/^[^-]+-/, '');
-      const nf = Math.max(8, Math.min(12, w / (short.length * 0.62)));
+      const tv = h > w * 1.25, tcx = x + w / 2, tcy = y + h / 2;   // même convention qu'en vue Plaques
+      const ttr = tv ? ` transform="rotate(-90 ${tcx.toFixed(1)} ${tcy.toFixed(1)})"` : '';
+      const nf = fitNom(tv ? h : w, short);
       svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
       // chants : SEULES les arêtes plaquées se surlignent, placées par `swap`
       if (t.chants.length) svg += chantSVG(chantEdges(t.chants, { x: x + 1.5, y: y + 1.5, w: w - 3, h: h - 3 }, t.swap), 3);
-      svg += `<text class="pname" data-et="${esc(t.et)}" x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 + 3).toFixed(1)}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
+      svg += hautMark(t.haut, { x: x + 2, y: y + 2, w: w - 4, h: h - 4 }, t.swap, FS.note);
+      svg += `<text class="pname" data-et="${esc(t.et)}" x="${tcx.toFixed(1)}" y="${(tcy + 3).toFixed(1)}"${ttr} text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(short)}</text>`;
     }
     // COTES : une par TRANCHE le long de la bande — deux pièces en travers partagent la leur,
     // c'est une seule coupe de tronçonnage. Puis la BUTÉE : la position cumulée de chaque trait.
@@ -2387,10 +2430,15 @@ function renderTronconnage(body, st) {
     for (const t of g.troncs) if (!slices.some((s) => Math.abs(s.a0 - t.a0) < 0.01 && Math.abs(s.al - t.al) < 0.01)) slices.push({ a0: t.a0, al: t.al });
     slices.sort((u, v) => u.a0 - v.a0);
     const cy = bh + 15;
+    let lastCx = -1e9, crow = 0;
     for (const s of slices) {
       const x = s.a0 * S2, w = s.al * S2;
+      // tranche étroite collée à la précédente : la cote descend d'un rang plutôt que de
+      // s'imprimer par-dessus sa voisine (le corps a grossi, l'encombrement aussi)
+      crow = (x - lastCx) < 46 ? 1 - crow : 0;
+      lastCx = x;
       svg += `<line x1="${(x + 2).toFixed(1)}" y1="${cy}" x2="${(x + w - 2).toFixed(1)}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${(x + 2).toFixed(1)}" y1="${cy - 3}" x2="${(x + 2).toFixed(1)}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${(x + w - 2).toFixed(1)}" y1="${cy - 3}" x2="${(x + w - 2).toFixed(1)}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-      svg += `<text x="${(x + w / 2).toFixed(1)}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${+s.al.toFixed(1)} mm</text>`;
+      svg += `<text x="${(x + w / 2).toFixed(1)}" y="${cy - 4 + crow * 12}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${+s.al.toFixed(1)} mm</text>`;
     }
     // Une butée par TRAIT, pas par arête : la fin d'une tranche et le début de la suivante ne
     // sont séparés que du trait de scie — c'est la même coupe, une seule position de guide.
@@ -2403,7 +2451,7 @@ function renderTronconnage(body, st) {
       const bx = b * S2;
       brow = bx - lastBx < 24 ? 1 - brow : 0;   // encore trop serré → deux rangs, jamais l'un sur l'autre
       lastBx = bx;
-      svg += `<text x="${bx.toFixed(1)}" y="${cy + 17 + brow * 10}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">${+b.toFixed(1)}</text>`;
+      svg += `<text x="${bx.toFixed(1)}" y="${cy + 17 + brow * 10}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">${+b.toFixed(1)}</text>`;
     }
     svg += `</g></svg>`;
     const chips = g.colonnes.map((c) => c.stepId
@@ -2463,12 +2511,12 @@ function renderLamello(body, st) {
   }
   if (!groups.size) { body.innerHTML = '<div class="empty">Aucun lamello.</div>'; return; }
   const S2 = WS, padL = 50, padR = 14, padT = 24, gap = 8;
-  const W = wb.WG;   // même px/mm que toutes les autres vues du workbook
+  const W0 = Math.max(...[...groups.values()].map((g) => (g.p0.longueur || 0) * S2)) + padL + padR + 2 * (gap + 12);
   const mk = (x, y, t) => t === 'biscuit'
     ? `<path d="M${x} ${y - 4.5} L${x + 4.5} ${y} L${x} ${y + 4.5} L${x - 4.5} ${y} Z" fill="var(--warn)" stroke="var(--warn)" stroke-width="1"/>`
     : `<circle cx="${x}" cy="${y}" r="3.6" fill="var(--shop)" fill-opacity=".45" stroke="var(--shop)" stroke-width="1.4"/>`;
   const chipsOf = (pieces) => pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
-  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>tout à la même échelle</b> — les surfaces fendues (about, rive, contre-face) rabattues en projection alignée : la fente y est un trait, la cote fait foi. Coté : u depuis la <b>gauche</b>, v depuis l'<b>avant (haut)</b>. <span style="color:var(--shop)">●</span> Tenso/Clamex · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond.</div>`;
+  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>tout à la même échelle</b> — les surfaces fendues (about, rive, contre-face) rabattues en projection alignée : la fente y est un trait, la cote fait foi. <b style="color:var(--proj)">En pointillé bleu</b> : la planche qui vient se poser, cotée depuis son bord de référence — <b>une planche en butée lit 0</b>, c'est la cote qu'on règle au sabot (jamais l'axe de la fente). <span style="color:var(--shop)">●</span> Tenso/Clamex · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond.</div>`;
   const SURLBL = { face: 'face', 'contre-face': 'contre-face', 'about-gauche': 'ab. G', 'about-droit': 'ab. D', 'rive-avant': 'rive av.', 'rive-arriere': 'rive ar.' };
   for (const g of groups.values()) {
     const { p0, preps } = g, len = p0.longueur || 0, larg = p0.largeur || 0, ep = epOf(wb.data, p0);
@@ -2476,20 +2524,24 @@ function renderLamello(body, st) {
     // les points par surface, en mm dans le repère de la pièce (u en x, v en y)
     const M = { face: [], contre: [], aG: [], aD: [], rAv: [], rAr: [] }, surs = [];
     const DST = { face: M.face, 'contre-face': M.contre, 'about-gauche': M.aG, 'about-droit': M.aD, 'rive-avant': M.rAv, 'rive-arriere': M.rAr };
+    const bandes = [];   // les planches qui viennent se poser (face / contre-face)
     for (const pr of preps) {
       if (!DST[pr.sur]) continue;
       if (!surs.includes(pr.sur)) surs.push(pr.sur);
-      DST[pr.sur].push(...lamPoints(pr));
+      DST[pr.sur].push(...lamPoints(pr, p0, ep));
+      if (pr.sur === 'face' || pr.sur === 'contre-face')
+        for (const li of lamLignes(pr, ep))
+          bandes.push({ sur: pr.sur, li, b: ligneBande(li, li.axe === 'u' ? len : larg) });
     }
     const topE = M.rAv.length ? es + gap : 0;
     const coteBase = bh + (M.rAr.length ? es + gap : 0);
     const hasContre = M.contre.length > 0;
     const yC = coteBase + 38;
     const Hc = padT + topE + (hasContre ? yC + bh + 12 : coteBase + 30);
-    let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(Hc)}" style="max-width:min(100%,${wb.WG * 2}px);height:auto"><g transform="translate(${padL + es + gap},${padT + topE})">`;
+    let svg = `<svg viewBox="0 0 ${Math.round(W0)} ${Math.round(Hc)}" ${wbPart(W0)}><g transform="translate(${padL + es + gap},${padT + topE})">`;
     // la FACE — le repère commun : tout se rabat autour d'elle, axes partagés
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
-    svg += `<text x="3" y="10" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">face</text>`;
+    svg += `<text x="3" y="10" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">face</text>`;
     const rain = (p0.preparations || []).find((x) => x.type === 'rainure');
     if (rain) {
       const roff = +((String(rain.pos).match(/(\d+)\s*mm/) || [])[1]) || 10;
@@ -2497,19 +2549,49 @@ function renderLamello(body, st) {
       const gy = bh - (roff + rwd) * S2;
       svg += `<rect x="0" y="${gy}" width="${len * S2 - roff * S2}" height="${Math.max(rwd * S2, 2)}" fill="var(--proj)" fill-opacity=".6" stroke="var(--proj)" stroke-width="1"/>`;
     }
+    // LA PLANCHE QUI ARRIVE : deux traits pointillés à ses faces, et la cote prise depuis le
+    // bord de référence jusqu'à la face la plus proche — une planche en butée lit 0. C'est
+    // cette cote qu'on règle au sabot, jamais l'axe de la fente.
+    const planche = (yOff, sur) => {
+      let o = '';
+      for (const { li, b } of bandes.filter((x) => x.sur === sur)) {
+        const uAxe = li.axe === 'u';
+        const p1 = b.a * S2, p2 = b.b * S2, near = b.loin ? p2 : p1;
+        const L1 = uAxe ? `<line x1="${p1.toFixed(1)}" y1="${yOff}" x2="${p1.toFixed(1)}" y2="${yOff + bh}"` : `<line x1="0" y1="${(yOff + p1).toFixed(1)}" x2="${len * S2}" y2="${(yOff + p1).toFixed(1)}"`;
+        const L2 = uAxe ? `<line x1="${p2.toFixed(1)}" y1="${yOff}" x2="${p2.toFixed(1)}" y2="${yOff + bh}"` : `<line x1="0" y1="${(yOff + p2).toFixed(1)}" x2="${len * S2}" y2="${(yOff + p2).toFixed(1)}"`;
+        const st = ` stroke="var(--proj)" stroke-width="1.4" stroke-dasharray="5 3"/>`;
+        o += L1 + st + L2 + st;
+        // ligne de cote depuis le bord de référence (0 = butée)
+        const orig = b.loin ? (uAxe ? len * S2 : bh) : 0;
+        if (uAxe) {
+          const cyl = yOff + bh - 9;
+          o += `<line x1="${orig}" y1="${cyl}" x2="${near.toFixed(1)}" y2="${cyl}" stroke="var(--proj)" stroke-width="1"/>`;
+          o += `<text x="${((orig + near) / 2).toFixed(1)}" y="${cyl - 3}" text-anchor="middle" fill="var(--proj)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${+li.pos.toFixed(1)}</text>`;
+        } else {
+          const cxl = 12;
+          o += `<line x1="${cxl}" y1="${(yOff + orig).toFixed(1)}" x2="${cxl}" y2="${(yOff + near).toFixed(1)}" stroke="var(--proj)" stroke-width="1"/>`;
+          o += `<text x="${cxl}" y="${(yOff + (orig + near) / 2).toFixed(1)}" transform="rotate(-90 ${cxl} ${(yOff + (orig + near) / 2).toFixed(1)})" text-anchor="middle" fill="var(--proj)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${+li.pos.toFixed(1)}</text>`;
+        }
+      }
+      return o;
+    };
+    svg += planche(0, 'face');
     for (const c of M.face) svg += mk(c.u * S2, c.v * S2, c.t);
+    // le HAUT du meuble monté : liseré sur l'arête concernée, ou mention quand c'est une face
+    svg += hautMark(p0.haut, { x: 0, y: 0, w: len * S2, h: bh }, true, FS.note);
     // bandes d'about rabattues (axe v partagé) — la fente est un trait qui traverse
     const strip = (x0, marks) => { let o = `<rect x="${x0}" y="0" width="${es}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) o += `<line x1="${x0}" y1="${(m.v * S2).toFixed(1)}" x2="${x0 + es}" y2="${(m.v * S2).toFixed(1)}" stroke="var(--shop)" stroke-width="2"/>`; return o; };
-    if (M.aG.length) svg += strip(-gap - es, M.aG) + `<text x="${-gap - es}" y="-4" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">ab. G</text>`;
-    if (M.aD.length) svg += strip(len * S2 + gap, M.aD) + `<text x="${len * S2 + gap + es}" y="-4" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">ab. D</text>`;
+    if (M.aG.length) svg += strip(-gap - es, M.aG) + `<text x="${-gap - es}" y="-4" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. G</text>`;
+    if (M.aD.length) svg += strip(len * S2 + gap, M.aD) + `<text x="${len * S2 + gap + es}" y="-4" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. D</text>`;
     // rives rabattues (axe u partagé)
     const rive = (y0, marks) => { let o = `<rect x="0" y="${y0}" width="${len * S2}" height="${es}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) o += `<line x1="${(m.u * S2).toFixed(1)}" y1="${y0}" x2="${(m.u * S2).toFixed(1)}" y2="${y0 + es}" stroke="var(--shop)" stroke-width="2"/>`; return o; };
-    if (M.rAv.length) svg += rive(-gap - es, M.rAv) + `<text x="2" y="${-gap - es - 3}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">rive av.</text>`;
-    if (M.rAr.length) svg += rive(bh + gap, M.rAr) + `<text x="2" y="${bh + gap + es + 9}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">rive ar.</text>`;
+    if (M.rAv.length) svg += rive(-gap - es, M.rAv) + `<text x="2" y="${-gap - es - 3}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive av.</text>`;
+    if (M.rAr.length) svg += rive(bh + gap, M.rAr) + `<text x="2" y="${bh + gap + es + 9}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive ar.</text>`;
     // contre-face — PAR TRANSPARENCE (même orientation) : les cotes se lisent pareil
     if (hasContre) {
       svg += `<rect x="0" y="${yC}" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5" stroke-dasharray="6 3"/>`;
-      svg += `<text x="3" y="${yC + 10}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">contre-face (par transparence)</text>`;
+      svg += `<text x="3" y="${yC + 10}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">contre-face (par transparence)</text>`;
+      svg += planche(yC, 'contre-face');
       for (const c of M.contre) svg += mk(c.u * S2, yC + c.v * S2, c.t);
     }
     // cotes écrites — u sous l'ensemble, v au-delà de la bande gauche : les MÊMES références
@@ -2517,14 +2599,15 @@ function renderLamello(body, st) {
     const us = [...new Set([...M.face, ...M.contre, ...M.rAv, ...M.rAr].map((m) => m.u))].sort((a2, b2) => a2 - b2);
     const vs = [...new Set([...M.face, ...M.contre, ...M.aG, ...M.aD].map((m) => m.v))].sort((a2, b2) => a2 - b2);
     svg += `<line x1="0" y1="${coteBase + 7}" x2="${len * S2}" y2="${coteBase + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    for (const uv of us) { const x = uv * S2; svg += `<line x1="${x}" y1="${coteBase + 4}" x2="${x}" y2="${coteBase + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${coteBase + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${uv}</text>`; }
+    for (const uv of us) { const x = uv * S2; svg += `<line x1="${x}" y1="${coteBase + 4}" x2="${x}" y2="${coteBase + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${coteBase + 19}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${uv}</text>`; }
     const lx0 = -es - gap - 9;
     svg += `<line x1="${lx0}" y1="0" x2="${lx0}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-    vs.forEach((vv, i) => { const y = vv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); svg += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="8.5">${vv}</text>`; });
-    svg += `<text x="${lx0 + 3}" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">avant↓</text>`;
+    vs.forEach((vv, i) => { const y = vv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); svg += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${vv}</text>`; });
+    svg += `<text x="${lx0 + 3}" y="-6" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">avant↓</text>`;
     svg += `</g></svg>`;
     const npts = Object.values(M).reduce((n2, l) => n2 + l.length, 0);
-    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role || '')} · ${len} × ${larg} mm</b><span>${surs.map((x) => esc(SURLBL[x] || x)).join(' + ')} · ${npts} points · ×${g.pieces.length}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chipsOf(g.pieces)}</div></div></div>`;
+    const hautTxt = p0.haut ? ` · haut : ${esc(SURLBL[p0.haut] || p0.haut)}` : '';
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role || '')} · ${len} × ${larg} mm</b><span>${surs.map((x) => esc(SURLBL[x] || x)).join(' + ')} · ${npts} points · ×${g.pieces.length}${hautTxt}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chipsOf(g.pieces)}</div></div></div>`;
   }
   body.innerHTML = html;
   body.querySelectorAll('[data-tick]').forEach((b2) => b2.addEventListener('click', () => tick(b2.dataset.tick, !wbDone(b2.dataset.tick))));
@@ -2563,7 +2646,7 @@ function sceneSVG(scene) {
       const ref = n.ref ? ` class="pname" data-et="${esc(n.ref)}" style="cursor:pointer"` : '';
       const nid = n.id ? ` data-nid="${esc(n.id)}"` : '';   // cible du surlignage séquence (v0.2)
       g += `<rect${ref}${nid} x="${X(n.x)}" y="${X(n.y)}" width="${X(n.w)}" height="${X(n.h)}" rx="2" ${skin} stroke="var(--shop)" stroke-width="1.5"/>`;
-      if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="600">${esc(n.label)}</text>`;
+      if (n.label) g += `<text x="${X(n.x + n.w / 2)}" y="${X(n.y + n.h / 2)}" text-anchor="middle" dominant-baseline="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.rep}" font-weight="600">${esc(n.label)}</text>`;
     } else if (n.type === 'trait') {
       const pts = (n.pts || []).map((p) => `${X(p[0])},${X(p[1])}`).join(' ');
       const dash = n.style === 'axe' ? 'stroke-dasharray="9 3 2 3"' : n.style === 'pointille' ? 'stroke-dasharray="3 3"' : '';
@@ -2578,7 +2661,7 @@ function sceneSVG(scene) {
       g += `<line x1="${X(a[0])}" y1="${X(a[1])}" x2="${X(a2[0])}" y2="${X(a2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
       g += `<line x1="${X(b[0])}" y1="${X(b[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink-soft)" stroke-width="0.7"/>`;
       g += `<line x1="${X(a2[0])}" y1="${X(a2[1])}" x2="${X(b2[0])}" y2="${X(b2[1])}" stroke="var(--ink)" stroke-width="1"/>`;
-      g += `<text x="${X(mx)}" y="${X(my)}" transform="rotate(${ang.toFixed(0)} ${X(mx)} ${X(my)})" text-anchor="middle" dy="-3" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3.5">${esc(n.texte || dist + ' mm')}</text>`;
+      g += `<text x="${X(mx)}" y="${X(my)}" transform="rotate(${ang.toFixed(0)} ${X(mx)} ${X(my)})" text-anchor="middle" dy="-3" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.cote}" font-weight="800" paint-order="stroke" stroke="var(--surface)" stroke-width="4">${esc(n.texte || dist + ' mm')}</text>`;
     } else if (n.type === 'feature') {
       if (n.forme === 'lamello') {
         const [x, y] = anc(n.at);
@@ -2595,16 +2678,16 @@ function sceneSVG(scene) {
     } else if (n.type === 'note') {
       const [x, y] = anc(n.at), w = (n.w || 170) * S, t = String(n.texte || '');
       g += `<rect x="${X(x)}" y="${X(y)}" width="${w.toFixed(0)}" height="22" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
-      g += `<text x="${(x * S + 6).toFixed(1)}" y="${(y * S + 15).toFixed(1)}" fill="var(--ink)" font-family="var(--f-mono)" font-size="10">${esc(t.length > 42 ? t.slice(0, 40) + '…' : t)}</text>`;
+      g += `<text x="${(x * S + 6).toFixed(1)}" y="${(y * S + 15).toFixed(1)}" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.note}">${esc(t.length > 42 ? t.slice(0, 40) + '…' : t)}</text>`;
     } else if (n.type === 'repere') {
       const [x, y] = anc(n.at);
       if (n.vers) { const [vx, vy] = anc(n.vers); g += `<line x1="${X(x)}" y1="${X(y)}" x2="${X(vx)}" y2="${X(vy)}" stroke="var(--ink-soft)" stroke-width="0.7"/>`; }
       const ta = x > cad.w * 0.6 ? 'end' : 'start';   // près du bord droit → texte aligné à droite (anti-débordement)
-      g += `<text x="${X(x)}" y="${X(y)}" text-anchor="${ta}" fill="var(--ink)" font-family="var(--f-mono)" font-size="10" font-weight="600" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(n.texte || '')}</text>`;
+      g += `<text x="${X(x)}" y="${X(y)}" text-anchor="${ta}" fill="var(--ink)" font-family="var(--f-mono)" font-size="${FS.rep}" font-weight="600" paint-order="stroke" stroke="var(--surface)" stroke-width="3">${esc(n.texte || '')}</text>`;
     }
   }
-  const vw = Math.max(wb.WG, Math.round(cad.w * S + 2 * M)), vh = (cad.h * S + 2 * M).toFixed(0);
-  return `<svg viewBox="0 0 ${vw} ${vh}" style="max-width:min(100%,${wb.WG * 2}px);height:auto"><g transform="translate(${M},${M})">${g}</g></svg>`;
+  const vw = Math.round(cad.w * S + 2 * M), vh = (cad.h * S + 2 * M).toFixed(0);
+  return `<svg viewBox="0 0 ${vw} ${vh}" ${wbPart(vw)}><g transform="translate(${M},${M})">${g}</g></svg>`;
 }
 // Glyphes des gestes de montage (vocabulaire fermé v0.2) — inconnu ⇒ puce neutre.
 const ASMG = { poser: '▽', coller: '≋', assembler: '⋈', visser: '✱', serrer: '⊏⊐', verifier: '⊾' };
@@ -2730,6 +2813,7 @@ function showPiece(etq) {
   body.innerHTML = `<h2>${esc(etq)}</h2>
     <div class="prow"><b>Dimensions</b><span>${esc(pieceDims(p))} mm${mat.ep ? ' · ép. ' + mat.ep : ''}</span></div>
     ${pieceChants(p).length ? `<div class="prow"><b>Chants</b><span style="color:var(--warn)">${pieceChants(p).map(esc).join(' · ')}</span></div>` : ''}
+    ${p.haut ? `<div class="prow"><b>Haut (monté)</b><span style="color:var(--proj)">▲ ${esc(p.haut)}</span></div>` : ''}
     <div class="prow"><b>Matière</b><span>${esc(mat.label || loc.materiau || '—')}</span></div>
     <div class="prow"><b>Colonne</b><span>${esc(step?.entree || '?')} · plaque ${esc(loc.plaque || '?')}</span></div>
     ${sibs.length > 1 ? `<div class="prow"><b>Tronçons</b><span>${sibs.map(esc).join(' · ')}</span></div>` : ''}

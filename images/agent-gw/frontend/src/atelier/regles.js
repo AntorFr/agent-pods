@@ -12,6 +12,10 @@
 
 export const SURFACES = ['face', 'contre-face', 'rive-avant', 'rive-arriere', 'about-gauche', 'about-droit'];
 export const CHANTS = ['rive-avant', 'rive-arriere', 'about-gauche', 'about-droit', 'abouts'];
+// `haut` : la surface qui regarde le PLAFOND une fois le meuble monté. Ce n'est PAS
+// déductible du débit (un flan couché sur la plaque ne dit pas comment il se dresse) — c'est
+// une donnée d'assemblage, et c'est ce qui évite de fraiser une pièce à l'envers.
+export const HAUTS = SURFACES;
 export const GESTES = ['poser', 'coller', 'assembler', 'visser', 'serrer', 'verifier'];
 export const ST_TYPES = ['debit', 'tronconnage', 'rainure', 'lamello', 'assemblage', 'suivi'];
 
@@ -55,16 +59,41 @@ export function chantEdges(chants, r, uAlongX) {
 /* ── lamello 3.0 : une surface + des lignes (faces) ou des points (chants) ──
    Une ligne fixe UNE coordonnée (sa clé `u:` ou `v:` nomme l'axe), ses points donnent
    l'autre. Sur un chant, la coordonnée transverse est imposée par la surface : les
-   points portent la seule libre (v sur un about, u sur une rive). */
-export function lamPoints(pr) {
+   points portent la seule libre (v sur un about, u sur une rive).
+
+   ⚠️ LE SABOT. Sur une face, une ligne ne décrit PAS l'axe des fentes : elle dit où vient
+   se poser la planche voisine. La Zeta se cale au **sabot** contre une face de cette
+   planche — on ne vise jamais un axe. Donc :
+     `pos` (la valeur de `u:`/`v:`) = distance du bord de RÉFÉRENCE à la face la plus
+        proche de la planche qui arrive → une planche en butée sur le bord vaut 0 ;
+     `depuis` = ce bord de référence (défaut : l'origine de l'axe) ;
+     `ep` = épaisseur de la planche qui arrive (défaut : celle de la pièce).
+   La fente tombe au MILIEU de cette bande — c'est ce que rend `lamPoints`. */
+export const ligneAxe = (l) => (l.u != null ? 'u' : 'v');
+export function lamLignes(pr, epDefaut) {
+  return (pr.lignes || []).map((l) => {
+    const axe = ligneAxe(l);
+    return { axe, pos: (axe === 'u' ? l.u : l.v) || 0, ep: l.ep ?? epDefaut,
+      depuis: l.depuis || (axe === 'u' ? 'about-gauche' : 'rive-avant'), points: l.points || [] };
+  });
+}
+// la bande occupée par la planche qui arrive, en absolu sur l'axe (dim = longueur ou largeur)
+export function ligneBande(li, dim) {
+  const loin = li.depuis === 'about-droit' || li.depuis === 'rive-arriere';
+  const a = loin ? dim - li.pos - li.ep : li.pos;
+  return { a, b: a + li.ep, mid: a + li.ep / 2, loin };
+}
+export function lamPoints(pr, piece, epDefaut) {
   const out = [];
-  for (const l of pr.lignes || []) {
-    const fixU = l.u != null;
-    for (const q of l.points || []) out.push({ u: fixU ? l.u : (q.u ?? 0), v: fixU ? (q.v ?? 0) : (l.v ?? 0), t: q.t });
+  const L = piece?.longueur || 0, V = piece?.largeur || 0;
+  for (const li of lamLignes(pr, li0(epDefaut, piece))) {
+    const { mid } = ligneBande(li, li.axe === 'u' ? L : V);
+    for (const q of li.points) out.push(li.axe === 'u' ? { u: mid, v: q.v ?? 0, t: q.t } : { u: q.u ?? 0, v: mid, t: q.t });
   }
   for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t });
   return out;
 }
+const li0 = (epDefaut, piece) => (Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19);
 
 /* ── l'état EFFECTIF d'une plaque : fichier + calque de l'établi ─────────
    `layout` = workbook-layout.json ({poses, bandes}) ; absent → l'état du fichier. */
@@ -172,7 +201,7 @@ export function valide(wb) {
         const libre = pr.sur.startsWith('about') ? 'v' : 'u';
         if (q[libre] == null) E.push(`${p.etiquette} : sur ${pr.sur}, un point porte « ${libre} »`);
       }
-      for (const q of lamPoints(pr)) {
+      for (const q of lamPoints(pr, p, epOf(wb, p))) {
         if (q.u < -0.01 || q.u > (p.longueur || 0) + 0.01 || q.v < -0.01 || q.v > (p.largeur || 0) + 0.01)
           E.push(`${p.etiquette} : point lamello (${q.u}, ${q.v}) hors de la pièce`);
       }

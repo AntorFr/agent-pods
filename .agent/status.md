@@ -2,6 +2,40 @@
 
 > MàJ : 2026-08-17
 
+**Lisibilité d'atelier : cotes, sabot, haut, et l'échelle enfin honnête (0.72.0)** — série de
+retours de Monsieur sur la 3.0, tous traités :
+
+- **Cotes de pièce en encre pleine, corps des cotes de bande** (11,5 gras + halo). Sur les
+  pièces plus hautes que larges, nom ET cote **pivotent** le long de la pièce — sinon les
+  lames de 100 se recouvraient en bouillie. Même convention en Plaques et en Tronçons ; les
+  cotes trop serrées s'étagent sur deux rangs, et la cote de bande d'une colonne étroite
+  remonte en tête pour ne plus croiser l'étiquette.
+- **UNE échelle typographique** (`FS`, trois niveaux) partagée par les quatre vues — elles
+  étaient désaccordées (8 / 8,5 / 9 / 10 / 10,5 / 12 / 13 selon l'endroit).
+- ☠️ **L'invariant d'échelle était FAUX à deux endroits, et seule la mesure l'a vu** : la
+  scène d'assemblage, qui partageait sa rangée avec la séquence, tournait à **0,155 px/mm**
+  contre 0,267 ailleurs ; et `.cutwrap svg{min-width:480px}` remontait de force les petits
+  dessins — la plaque P3 (700 mm) rendait au **DOUBLE** de la P2 (2800 mm). Corrigés :
+  scène en pleine largeur (séquence dessous), min-width supprimée, et chaque carte porte un
+  viewBox à sa taille réelle + une largeur CSS proportionnelle (px/mm identique, zéro espace
+  mort). Mesuré carte par carte : 0,267 sur les quatre vues.
+- **D6 — LE SABOT** (correction métier de Monsieur) : une ligne lamello de face décrit **où
+  arrive la planche voisine**, pas l'axe des fentes — la Zeta se cale au sabot contre une
+  face, on ne vise jamais un axe. `pos` = distance du bord de référence à la face la plus
+  proche (**une planche en butée lit 0**), + `ep` et `depuis`. Le front dessine la planche en
+  pointillé bleu, cote son bord de référence, et place la fente **au milieu** de la bande.
+  ⚠️ La donnée d'Alfred était déjà juste (u=500 = dessous de tablette) ; c'est le DESSIN qui
+  la lisait comme un axe — l'erreur valait ép/2, soit 9,5 mm de fraisage.
+- **D7 — `haut`** : la surface qui regarde le plafond une fois monté, non déductible du
+  débit. Liseré « ▲ HAUT » sur l'arête (ou mention si c'est une face), en Plaques, Tronçons,
+  Lamello et fiche pièce.
+
+Banc `atelier-test.mjs` : 30 asserts (dont les deux cas de butée à 0). Contrat et ATELIER-3
+amendés. Vérifié à l'œil sur imp3d (3.0) et claustra (2.0 converti), px/mm mesuré partout.
+⚠️ Reste à faire côté Alfred : déclarer `haut` sur les pièces d'imp3d (mes valeurs d'essai
+ne vivent que dans le bac à sable), et `ep`/`depuis` sur les lignes qui ne prennent pas les
+défauts.
+
 **WORKBOOK 3.0 — la refonte feuille blanche (0.71.0, 2026-08-17)** : demandée par Monsieur
 (« on traîne des contraintes historiques ? »), cadrée dans `ATELIER-3.md` (acté, ses trois
 arbitrages : rot inversé OUI, chants renommés OUI, scènes minimales pour les dormants — seul

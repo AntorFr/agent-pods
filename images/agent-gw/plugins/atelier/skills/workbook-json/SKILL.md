@@ -50,9 +50,15 @@ par pièce est `chants[]`), `installation`.
 ```json
 { "etiquette": "IMP-C1-BAS", "module": "C1", "role": "BAS", "repere": "…",
   "longueur": 720, "largeur": 670, "materiau": "MEL19",
-  "chants": ["rive-avant"],
+  "chants": ["rive-avant"], "haut": "face",
   "preparations": [ … ] }
 ```
+
+**`haut`** (optionnel, vocabulaire des surfaces) : la surface qui regarde le **plafond une
+fois le meuble monté**. Ce n'est PAS déductible du débit — un flan couché sur la plaque ne
+dit pas comment il se dresse — et c'est ce qui évite de fraiser une pièce à l'envers. Les
+vues la signalent (liseré bleu « ▲ HAUT » sur l'arête, ou mention quand c'est une face).
+Déclare-la sur toute pièce qui n'est pas symétrique haut/bas.
 
 - `materiau` porte l'épaisseur (pas de `ep` recopié). Les champs 1.0 (`reglageFS`,
   `panneau`, `colonne`) **n'existent plus** — `debit[]` dit déjà tout ça.
@@ -71,6 +77,16 @@ par pièce est `chants[]`), `installation`.
 - **Sur `face`/`contre-face` : `lignes[]`.** La clé de la ligne (`u:` ou `v:`) NOMME l'axe
   fixé ; ses points donnent l'autre coordonnée. Le type peut varier ligne à ligne — on
   n'éclate JAMAIS une prépa pour ça : une pièce, une surface, une préparation.
+
+  ⚠️ **LE SABOT — une ligne dit où arrive la PLANCHE, pas où passe l'axe.** La Zeta se cale
+  au sabot contre une face de la planche voisine ; on ne vise jamais un axe. Donc la valeur
+  de `u:`/`v:` est la **distance du bord de référence à la face la plus proche de la planche
+  qui arrive** — une planche posée en butée sur le bord vaut **0**. Deux attributs de ligne
+  accompagnent ça : **`ep`** (épaisseur de la planche qui arrive ; défaut : celle de la
+  pièce) et **`depuis`** (le bord de référence ; défaut `about-gauche` pour une ligne `u:`,
+  `rive-avant` pour une `v:`). Mesure-t-on depuis le haut ? `depuis: "about-droit"`, et la
+  cote redevient 0 pour une planche en butée en haut. Le front dessine la planche en
+  pointillé, cote son bord de référence, et place la fente **au milieu** de la bande.
 - **Sur un chant : `points[]`** portant la seule coordonnée libre — `v` sur un about,
   `u` sur une rive (le validateur refuse l'autre).
 - Chaque point doit tomber DANS la pièce (`0 ≤ u ≤ longueur`, `0 ≤ v ≤ largeur`) — c'est le
