@@ -108,6 +108,56 @@ export function lamPoints(pr, piece, epDefaut) {
 }
 const li0 = (epDefaut, piece) => (Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19);
 
+/* ── D8 : `jonctions[]`, la source unique d'une jonction ─────────────────
+   Une jonction s'usine sur DEUX pièces. Écrite deux fois, rien ne garantissait qu'elle le
+   soit des deux bords, ni que les deux moitiés s'accordent, ni que l'`appui` d'un côté
+   réponde au `depuis` de l'autre. Elle s'écrit désormais UNE fois et les préparations en
+   DÉRIVENT — c'est ce qui rend ces trois fautes structurellement impossibles.
+
+     porte  : la pièce qui reçoit sur sa face  { piece, sur, pos, depuis }
+     arrive : la pièce qui arrive par son chant { piece, sur, appui, origine?, inverse? }
+     connecteurs[].a : la position LE LONG de la jonction, dans le repère de la porteuse.
+   Chez l'arrivante, la même fente vaut `a - origine` (ou `origine - a` si `inverse`). */
+
+// `depuis` nomme un bord ⇒ la ligne de la porteuse court sur l'axe perpendiculaire, et les
+// positions `a` tombent sur l'axe restant. L'axe se déduit, il ne se déclare jamais.
+export const axeDe = (bord) => (String(bord || '').startsWith('about') ? 'u' : 'v');
+const axeChant = (sur) => (String(sur || '').startsWith('about') ? 'v' : 'u');
+
+export function jonctionPreps(j) {
+  const out = [];
+  const po = j.porte || {}, ar = j.arrive || {};
+  const cs = j.connecteurs || [];
+  if (po.piece && po.sur) {
+    const axe = axeDe(po.depuis), autre = axe === 'u' ? 'v' : 'u';
+    out.push([po.piece, {
+      type: 'lamello', sur: po.sur, jonction: j.id,
+      lignes: [{ [axe]: po.pos ?? 0, depuis: po.depuis, ...(po.ep != null ? { ep: po.ep } : {}),
+        points: cs.map((c) => ({ [autre]: c.a, t: c.t })) }],
+      ...(j.note ? { note: j.note } : {}),
+    }]);
+  }
+  if (ar.piece && ar.sur) {
+    const o = ar.origine || 0, libre = axeChant(ar.sur);
+    out.push([ar.piece, {
+      type: 'lamello', sur: ar.sur, jonction: j.id,
+      ...(ar.appui ? { appui: ar.appui } : {}),
+      points: cs.map((c) => ({ [libre]: ar.inverse ? o - c.a : c.a - o, t: c.t })),
+      ...(j.note ? { note: j.note } : {}),
+    }]);
+  }
+  return out;
+}
+
+// Les préparations EFFECTIVES d'une pièce : celles écrites à la main + celles dérivées des
+// jonctions. Le rendu et le suivi ne voient que cette somme.
+export function prepsDe(wb, piece) {
+  const out = [...(piece.preparations || [])];
+  for (const j of wb.jonctions || [])
+    for (const [et, pr] of jonctionPreps(j)) if (et === piece.etiquette) out.push(pr);
+  return out;
+}
+
 /* ── l'état EFFECTIF d'une plaque : fichier + calque de l'établi ─────────
    `layout` = workbook-layout.json ({poses, bandes}) ; absent → l'état du fichier. */
 export function plaqueBands(wb, pl, layout) {
@@ -199,7 +249,7 @@ export function valide(wb) {
     etqs.add(p.etiquette);
     if (!(p.longueur > 0) || !(p.largeur > 0)) E.push(`${p.etiquette} : longueur/largeur > 0 requis`);
     for (const c of p.chants || []) if (!CHANTS.includes(c)) E.push(`${p.etiquette} : chant inconnu « ${c} » (${CHANTS.join(', ')})`);
-    for (const pr of p.preparations || []) {
+    for (const pr of prepsDe(wb, p)) {
       if (pr.type !== 'lamello') continue;
       if (!SURFACES.includes(pr.sur)) E.push(`${p.etiquette} : lamello.sur « ${pr.sur} » hors vocabulaire (${SURFACES.join(', ')})`);
       const surFace = pr.sur === 'face' || pr.sur === 'contre-face';
@@ -254,6 +304,7 @@ export function valide(wb) {
     if (!s || !ST_TYPES.includes(s.type)) E.push(`stations[${i}] : type inconnu « ${s && s.type} »`);
   }
   E.push(...valideScenes(wb));
+  E.push(...valideJonctions(wb));
   return E;
 }
 
@@ -292,6 +343,39 @@ export function valideScenes(wb) {
       if (!st.titre) E.push(`${tag}/sequence[${j}] : titre requis`);
       if (st.geste != null && !GESTES.includes(st.geste)) E.push(`${tag}/sequence[${j}] : geste « ${st.geste} »`);
       for (const c of st.cible || []) if (!ids.has(c)) E.push(`${tag}/sequence[${j}] : cible « ${c} » inconnue`);
+    }
+  }
+  return E;
+}
+
+/* ── les jonctions : les contrôles qu'un objet de premier rang rend possibles ── */
+export function valideJonctions(wb) {
+  const E = [];
+  const P = new Map((wb.pieces || []).map((p) => [p.etiquette, p]));
+  const vus = new Set();
+  for (const [i, j] of (wb.jonctions || []).entries()) {
+    const tag = `jonction[${i}]${j.id ? ' « ' + j.id + ' »' : ''}`;
+    if (!j.id) E.push(`${tag} : « id » requis`);
+    else if (vus.has(j.id)) E.push(`${tag} : id dupliqué`);
+    else vus.add(j.id);
+    const po = j.porte || {}, ar = j.arrive || {};
+    const pp = P.get(po.piece), pa = P.get(ar.piece);
+    if (!pp) E.push(`${tag} : porte.piece inconnue « ${po.piece} »`);
+    if (!pa) E.push(`${tag} : arrive.piece inconnue « ${ar.piece} »`);
+    if (po.sur !== 'face' && po.sur !== 'contre-face') E.push(`${tag} : porte.sur doit être une FACE (vu « ${po.sur} »)`);
+    if (!estChant(ar.sur)) E.push(`${tag} : arrive.sur doit être un CHANT — about ou rive (vu « ${ar.sur} »)`);
+    if (!SURFACES.includes(po.depuis) || po.depuis === 'face' || po.depuis === 'contre-face')
+      E.push(`${tag} : porte.depuis doit nommer un BORD (about-*/rive-*)`);
+    if (!ar.appui) E.push(`${tag} : arrive.appui requis — sans lui, on ne sait pas quelle face coucher sur l'établi`);
+    else if (!APPUIS.includes(ar.appui)) E.push(`${tag} : arrive.appui « ${ar.appui} » (face|contre-face)`);
+    if (!(j.connecteurs || []).length) E.push(`${tag} : aucun connecteur`);
+    // chaque point doit tomber dans les DEUX pièces — le contrôle croisé, impossible avant
+    for (const [et, pr] of jonctionPreps(j)) {
+      const pc = P.get(et); if (!pc) continue;
+      for (const q of lamPoints(pr, pc, epOf(wb, pc))) {
+        if (q.u < -0.01 || q.u > (pc.longueur || 0) + 0.01 || q.v < -0.01 || q.v > (pc.largeur || 0) + 0.01)
+          E.push(`${tag} : un connecteur tombe hors de ${et} (${+q.u.toFixed(1)}, ${+q.v.toFixed(1)})`);
+      }
     }
   }
   return E;

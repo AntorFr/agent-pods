@@ -2,7 +2,7 @@
 // fichiers externes — les fixtures encodent ici les variantes réelles des trois livres.
 import assert from 'node:assert/strict';
 import { normalise } from '../src/atelier/convert.js';
-import { valide, lamPoints, lamLignes, ligneBande, bandGuide, poseRect, chantEdges, issuesPlaque, epOf } from '../src/atelier/regles.js';
+import { valide, lamPoints, lamLignes, ligneBande, bandGuide, poseRect, chantEdges, issuesPlaque, epOf, prepsDe, valideJonctions, axeDe } from '../src/atelier/regles.js';
 
 let n = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); n++; };
@@ -119,6 +119,34 @@ ok(errs.some((e) => e.includes('n’existe pas encore') || e.includes("n'existe 
 const lay = { poses: { 'TST-A-TAB-1': { x: 10, y: 812, rot: true, bande: 'P1-B1' } }, bandes: {} };
 const iss = issuesPlaque(wb, wb.debit[0], lay);
 ok([...iss.values()].flat().some((m) => m.includes('trait de scie')), 'kerf mangé détecté via le calque');
+
+/* ── D8 : une jonction écrite UNE fois, les deux moitiés dérivées ────── */
+{
+  const w = { schemaVersion: '3.0', projet: 'J',
+    materiaux: [{ id: 'M', ep: 19, plaque: { l: 2800, h: 2070 }, derasage: 0 }], meta: { kerf: 4 },
+    pieces: [
+      { etiquette: 'J-COTE', role: 'CÔTÉ', longueur: 721, largeur: 668, materiau: 'M', haut: 'about-droit' },
+      { etiquette: 'J-TRAV', role: 'TRAV', longueur: 682, largeur: 100, materiau: 'M', haut: 'face' }],
+    jonctions: [{ id: 'J1',
+      porte: { piece: 'J-COTE', sur: 'face', pos: 0, depuis: 'about-droit' },
+      arrive: { piece: 'J-TRAV', sur: 'about-gauche', appui: 'face', origine: 551 },
+      connecteurs: [{ t: 'tenso', a: 601 }] }],
+    debit: [], assemblage: [] };
+  const pt = (et) => { const pc = w.pieces.find((x) => x.etiquette === et);
+    return prepsDe(w, pc).flatMap((pr) => lamPoints(pr, pc, epOf(w, pc))); };
+  eq(axeDe('about-droit'), 'u', 'l’axe se déduit du bord de référence');
+  // LE cas réel : 601 chez la porteuse, 50 chez l’arrivante — recopier 601 raterait de 551 mm
+  eq(pt('J-COTE'), [{ u: 711.5, v: 601, t: 'tenso', fixe: 'u' }], 'porteuse : la fente au milieu de la bande, à 601');
+  eq(pt('J-TRAV'), [{ u: 0, v: 50, t: 'tenso', fixe: 'u' }], 'arrivante : la MÊME fente, à 50 dans son repère');
+  eq(valideJonctions(w), [], 'la jonction valide');
+  const ko = (mut, motif, quoi) => { const c = JSON.parse(JSON.stringify(w)); mut(c);
+    ok(valideJonctions(c).some((e) => e.includes(motif)), quoi); };
+  ko((c) => { delete c.jonctions[0].arrive.appui; }, 'appui requis', 'appui manquant refusé');
+  ko((c) => { c.jonctions[0].porte.sur = 'about-gauche'; }, 'doit être une FACE', 'porteuse qui n’est pas une face refusée');
+  ko((c) => { c.jonctions[0].arrive.sur = 'face'; }, 'doit être un CHANT', 'arrivante qui n’est pas un chant refusée');
+  ko((c) => { c.jonctions[0].arrive.origine = 0; }, 'hors de J-TRAV', 'origine fausse : le connecteur sort de l’arrivante');
+  ko((c) => { c.jonctions[0].arrive.piece = 'FANTOME'; }, 'inconnue', 'pièce inconnue refusée');
+}
 
 console.log(`${n}/${n}`);
 console.log('ATELIER OK');

@@ -196,6 +196,51 @@ des petits objets passe par les cotes écrites, pas par la loupe.
    qu'Alfred redessine une vraie scène pour le garage ? Recommandé : minimale pour les
    deux, une vraie scène le jour où le garage rebouge.
 
+## 8. D8 — `jonctions[]`, l'objet de premier rang (acté 2026-08-17)
+
+**Le mal, en trois symptômes d'une seule cause.** Une jonction s'usine sur DEUX pièces, mais
+elle s'écrivait deux fois, indépendamment, sans rien qui les relie. D'où, en une seule
+journée : sept jonctions **déclarées d'un seul bord** (rien ne le détectait) ; deux moitiés
+qui **peuvent porter des cotes divergentes** (déjà vécu : fentes décalées de 9 et 19 mm) ;
+et un **`appui` qui peut contredire le `depuis`** d'en face (rien ne le vérifie).
+
+**La règle 3.1** : la jonction devient la source, les préparations en **dérivent**.
+
+```jsonc
+{ "id": "J-bas-coteG",
+  "porte":  { "piece": "IMP-C1-BAS", "sur": "face",
+              "pos": 0, "depuis": "about-gauche" },   // le sabot : où arrive la planche
+  "arrive": { "piece": "IMP-C1-CÔTÉ-G", "sur": "about-gauche",
+              "appui": "face", "origine": 0 },        // l'établi + le décalage de repère
+  "connecteurs": [ { "t": "tenso", "a": 50 },
+                   { "t": "biscuit", "a": 335 },
+                   { "t": "tenso", "a": 620 } ] }
+```
+
+- **`porte`** — la pièce qui reçoit sur sa face. `pos`/`depuis` = la cote au sabot (D6).
+- **`arrive`** — la pièce qui arrive par son chant. `appui` = la face couchée sur l'établi (D7).
+- **`connecteurs[].a`** — la position **le long de la jonction**, dans le repère de la
+  PORTEUSE. Écrite **une seule fois** : les deux moitiés ne peuvent plus diverger.
+- **`arrive.origine`** — la coordonnée, chez la porteuse, du zéro de l'arrivante. La position
+  chez l'arrivante vaut `a − origine`. Défaut 0 (le cas courant : même origine physique).
+  C'est ce nombre qui capture le cas réel de la traverse arrière — 601 chez le côté, 50 chez
+  elle, donc `origine: 551`. Sans lui, on recopie 50 et les fentes ratent de 551 mm.
+- **`arrive.inverse`** — repère à contresens (rare, symétries) : `a` compté depuis l'autre bout.
+
+**L'axe se déduit, il ne se déclare pas** : `depuis` nomme un bord, donc la ligne de la
+porteuse court sur l'axe perpendiculaire, et les `a` tombent sur l'axe restant. Même règle
+pour l'arrivante selon son chant (about → `v`, rive → `u`). Zéro ambiguïté, zéro transposition
+possible — la maladie du 2.0 ne peut plus revenir par cette porte.
+
+**Ce que le validateur gagne** (et qui était impossible avant) : les deux pièces existent ;
+les deux surfaces sont du bon genre (une face porte, un chant arrive) ; chaque point tombe
+dans les DEUX pièces ; `appui` est présent sur l'arrivante. Une jonction ne peut plus être
+à moitié écrite, puisqu'elle est écrite d'un bloc.
+
+**Cohabitation** : `preparations[]` reste pour l'usinage qui n'est PAS une jonction (rainure,
+perçage) et pour les livres pas encore migrés. Les préparations dérivées des jonctions
+s'ajoutent aux préparations écrites à la main — le rendu et le suivi ne voient que la somme.
+
 ## 7. Amendements post-livraison (2026-08-17)
 
 - **D6 — Le sabot.** Une ligne lamello de face décrit **où arrive la planche voisine**, pas

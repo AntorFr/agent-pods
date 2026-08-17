@@ -18,7 +18,7 @@ import { FORMATS, createBasket, scanFrame, dropCode, composeMessage } from '../s
 import { normalise } from '../atelier/convert.js';
 import {
   SURFACES, CHANTS, epOf, kerfOf, zoneUtile, bandBox, bandGuide, bandLong,
-  chantEdges, lamPoints, lamLignes, ligneBande, plaqueBands, plaquePoses, bandesMeres, issuesPlaque,
+  chantEdges, lamPoints, lamLignes, ligneBande, prepsDe, plaqueBands, plaquePoses, bandesMeres, issuesPlaque,
 } from '../atelier/regles.js';
 
 const $ = (id) => document.getElementById(id);
@@ -2503,7 +2503,7 @@ function renderLamello(body, st) {
   const groups = new Map();
   for (const p of wb.data.pieces || []) {
     if (!stModOk(st, p.module)) continue;
-    const preps = (p.preparations || []).filter((pr) => pr.type === 'lamello');
+    const preps = prepsDe(wb.data, p).filter((pr) => pr.type === 'lamello');   // écrites + dérivées des jonctions
     if (!preps.length) continue;
     const sig = JSON.stringify({ L: p.longueur, l: p.largeur, e: epOf(wb.data, p), pr: preps, rep: p.repere || 0, role: p.role });
     if (!groups.has(sig)) groups.set(sig, { p0: p, preps, pieces: [] });
@@ -2544,7 +2544,7 @@ function renderLamello(body, st) {
     // la FACE — le repère commun : tout se rabat autour d'elle, axes partagés
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
     svg += `<text x="3" y="10" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">face</text>`;
-    const rain = (p0.preparations || []).find((x) => x.type === 'rainure');
+    const rain = prepsDe(wb.data, p0).find((x) => x.type === 'rainure');
     if (rain) {
       const roff = +((String(rain.pos).match(/(\d+)\s*mm/) || [])[1]) || 10;
       const rwd = +((String(rain.cotes).match(/largeur\s*(\d+)/) || [])[1]) || 8;

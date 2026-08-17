@@ -116,6 +116,38 @@ Déclare-la sur toute pièce qui n'est pas symétrique haut/bas.
 - `note` : texte libre. `ref` n'existe plus (le repère EST la référence de cotation).
 - Une prépa `rainure`/`perçage` garde ses `cotes`/`pos` en texte (inchangé).
 
+## `jonctions[]` — une jonction s'écrit UNE fois (préférer à la main)
+
+Une jonction s'usine sur **deux** pièces. Écrite deux fois, rien ne garantit qu'elle le soit
+des deux bords, ni que les deux moitiés s'accordent, ni que l'`appui` réponde au `depuis`.
+Déclare-la donc **ici**, et les préparations des deux pièces en **dérivent** :
+
+```jsonc
+{ "id": "J-cote-travAR",
+  "porte":  { "piece": "IMP-C1-CÔTÉ-G", "sur": "face", "pos": 0, "depuis": "about-droit" },
+  "arrive": { "piece": "IMP-C1-TRAV-AR", "sur": "about-gauche", "appui": "face", "origine": 551 },
+  "connecteurs": [ { "t": "tenso", "a": 601 } ] }
+```
+
+- **`porte`** : la pièce qui reçoit **sur sa face**. `pos` + `depuis` = la cote au sabot.
+- **`arrive`** : la pièce qui arrive **par son chant**. `appui` = la face couchée sur l'établi.
+- **`connecteurs[].a`** : la position le long de la jonction, **dans le repère de la
+  porteuse**. Écrite une seule fois — les deux moitiés ne peuvent plus diverger.
+- **`arrive.origine`** : la coordonnée, chez la porteuse, du **zéro de l'arrivante** ; chez
+  elle la fente vaut `a − origine`. Défaut 0. ⚠️ C'est le nombre qui évite le pire piège :
+  la traverse arrière est à **601** vue du côté et à **50** vue d'elle-même — recopier 601
+  raterait de 551 mm. (`inverse: true` si son repère court à contresens.)
+- **L'axe se déduit** de `depuis` et du chant : tu ne le déclares jamais, donc tu ne peux
+  plus le transposer.
+
+**Ce que le validateur vérifie alors, et qu'il ne pouvait pas avant** : les deux pièces
+existent ; la porteuse présente bien une face et l'arrivante un chant ; `appui` est là ;
+et **chaque connecteur tombe dans les DEUX pièces**. Une jonction ne peut plus être écrite
+à moitié.
+
+`preparations[]` reste pour ce qui n'est PAS une jonction (rainure, perçage) — les deux se
+cumulent à l'affichage.
+
 ## `debit[]` — la plaque est le tronc, les étapes forment une CHAÎNE
 
 `{ "plaque": "P1", "label"?, "materiau", "etapes": [...] }` — types : `derasage`,

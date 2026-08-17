@@ -117,6 +117,8 @@ function sceneMinimale(a, wb2) {
 // src/atelier/regles.js
 var SURFACES = ["face", "contre-face", "rive-avant", "rive-arriere", "about-gauche", "about-droit"];
 var CHANTS = ["rive-avant", "rive-arriere", "about-gauche", "about-droit", "abouts"];
+var APPUIS = ["face", "contre-face"];
+var estChant = (sur) => String(sur || "").startsWith("about") || String(sur || "").startsWith("rive");
 var GESTES = ["poser", "coller", "assembler", "visser", "serrer", "verifier"];
 var ST_TYPES = ["debit", "tronconnage", "rainure", "lamello", "assemblage", "suivi"];
 var matOf = (wb2, id) => (wb2.materiaux || []).find((m) => m.id === id) || {};
@@ -163,6 +165,46 @@ function lamPoints(pr, piece, epDefaut) {
   return out;
 }
 var li0 = (epDefaut, piece) => Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19;
+var axeDe = (bord) => String(bord || "").startsWith("about") ? "u" : "v";
+var axeChant = (sur) => String(sur || "").startsWith("about") ? "v" : "u";
+function jonctionPreps(j) {
+  const out = [];
+  const po = j.porte || {}, ar = j.arrive || {};
+  const cs = j.connecteurs || [];
+  if (po.piece && po.sur) {
+    const axe = axeDe(po.depuis), autre = axe === "u" ? "v" : "u";
+    out.push([po.piece, {
+      type: "lamello",
+      sur: po.sur,
+      jonction: j.id,
+      lignes: [{
+        [axe]: po.pos ?? 0,
+        depuis: po.depuis,
+        ...po.ep != null ? { ep: po.ep } : {},
+        points: cs.map((c) => ({ [autre]: c.a, t: c.t }))
+      }],
+      ...j.note ? { note: j.note } : {}
+    }]);
+  }
+  if (ar.piece && ar.sur) {
+    const o = ar.origine || 0, libre = axeChant(ar.sur);
+    out.push([ar.piece, {
+      type: "lamello",
+      sur: ar.sur,
+      jonction: j.id,
+      ...ar.appui ? { appui: ar.appui } : {},
+      points: cs.map((c) => ({ [libre]: ar.inverse ? o - c.a : c.a - o, t: c.t })),
+      ...j.note ? { note: j.note } : {}
+    }]);
+  }
+  return out;
+}
+function prepsDe(wb2, piece) {
+  const out = [...piece.preparations || []];
+  for (const j of wb2.jonctions || [])
+    for (const [et, pr] of jonctionPreps(j)) if (et === piece.etiquette) out.push(pr);
+  return out;
+}
 function plaqueBands(wb2, pl, layout) {
   const bands = /* @__PURE__ */ new Map();
   for (const st of pl.etapes || []) if (st.type === "refente")
@@ -259,7 +301,7 @@ function valide(wb2) {
     etqs.add(p.etiquette);
     if (!(p.longueur > 0) || !(p.largeur > 0)) E.push(`${p.etiquette} : longueur/largeur > 0 requis`);
     for (const c of p.chants || []) if (!CHANTS.includes(c)) E.push(`${p.etiquette} : chant inconnu \xAB ${c} \xBB (${CHANTS.join(", ")})`);
-    for (const pr of p.preparations || []) {
+    for (const pr of prepsDe(wb2, p)) {
       if (pr.type !== "lamello") continue;
       if (!SURFACES.includes(pr.sur)) E.push(`${p.etiquette} : lamello.sur \xAB ${pr.sur} \xBB hors vocabulaire (${SURFACES.join(", ")})`);
       const surFace = pr.sur === "face" || pr.sur === "contre-face";
@@ -318,6 +360,7 @@ function valide(wb2) {
     if (!s || !ST_TYPES.includes(s.type)) E.push(`stations[${i}] : type inconnu \xAB ${s && s.type} \xBB`);
   }
   E.push(...valideScenes(wb2));
+  E.push(...valideJonctions(wb2));
   return E;
 }
 function valideScenes(wb2) {
@@ -369,6 +412,37 @@ function valideScenes(wb2) {
       if (!st.titre) E.push(`${tag}/sequence[${j}] : titre requis`);
       if (st.geste != null && !GESTES.includes(st.geste)) E.push(`${tag}/sequence[${j}] : geste \xAB ${st.geste} \xBB`);
       for (const c of st.cible || []) if (!ids.has(c)) E.push(`${tag}/sequence[${j}] : cible \xAB ${c} \xBB inconnue`);
+    }
+  }
+  return E;
+}
+function valideJonctions(wb2) {
+  const E = [];
+  const P = new Map((wb2.pieces || []).map((p) => [p.etiquette, p]));
+  const vus = /* @__PURE__ */ new Set();
+  for (const [i, j] of (wb2.jonctions || []).entries()) {
+    const tag = `jonction[${i}]${j.id ? " \xAB " + j.id + " \xBB" : ""}`;
+    if (!j.id) E.push(`${tag} : \xAB id \xBB requis`);
+    else if (vus.has(j.id)) E.push(`${tag} : id dupliqu\xE9`);
+    else vus.add(j.id);
+    const po = j.porte || {}, ar = j.arrive || {};
+    const pp = P.get(po.piece), pa = P.get(ar.piece);
+    if (!pp) E.push(`${tag} : porte.piece inconnue \xAB ${po.piece} \xBB`);
+    if (!pa) E.push(`${tag} : arrive.piece inconnue \xAB ${ar.piece} \xBB`);
+    if (po.sur !== "face" && po.sur !== "contre-face") E.push(`${tag} : porte.sur doit \xEAtre une FACE (vu \xAB ${po.sur} \xBB)`);
+    if (!estChant(ar.sur)) E.push(`${tag} : arrive.sur doit \xEAtre un CHANT \u2014 about ou rive (vu \xAB ${ar.sur} \xBB)`);
+    if (!SURFACES.includes(po.depuis) || po.depuis === "face" || po.depuis === "contre-face")
+      E.push(`${tag} : porte.depuis doit nommer un BORD (about-*/rive-*)`);
+    if (!ar.appui) E.push(`${tag} : arrive.appui requis \u2014 sans lui, on ne sait pas quelle face coucher sur l'\xE9tabli`);
+    else if (!APPUIS.includes(ar.appui)) E.push(`${tag} : arrive.appui \xAB ${ar.appui} \xBB (face|contre-face)`);
+    if (!(j.connecteurs || []).length) E.push(`${tag} : aucun connecteur`);
+    for (const [et, pr] of jonctionPreps(j)) {
+      const pc = P.get(et);
+      if (!pc) continue;
+      for (const q of lamPoints(pr, pc, epOf(wb2, pc))) {
+        if (q.u < -0.01 || q.u > (pc.longueur || 0) + 0.01 || q.v < -0.01 || q.v > (pc.largeur || 0) + 0.01)
+          E.push(`${tag} : un connecteur tombe hors de ${et} (${+q.u.toFixed(1)}, ${+q.v.toFixed(1)})`);
+      }
     }
   }
   return E;

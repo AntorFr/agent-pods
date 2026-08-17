@@ -2,6 +2,29 @@
 
 > MàJ : 2026-08-17
 
+**D8 — `jonctions[]`, l'objet de premier rang (acté par Monsieur)** : le remède aux TROIS
+symptômes d'une même cause, tous rencontrés dans la journée — sept jonctions déclarées d'un
+seul bord (rien ne le détectait), deux moitiés qui peuvent porter des cotes divergentes
+(déjà vécu : 9 et 19 mm), un `appui` qui peut contredire le `depuis` d'en face. Cause unique :
+**une jonction s'usinait sur deux pièces mais s'écrivait deux fois, sans rien qui les relie.**
+
+Elle s'écrit maintenant UNE fois — `porte` (la pièce qui reçoit sur sa face, avec sa cote au
+sabot), `arrive` (celle qui arrive par son chant, avec son appui d'établi), et **un seul jeu
+de connecteurs** — et les préparations des deux pièces en DÉRIVENT (`prepsDe`, que le rendu et
+la validation lisent désormais). L'axe se déduit de `depuis` et du chant : plus déclarable,
+donc plus transposable.
+
+⚠️ **`arrive.origine` est le nombre qui sauve** : la traverse arrière est à **601** vue du
+côté et à **50** vue d'elle-même. Recopier 601 raterait de 551 mm. Un seul champ capture le
+décalage de repère, et le banc le fige (41 asserts, dont 5 fautes désormais détectables :
+appui manquant, porteuse qui n'est pas une face, arrivante qui n'est pas un chant, origine
+fausse qui sort le connecteur de la pièce, pièce inconnue).
+
+Purement **additif** : `preparations[]` reste pour l'usinage hors jonction, les deux se
+cumulent, et les trois livres réels valident sans modification. Conception en D8 d'ATELIER-3,
+contrat dans `atelier:workbook-json`. Reste à Alfred : réécrire les 17 jonctions d'imp3d
+sous cette forme, et déclarer les `appui`.
+
 **`appui` — la face posée sur l'établi (0.75.0)** : contrainte machine soulevée par Monsieur,
 et c'est le pendant exact du sabot sur l'autre axe. On fraise un chant la planche COUCHÉE :
 la lamelleuse cote depuis son embase, donc depuis la face qui touche le banc. Poser l'autre
