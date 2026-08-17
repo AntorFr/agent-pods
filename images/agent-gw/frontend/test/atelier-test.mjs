@@ -92,7 +92,11 @@ ok(pts(bas).every((q) => q.v === 59.5 || q.v === 259.5), 'BAS : fente au milieu 
   eq(but.a, 0, 'planche en butée : cote 0');
   const haut = ligneBande({ axe: 'v', pos: 0, ep: 19, depuis: 'rive-arriere' }, bas.largeur);
   eq(haut.b, bas.largeur, 'butée depuis l’autre bord : la planche colle à ce bord'); }
-eq(pts(trav), [{ u: 250, v: 0, t: 'biscuit' }], 'rive : connecteurs nus repris en u');
+eq(pts(trav), [{ u: 250, v: 0, t: 'biscuit', fixe: 'v' }], 'rive : connecteurs nus repris en u, v déduit par la surface');
+// on ne cote QUE les marques qu'on trace : un axe déduit ne s'écrit pas
+{ const P = pts(bas);
+  eq([...new Set(P.filter((q) => q.fixe !== 'v').map((q) => q.v))].sort((a2, b2) => a2 - b2), [], 'BAS : aucune cote sur l’axe déduit');
+  eq([...new Set(P.filter((q) => q.fixe !== 'u').map((q) => q.u))].sort((a2, b2) => a2 - b2), [10, 350, 690], 'BAS : seules les marques le long des lignes restent cotées'); }
 
 /* ── assemblage hérité → scène minimale valide ──────────────────────── */
 const sc = wb.assemblage[0];

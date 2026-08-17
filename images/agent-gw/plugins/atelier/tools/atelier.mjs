@@ -156,9 +156,10 @@ function lamPoints(pr, piece, epDefaut) {
   const L = piece?.longueur || 0, V = piece?.largeur || 0;
   for (const li of lamLignes(pr, li0(epDefaut, piece))) {
     const { mid } = ligneBande(li, li.axe === "u" ? L : V);
-    for (const q of li.points) out.push(li.axe === "u" ? { u: mid, v: q.v ?? 0, t: q.t } : { u: q.u ?? 0, v: mid, t: q.t });
+    for (const q of li.points) out.push(li.axe === "u" ? { u: mid, v: q.v ?? 0, t: q.t, fixe: "u" } : { u: q.u ?? 0, v: mid, t: q.t, fixe: "v" });
   }
-  for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t });
+  const fixeChant = String(pr.sur || "").startsWith("about") ? "u" : "v";
+  for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t, fixe: fixeChant });
   return out;
 }
 var li0 = (epDefaut, piece) => Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19;

@@ -13,6 +13,16 @@ bucket anonyme → 429 persistants, cf. anthropics/claude-code#31637), cache ser
 de la modale Connexion, sinon les credentials `claude login` du home partagé. Banc
 claude_token porté à 16 asserts.
 
+**On ne cote plus ce que la machine ne sait pas viser (0.74.0)** : question de Monsieur —
+« pourquoi j'ai encore des mesures au centre de l'axe alors que l'outil ne permet de viser
+que les références ? ». Juste, et c'était une scorie de l'avant-sabot. Un point de connecteur
+porte désormais `fixe` : la coordonnée **déduite** (le milieu de la bande d'une ligne, ou le
+bord imposé par une surface de chant) par opposition à la marque qu'on trace vraiment. Les
+graduations n'affichent plus que les secondes. Sur le BAS : restent 0 / 350,5 / 0 / 0 en
+butée (bleu) et 69 / 360 / 651 / 50 / 335 / 620 en marques ; disparus 9,5 / 710,5 / 660,5 —
+les axes de fente, que personne ne peut régler. Le glyphe, lui, reste dessiné au bon endroit :
+l'axe se voit, il ne se cote plus. Banc à 32 asserts.
+
 **Graduations par bloc + le contrat dit ce qu'est une ligne (0.73.0)** : deux retours de
 Monsieur sur la vue Lamello.
 

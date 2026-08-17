@@ -83,14 +83,21 @@ export function ligneBande(li, dim) {
   const a = loin ? dim - li.pos - li.ep : li.pos;
   return { a, b: a + li.ep, mid: a + li.ep / 2, loin };
 }
+// Chaque point rend AUSSI `fixe` : la coordonnée qui est DÉDUITE (le milieu de la bande, ou
+// le bord imposé par la surface) et non pointée à la main. L'autre est une marque qu'on trace
+// vraiment sur la pièce. La distinction compte : l'outil ne sait viser qu'une référence, donc
+// on ne cote jamais un axe déduit — il se dessine, il ne s'écrit pas.
 export function lamPoints(pr, piece, epDefaut) {
   const out = [];
   const L = piece?.longueur || 0, V = piece?.largeur || 0;
   for (const li of lamLignes(pr, li0(epDefaut, piece))) {
     const { mid } = ligneBande(li, li.axe === 'u' ? L : V);
-    for (const q of li.points) out.push(li.axe === 'u' ? { u: mid, v: q.v ?? 0, t: q.t } : { u: q.u ?? 0, v: mid, t: q.t });
+    for (const q of li.points) out.push(li.axe === 'u'
+      ? { u: mid, v: q.v ?? 0, t: q.t, fixe: 'u' } : { u: q.u ?? 0, v: mid, t: q.t, fixe: 'v' });
   }
-  for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t });
+  // sur un chant, la surface impose la coordonnée transverse : v sur un about, u sur une rive
+  const fixeChant = String(pr.sur || '').startsWith('about') ? 'u' : 'v';
+  for (const q of pr.points || []) out.push({ u: q.u ?? 0, v: q.v ?? 0, t: q.t, fixe: fixeChant });
   return out;
 }
 const li0 = (epDefaut, piece) => (Number.isFinite(epDefaut) ? epDefaut : Number.isFinite(piece?.ep) ? piece.ep : 19);

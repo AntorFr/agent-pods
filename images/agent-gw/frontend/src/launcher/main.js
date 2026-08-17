@@ -2600,7 +2600,9 @@ function renderLamello(body, st) {
     const grads = (yOff, base, pts, axe) => {
       let o = '';
       if (axe !== 'v') {
-        const us = [...new Set(pts.filter((m) => m.u != null).map((m) => m.u))].sort((a2, b2) => a2 - b2);
+        // seulement les marques qu'on TRACE : un axe déduit (milieu de bande, bord imposé)
+        // ne se cote pas, puisque la machine ne sait pas le viser — cf. le sabot
+        const us = [...new Set(pts.filter((m) => m.u != null && m.fixe !== 'u').map((m) => m.u))].sort((a2, b2) => a2 - b2);
         o += `<line x1="0" y1="${base + 7}" x2="${len * S2}" y2="${base + 7}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
         let lastG = -1e9, grow = 0;
         for (const uv of us) {
@@ -2609,7 +2611,7 @@ function renderLamello(body, st) {
           o += `<line x1="${x}" y1="${base + 4}" x2="${x}" y2="${base + 10}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${x}" y="${base + 19 + grow * 10}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${uv}</text>`;
         }
       }
-      const vs = [...new Set(pts.filter((m) => m.v != null).map((m) => m.v))].sort((a2, b2) => a2 - b2);
+      const vs = [...new Set(pts.filter((m) => m.v != null && m.fixe !== 'v').map((m) => m.v))].sort((a2, b2) => a2 - b2);
       o += `<line x1="${lx0}" y1="${yOff}" x2="${lx0}" y2="${yOff + bh}" stroke="var(--ink-soft)" stroke-width="0.8"/>`;
       vs.forEach((vv, i) => { const y = yOff + vv * S2, lx = lx0 - 4 - (i % 2 ? 11 : 0); o += `<line x1="${lx0 - 3}" y1="${y}" x2="${lx0 + 3}" y2="${y}" stroke="var(--ink-soft)" stroke-width="0.8"/><text x="${lx}" y="${y + 3}" text-anchor="end" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="${FS.rep}">${vv}</text>`; });
       o += `<text x="${lx0 + 3}" y="${yOff - 6}" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">avant↓</text>`;
