@@ -1,9 +1,11 @@
-# Workbook 3.0 — le contrat refondu (BROUILLON pour relecture)
+# Workbook 3.0 — le contrat refondu
 
-> **Statut : proposition, rien d'implémenté.** Rédigé le 2026-08-17 sur demande de Monsieur :
-> « si on partait d'une feuille blanche, quitte à casser la compatibilité ». Ce document est
-> la refonte à relire AVANT toute ligne de code. Les § marqués ⚖️ sont des arbitrages qui
-> lui reviennent.
+> **Statut : ACTÉ le 2026-08-17.** Les trois arbitrages ⚖️ sont tranchés par Monsieur :
+> **1. oui** (`rot` inversé), **2. oui** (chants renommés), **3. minimale** — et un
+> amendement : **seul `imp3d` migre en fichier** (le projet actif). Le claustra et le
+> garage restent en 2.0 sur disque ; le convertisseur au chargement devient le chemin de
+> compatibilité **durable** des livres dormants (un module, pas un second moteur de rendu),
+> et le § 4.4 (mort du convertisseur) est abandonné.
 >
 > Une fois acté, ce document se distille dans la skill `atelier:workbook-json` (le contrat
 > pour agents) et meurt ici en archive de conception.

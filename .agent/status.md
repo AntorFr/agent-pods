@@ -2,6 +2,36 @@
 
 > MàJ : 2026-08-17
 
+**WORKBOOK 3.0 — la refonte feuille blanche (0.71.0, 2026-08-17)** : demandée par Monsieur
+(« on traîne des contraintes historiques ? »), cadrée dans `ATELIER-3.md` (acté, ses trois
+arbitrages : rot inversé OUI, chants renommés OUI, scènes minimales pour les dormants — seul
+imp3d migre en fichier). Livré :
+
+- **`frontend/src/atelier/regles.js` + `convert.js` + `cli.js`** : le contrat en code, UNE
+  source pour trois consommateurs — l'établi (bundlé), le CLI `valide`/`migre` (livré par
+  l'image dans `plugins/atelier/tools/atelier.mjs`, copie au build), la conversion au
+  chargement. Banc `atelier-test.mjs` (27 asserts, toutes les écritures 2.0) dans `npm test`.
+- **Le repère unique (D1)** : u/v par pièce, six surfaces nommées, chants renommés, plus
+  UNE heuristique de rôle dans le rendu. Le convertisseur est le SEUL endroit où les vieilles
+  conventions survivent — y compris le routage par position des lignes d'about 2.0 (la
+  tablette du garage portait ses fentes aux extrémités de sa LARGEUR : rives en 3.0).
+- **Bandes rectangle + axe (D2)**, guide = transverse ; **lamello lignes typées (D3)** ;
+  **échelle commune wb.WG** (un px/mm par workbook, toutes vues, scènes comprises).
+- **Suppressions (D5)** : calepinage 1.0, ancienne UI (`/legacy` + `index.html`), élévation
+  d'assemblage héritée (le convertisseur fabrique une scène minimale), champs doublons,
+  `renderPrepas` orphelin. Le serveur nettoie le calque bandes en w/h/axe.
+- **Contrat `atelier:workbook-json` réécrit** (il rétrécit) ; les validateurs du workspace
+  d'Alfred deviennent des lanceurs minces vers l'outil de l'image.
+- **imp3d migré en 3.0** (validé, commit `memoire:`) ; claustra et garage restent en 2.0 sur
+  disque, convertis au chargement — compatibilité durable, décision de Monsieur.
+
+⚠️ Les calques `workbook-layout.json` écrits AVANT 3.0 (établi 0.68-0.70) portent l'ancienne
+sémantique (rot inversé, bandes largeur/longueur) : un « Rendre la main » les remet à zéro.
+Vérifié : banc 27/27, `valide` vert sur les trois livres réels, les 5 vues rendues sur imp3d
+(3.0 natif) ET claustra (2.0 converti), établi exercé au pointeur (pose, colonne w/h/axe,
+reset). Une régression attrapée par la sonde DOM et pas par le build (`tot` supprimé mais
+lu) — la leçon 0.52.0 tient toujours.
+
 **Lamello : une ligne peut porter SES connecteurs (0.70.0, 2026-08-17)** : Alfred signalait
 avoir dû éclater la prépa du BAS d'imp3d en TROIS, une par ligne de profondeur, « le format ne
 sachant pas faire varier le type le long des abouts ». Diagnostic exact et rien de ce qu'on

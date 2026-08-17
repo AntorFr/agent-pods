@@ -1,272 +1,154 @@
 ---
 name: workbook-json
 description: >
-  Le CONTRAT DE DONNÉES de l'app Atelier — le format de
-  `projets/<projet>/assets/workbook.json`, que la PWA rend en quatre vues liées
-  (Débit, Prépas, Assemblage, Suivi) plus un mode atelier plein écran. À consulter
-  dès que tu produis ou modifies un workbook : schéma 2.0, conventions d'axes,
-  sémantique des colonnes. Livré par l'image avec le module qui le lit. Le métier —
-  concevoir un meuble, choisir une matière — reste dans ton workspace.
+  Le CONTRAT DE DONNÉES de l'app Atelier — `projets/<projet>/assets/workbook.json`,
+  schéma 3.0 : UN repère par pièce, bandes en rectangle + axe, lamello en lignes typées,
+  assemblage en scène. À consulter dès que tu produis ou modifies un workbook. Livré par
+  l'image avec le moteur qui le lit ET l'outil qui le valide/migre
+  (`plugins/atelier/tools/atelier.mjs`). Le métier reste dans ton workspace.
 ---
 
-# `workbook.json` — le contrat de données
+# `workbook.json` — le contrat 3.0
 
-**Le JSON est la source de vérité unique.** Il vit dans
-`projets/<projet>/assets/workbook.json` ; le front le détecte tout seul (`rglob`), sans
-déclaration nulle part, et le rend en **quatre vues liées par l'étiquette**
-(`PROJ-MODULE-RÔLE-REPÈRE`) : Débit (calepinage à l'échelle), Prépas (par pièce),
-Assemblage (par module), Suivi (cases par groupe de réglage). L'avancement est stocké
-côté serveur dans un `workbook-state.json` voisin — **le front ne touche jamais ton
-JSON.**
+**Le JSON est la source de vérité unique.** Il vit dans `projets/<projet>/assets/`, le front
+le détecte seul (`rglob`) et le rend en vues liées par l'étiquette (`PROJ-MODULE-RÔLE-REPÈRE`).
+L'avancement (`workbook-state.json`) et le calepinage remanié à l'établi
+(`workbook-layout.json`) vivent À CÔTÉ, hors git — **le front n'écrit jamais ton JSON**, et
+c'est toi qui consolides les calques sur demande.
+
+**Valide TOUJOURS avant de commiter** : `node plugins/atelier/tools/atelier.mjs valide <fichier>`
+— c'est EXACTEMENT le code que l'établi exécute (une règle = un seul endroit). `migre`
+réécrit un vieux 2.0 en 3.0 (le front convertit aussi les 2.0 au chargement — les livres
+dormants restent lisibles sans migration).
+
+## D1 — LE REPÈRE : une pièce, six surfaces, tout s'exprime dedans
+
+```
+u : 0 → longueur   (about-gauche → about-droit)
+v : 0 → largeur    (rive-avant → rive-arriere)
+faces : face / contre-face
+```
+
+Vocabulaire FERMÉ des surfaces, partagé par tout le contrat :
+`face` · `contre-face` · `rive-avant` · `rive-arriere` · `about-gauche` · `about-droit`
+(+ `abouts` = les deux abouts, pour `chants[]` seulement).
+
+**Le rôle est un libellé.** Aucun comportement n'en dépend — plus jamais d'axe choisi
+« parce que la pièce s'appelle CÔTÉ ». Ce qui a une position la donne en `(u, v)`.
 
 ## Racine
 
-`schemaVersion` (`"2.0"`), `projet` (trigramme), `titre`, `note`, `materiaux[]`, `meta`,
-`pieces[]`, `debit[]`, `assemblage[]`, `stations[]` (optionnel).
+`schemaVersion: "3.0"`, `projet`, `titre`, `note`, `materiaux[]`, `meta`, `pieces[]`,
+`debit[]`, `stations[]?`, `assemblage[]?`.
 
-## `stations[]` — la barre du workbook, déclarée
-
-La barre d'onglets n'est plus figée : **`stations[]` la déclare**, dans l'ordre du fichier —
-chaque type **zéro, une ou plusieurs fois**. C'est toi qui écris l'ordre réel de l'atelier.
-
-```json
-"stations": [
-  { "type": "debit", "titre": "Plaques CP", "plaques": ["P1", "P2"] },
-  { "type": "tronconnage", "titre": "Tronçons CP", "plaques": ["P1", "P2"] },
-  { "type": "rainure" },
-  { "type": "lamello", "modules": ["B1"] },
-  { "type": "assemblage", "modules": ["B1", "B2"] },
-  { "type": "suivi" }
-]
-```
-
-- **`type`** — vocabulaire FERMÉ : `debit` · `tronconnage` · `rainure` · `lamello` ·
-  `assemblage` · `suivi`. Inconnu → station ignorée en silence.
-- **`titre`** (optionnel) — le libellé de l'onglet ; défaut : Plaques / Tronçons / Rainures /
-  Lamello / Assemblage / Suivi. Indispensable quand un type revient deux fois (« Tronçons
-  CP » / « Tronçons MDF »).
-- **Portée** (optionnelle) — ce que l'instance montre : **`plaques: [ids]`** pour `debit` et
-  `tronconnage` ; **`modules: [ids]`** pour `rainure`, `lamello` (filtre les pièces par leur
-  `module`) et `assemblage` (filtre les entrées par leur `module` — une scène du contrat
-  ouvert **sans** champ `module` n'apparaît que dans une station non scopée). Absente → tout.
-- `suivi` est toujours global. La progression d'en-tête et le Mode atelier ne dépendent pas
-  des stations : ils suivent les étapes du débit, comme avant.
-
-**Sans `stations[]`** (tous les workbooks existants) : barre **dérivée** — l'ordre historique
-Plaques → Tronçons → Rainures → Lamello → Assemblage → Suivi, **moins les stations sans
-contenu** (pas de rainure dans le projet ⇒ pas d'onglet Rainures). Déclare `stations[]` dès
-que l'ordre réel s'écarte de ça, pas pour reproduire le défaut.
-
-**`meta`** : `matiere`, `decorUni`, `sensFil`, `plaque` (ex. `"2800 × 2070 mm"` — sert de
-cadre au dessin de débit), `kerf` (mm), `chant`, `installation`.
+**`materiaux[]`** : `{ id, label, ep, plaque: {l, h}, derasage, decorUni?, sensFil? }`.
+**`meta`** : `kerf` (mm), `tronconnage` (surcote), `chant` (résumé libre — la vérité pièce
+par pièce est `chants[]`), `installation`.
 
 ## `pieces[]`
 
 ```json
-{ "etiquette": "GAR-B1-DESSOUS", "projet": "GAR", "module": "B1", "role": "DESSOUS",
-  "repere": "…", "largeur": 620, "longueur": 480, "ep": 19, "reglageFS": 620,
-  "panneau": "P4", "colonne": "C4",
-  "chants": ["avant"],
-  "preparations": [ { "type": "rainure|lamello|perçage", "cotes": "…", "pos": "…" } ],
-  "placeAssemblage": "…" }
+{ "etiquette": "IMP-C1-BAS", "module": "C1", "role": "BAS", "repere": "…",
+  "longueur": 720, "largeur": 670, "materiau": "MEL19",
+  "chants": ["rive-avant"],
+  "preparations": [ … ] }
 ```
 
-### `chants[]` — les côtés plaqués, et eux seuls
+- `materiau` porte l'épaisseur (pas de `ep` recopié). Les champs 1.0 (`reglageFS`,
+  `panneau`, `colonne`) **n'existent plus** — `debit[]` dit déjà tout ça.
+- `chants[]` : les arêtes plaquées, dans le vocabulaire des surfaces. Les vues les
+  surlignent en orange ; deux colonnes aux chants différents ne se regroupent pas.
 
-Déclare **quels côtés de la pièce reçoivent un chant** (plaqueuse). Vocabulaire **FERMÉ**,
-dans le **repère du dessin Tronçons** (longueur en x, AVANT en haut) : `avant` · `arriere` ·
-`gauche` · `droite` · `abouts` (= les deux bouts d'un coup). Hors liste → ignoré en silence.
-
-Le front surligne **uniquement ces côtés-là**, en trait **orange épais** posé sur l'arête —
-jamais tout le contour, jamais la cote — dans la vue **Tronçons** (légende en pied de page),
-et l'annonce dans la fiche pièce et la fiche colonne. Deux colonnes par ailleurs identiques
-ne se **regroupent pas** si leurs chants diffèrent : au poste de plaquage, ce n'est pas la
-même colonne. La vue Débit ne les dessine pas : ses colonnes tournent les pièces (`sens`,
-`rot`), le repère avant/arrière n'y est plus fiable — on ne surligne pas un côté qu'on ne
-sait pas placer. `meta.chant`, lui, reste le résumé libre du projet (matière du chant,
-politique) ; `chants[]` est la vérité pièce par pièce.
-
-### ⚠️ Préparation `lamello` — la convention d'axes, et le piège
+### Préparation `lamello` — une surface, des lignes (ou des points)
 
 ```json
-{ "type": "lamello", "sur": "face", "ref": {"long": …, "trav": …}, "abouts": [a1, a2],
-  "connecteurs": [{ "t": "tenso|biscuit", "w": … }], "note": "…" }
+{ "type": "lamello", "sur": "face",
+  "lignes": [
+    { "v": 50,  "points": [ {"u": 9.5, "t": "tenso"}, {"u": 360, "t": "tenso"} ] },
+    { "v": 335, "points": [ {"u": 360, "t": "biscuit"} ] } ] }
 ```
 
-**`sur` — la surface fraisée** (optionnel, vocabulaire FERMÉ) : `face` · `contre-face` ·
-`abouts` · `rive-avant` · `rive-arriere`. Dès qu'une prépa d'une pièce le déclare, la vue
-Lamello passe en **fiche multi-vues** pour cette pièce : la face au centre, chaque surface
-fendue **rabattue** autour en projection alignée — bande d'about à gauche/droite (l'`abouts[]`
-choisit le bout : `0` → gauche, `≈longueur` → droite), rive au-dessus/dessous, contre-face en
-dessous **par transparence** (même orientation, mêmes cotes). **Tout à l'échelle commune,
-jamais de zoom local** : dans une bande d'épaisseur la fente est un trait d'axe, et la
-vérification passe par les cotes écrites, mesurées depuis les mêmes références dans toutes
-les vues — on fait des plans, pas du dessin d'art. C'est le seul moyen d'écrire « fentes de
-part et d'autre » (`face` + `contre-face`) : sans `sur`, la donnée ne sait pas le dire, et la
-pièce garde sa carte à plat historique (migration au fil de l'eau).
+- **Sur `face`/`contre-face` : `lignes[]`.** La clé de la ligne (`u:` ou `v:`) NOMME l'axe
+  fixé ; ses points donnent l'autre coordonnée. Le type peut varier ligne à ligne — on
+  n'éclate JAMAIS une prépa pour ça : une pièce, une surface, une préparation.
+- **Sur un chant : `points[]`** portant la seule coordonnée libre — `v` sur un about,
+  `u` sur une rive (le validateur refuse l'autre).
+- Chaque point doit tomber DANS la pièce (`0 ≤ u ≤ longueur`, `0 ≤ v ≤ largeur`) — c'est le
+  contrôle qui attrape les transpositions d'axes, la plaie du 2.0.
+- `note` : texte libre. `ref` n'existe plus (le repère EST la référence de cotation).
+- Une prépa `rainure`/`perçage` garde ses `cotes`/`pos` en texte (inchangé).
 
-- **`connecteurs[].w` est une cote le long de la PROFONDEUR** (la `longueur` de la
-  pièce), mesurée depuis le bord AVANT. **Jamais** le long de la largeur.
-- **`abouts` = positions en LARGEUR** des lignes de connecteurs.
+## `debit[]` — la plaque est le tronc, les étapes forment une CHAÎNE
 
-#### Une ligne peut porter SES propres connecteurs (forme longue)
+`{ "plaque": "P1", "label"?, "materiau", "etapes": [...] }` — types : `derasage`,
+`refente`, `tronconnage`. **Chaque étape a un `id`** (c'est la clé d'avancement) et un
+`label?` (l'affichage — plus de nom déduit en découpant l'id).
 
-`abouts: [a1, a2]` + `connecteurs: [...]` est un **produit croisé** : toutes les lignes
-reçoivent le même jeu. C'est la bonne écriture quand elle dit vrai — elle signifie « même
-réglage, répété », ce qui est exactement le geste à la machine.
+**`entree` = ce qu'on met sous la scie** : `"plaque"` | id d'une bande | id d'une étape de
+tronçonnage (redéligner un tronçon — deux pièces posées côte à côte en travers, séparées à
+l'étape suivante). Une source doit exister avant d'être reprise. Dégrossissage, orientations
+mixtes et deux-en-travers en découlent sans vocabulaire de plus.
 
-Elle ne sait pas faire **varier le type d'une ligne à l'autre**. Pour ça, une ligne s'écrit
-en objet, comme un `niveau` :
+**Une bande = un rectangle + un axe** :
 
 ```json
-{ "type": "lamello", "sur": "face", "abouts": [
-    { "a": 50,  "connecteurs": [{"t":"tenso","w":9.5}, {"t":"tenso","w":360}, {"t":"tenso","w":710.5}] },
-    { "a": 335, "connecteurs": [{"t":"biscuit","w":9.5}, {"t":"biscuit","w":360}, {"t":"biscuit","w":710.5}] },
-    { "a": 620, "connecteurs": [{"t":"tenso","w":9.5}, {"t":"tenso","w":360}, {"t":"tenso","w":710.5}] } ] }
+{ "id": "P1-B1", "label": "B1", "x": 0, "y": 0, "w": 668, "h": 2800, "axe": "y" }
 ```
 
-**N'éclate JAMAIS une prépa en plusieurs pour contourner le produit croisé** : une pièce,
-une surface, une préparation. Trois prépas pour trois lignes, c'est la même opération écrite
-trois fois — et le jour où la géométrie bouge, deux d'entre elles sont oubliées.
+`axe` = la direction le long de laquelle courent les tronçons (`"y"` = debout, `"x"` =
+couchée). **Le réglage du guide n'est pas un champ : c'est la dimension transverse**
+(`axe:"y"` → `w`) — il ne peut pas mentir.
 
-⚠️ **`niveaux[]` vaut pour TOUT rôle**, pas seulement les `CÔTÉ`. (La carte à plat l'ignorait
-sur les pièces horizontales — elle ne dessinait alors rien du tout ; corrigé le 17/08/2026.)
-- Le rendu mappe donc `w` → axe profondeur, `abouts` → axe largeur. Sur le dessin de
-  **débit**, `pose.rot` échange en plus ces deux axes (cf. `debit[]`).
+**Une pose** : `{ "etiquette", "x", "y", "rot"? }` — absolue sur la plaque brute, origine
+en haut-gauche. **`rot: false` (défaut) = u (longueur) le long de x** — la pièce posée
+comme elle se dessine ; `true` = quart de tour. ⚠️ C'est l'INVERSE du défaut 2.0 : ne relis
+jamais un vieux fichier avec les yeux du 3.0 — `schemaVersion` tranche, `migre` convertit.
 
-**Symptôme d'une transposition d'axes** (constatée le 2026-07-23) : une pièce sort **hors
-de la plaque**. Repro — `GAR-B1-DESSOUS`, 480 prof × 620 larg, posée en P4-C4 à `y=1502` :
-l'about `620` porté à tort sur l'axe profondeur donne `y = 2122`, pour une plaque haute de
-2070. Le même défaut est plus discret sur les tablettes (un Tenso `w=550` sur une pièce
-large de 412) : il ne sort pas du cadre, il place juste faux.
+**Le trait de scie n'est pas optionnel** : deux pièces (ou deux bandes feuilles) qui se font
+face laissent au moins `meta.kerf` mm — jointives, elles sont insciables. Les colonnes d'un
+dégrossissage vivent DANS leur bande mère (modèle enchaîné, pas un chevauchement) : seules
+les **feuilles** — que plus aucune refente ne reprend — doivent paver la plaque.
 
-## `debit[]` — schéma 2.0, « modèle A »
+## `stations[]` — la barre déclarée (inchangé)
 
-La plaque est le tronc, le débit se lit en étapes : `dérasage → refente → tronçonnage`,
-en **positions absolues sur la plaque brute**.
+`{ type, titre?, plaques?|modules? }`, types : `debit` · `tronconnage` · `rainure` ·
+`lamello` · `assemblage` · `suivi`, zéro ou plusieurs fois, dans l'ordre du fichier.
+Sans déclaration : barre historique moins les stations vides.
 
-`{ "plaque": …, "materiau": …, "etapes": [ … ] }`, une étape valant :
+## `assemblage[]` — la scène, SEUL format
 
-- `derasage`
-- `refente` : `{ entree, sens, bandes: [{ id, largeur, x, y, longueur }] }`
-- `tronconnage` : `{ entree, pieces: [{ etiquette, x, y, rot? }] }`
+Le contrat ouvert v0.2 (cadre mm, `noeuds[]` : piece/trait/cote/feature/note/repere,
+`sequence[]` cochable qui surligne ses `cible[]`). Les cotes se MESURENT depuis les ancres,
+jamais écrites. L'élévation héritée (module/niveaux) n'existe plus — le convertisseur en
+fait une scène minimale pour les vieux livres.
 
-`x`/`y` sont **absolus sur la plaque brute**, origine au coin haut-gauche : `x` le long de
-`materiaux[].plaque.l`, `y` le long de `.h`.
+## L'ÉCHELLE — un seul px/mm par workbook
 
-### `entree` — les étapes forment une CHAÎNE
+Toutes les vues (Plaques, Tronçons, Lamello, Assemblage) composent leur viewBox sur la même
+largeur de référence : une tablette de 331,5 a la même taille dans chaque onglet, et un
+meuble se compare à sa plaque. Jamais de zoom local — la lisibilité des petits objets passe
+par les cotes écrites. On fait des plans, pas du dessin d'art.
 
-`entree` désigne **ce qu'on met sous la scie**. Trois sources possibles, dans l'ordre du
-fichier (une source doit exister avant d'être reprise) :
+## L'établi et les calques — ce que tu consolides
 
-| `entree` | Le geste |
-|---|---|
-| `"plaque"` | la plaque brute |
-| l'`id` d'une **bande** | on reprend une bande déjà refendue |
-| l'`id` d'une **étape de tronçonnage** | on redéligne un tronçon |
-
-Trois usages, tous réels à l'atelier :
-
-1. **Dégrossissage** — une plaque de 2 800 ne passe pas au réglage final. `refente(plaque)`
-   en bandes larges, puis `refente(bande)` en colonnes. C'est ce que fait le claustra.
-2. **Orientations mixtes** — rien n'impose un `sens` unique par plaque : chaque refente porte
-   le sien, donc des bandes **verticales et horizontales** peuvent cohabiter, chacune
-   chaînée sur la région dont elle sort.
-3. **Deux pièces en travers d'une bande** — si `largeur(A) + kerf + largeur(B) ≤` largeur de
-   la bande, les deux pièces se posent **côte à côte en travers**, sont tronçonnées ensemble,
-   puis séparées par une **`refente` chaînée sur l'étape de tronçonnage**. C'est une étape de
-   plus, cochable, avec son propre réglage de guide — pas un tour de passe-passe géométrique.
-
-⚠️ **Le trait de scie n'est pas optionnel.** Deux pièces qui se font face doivent laisser au
-moins `meta.kerf` mm entre elles sur l'axe de la coupe qui les sépare. Collées bord à bord,
-elles sont géométriquement jointives et **physiquement insciables** — la lame mange l'une des
-deux. Le validateur le refuse.
-
-**`sens` sur une refente :**
-
-| `sens` | La bande | Le tronçonnage | Dessin |
-|---|---|---|---|
-| `"court"` (défaut, rétrocompatible) | court le long de `y` | tronçons empilés en `y` | `largeur` en x, `longueur` en y |
-| `"long"` | court le long de `x` | tronçons alignés en `x` | **`longueur` en x, `largeur` en y** |
-
-**Pourquoi `long`** : la refente y fait du **long bord de la bande la façade des pièces** —
-le chant se plaque en une passe, le tronçonnage arase les abouts ensuite. `sens` ne décrit
-donc pas un choix de dessin, mais ce que la bande va devenir.
-
-**`rot` sur une pose de tronçonnage** : `true` tourne la pièce d'un quart de tour — elle
-occupe `longueur` en **x** et `largeur` en **y** (absent ou `false` : `largeur` en x,
-`longueur` en y). Sert à coucher une pièce plus profonde que la bande pour qu'elle y tienne.
-
-⚠️ **`rot` et `sens` sont INDÉPENDANTS et se combinent.** `sens` oriente la **bande**
-(géométrie de la colonne) ; `rot` oriente **une pièce** dans sa bande. Les `x`/`y` d'une pose
-restent absolus et **sens-agnostiques** : c'est toi qui les poses justes, le front ne calcule
-aucun nesting. `rot` n'est lu que par la vue **Débit** — la vue Lamello dessine toujours la
-pièce à plat (`longueur` en x), il n'y entre pas.
-
-## L'établi — le calepinage remanié à la main, et ce que tu en fais
-
-La vue Plaques a un mode **établi** (bouton « ✎ Remanier ») : Monsieur y fait glisser les
-pièces, les tourne, les change de colonne. Ses gestes atterrissent dans un
-**`workbook-layout.json` voisin** (hors git), **jamais dans ton `workbook.json`** — même
-frontière que `workbook-state.json` :
+La vue Plaques a un mode **établi** : Monsieur déplace pièces ET colonnes (une colonne
+emporte ses pièces), règle le guide au clavier, tourne (bridé par `decorUni`/`sensFil`),
+crée et supprime des colonnes. Ses gestes vont dans `workbook-layout.json` :
 
 ```jsonc
 { "poses":  { "IMP-C1-BAS": { "x": 690, "y": 54, "rot": true, "bande": "P2-C3" } },
-  "bandes": { "P2-C3": { "largeur": 260 },                        // amendée
-              "P2-N1": { "cree": true, "plaque": "P2", "sens": "court",
-                         "x": 1604, "y": 50, "largeur": 100, "longueur": 600 },
-              "P2-C7": { "supprime": true } },
-  "maj": "2026-08-17T…" }
+  "bandes": { "P2-C3": { "w": 260 },
+              "P2-N1": { "cree": true, "plaque": "P2", "axe": "y", "x": 1604, "y": 50, "w": 100, "h": 600 },
+              "P2-C7": { "supprime": true } } }
 ```
 
-⚠️ **`poses` écrase des valeurs ; `bandes` ajoute et retire des OBJETS.** C'est toute la
-différence de traitement à la consolidation.
-
-**Ce que tu dois en faire — le consolider, comme les cases de todo (D28).** Quand Monsieur te
-le demande (« range mon calepinage », « valide ce que j'ai bougé ») :
-
-1. **Les poses** : reporte `x`, `y`, `rot` dans le `debit[]`, et **rattache la pose à la bonne
-   étape de tronçonnage** si `bande` a changé (la déplacer d'un `pieces[]` à l'autre).
-2. **Une bande amendée** : reporte sa géométrie dans la `refente` qui la produit. Si sa
-   **largeur** a changé, c'est un **réglage de guide** qui change — vérifie que la fiche du
-   projet dit toujours vrai (tableau FS-PA, stratégie de débit).
-3. **Une bande `cree: true`** n'existe dans aucune étape : crée-lui sa `refente` (avec la
-   bonne `entree` dans la chaîne) **et** son étape de `tronconnage` — sans elle, la colonne
-   n'a pas de case à cocher, et l'interface le signale en grisé.
-4. **Une bande `supprime`** : retire-la de sa refente et supprime son étape de tronçonnage.
-   L'établi refuse déjà de supprimer une bande qui porte des pièces.
-5. **Vide le calque** et commite. Puis **repasse le validateur** : l'établi contrôle beaucoup,
-   mais c'est le fichier consolidé qui fait foi.
-
-Tant que tu ne l'as pas fait, l'affichage montre son calepinage et ton fichier garde le tien :
-c'est voulu, il peut revenir en arrière d'un bouton.
-
-**Ce que l'établi refuse déjà à sa place** (mêmes règles que le validateur, appliquées sous
-le doigt) : sortir de la zone utile, chevaucher une autre pièce ou une autre colonne,
-déborder de sa colonne, manger le trait de scie. Les bords **s'aimantent en ajoutant le kerf**
-automatiquement. Une pièce ou une colonne fautive est peinte en rouge et son grief écrit sous
-le plan — mais rien n'empêche de sauvegarder un état fautif : c'est un établi, pas un
-gendarme. **Revalide en consolidant.**
-
-⚠️ **Les colonnes d'un dégrossissage sont IMBRIQUÉES dans leur bande mère** — c'est le modèle
-enchaîné, pas un chevauchement. Le contrôle ne compare donc que les bandes **feuilles**
-(celles que plus aucune refente ne reprend) : ce sont elles qui doivent paver la plaque sans
-se toucher.
-
-**La rotation est bridée par la matière** : elle n'est offerte que si `meta.decorUni` ou
-`meta.sensFil === "libre"`. Sur un panneau à fil, tourner une pièce n'est pas un choix de
-calepinage, c'est un défaut.
-
-## `calepinage[]` — schéma 1.0, et sa sémantique trompeuse
-
-`{ panneau, ep, dims, colonnes: [{ largeur, reglageFS, pieces: [etiquettes] }] }`
-
-⚠️ **Une « colonne » est un GROUPE DE RÉGLAGE FS-PA** (une largeur = un groupe), **pas**
-une position physique sur la plaque. Le front en tire un **nesting indicatif** à l'échelle
-et l'annonce comme tel — ne le lis jamais comme un plan de coupe exact.
-
-*(Les workbooks émis depuis juillet 2026 sont tous en 2.0 ; 1.0 reste rendu.)*
-
-## `assemblage[]`
-
-`{ module, titre, fond, niveaux: [{ niveau, h, connecteurs }], sequence: [ … ] }`
+Quand Monsieur demande de « ranger le calepinage » :
+1. **poses** → reporte `x`, `y`, `rot` dans `debit[]`, et déplace la pose vers la bonne
+   étape de tronçonnage si `bande` a changé.
+2. **bande amendée** → reporte le rectangle/axe dans sa refente (un `w` qui change est un
+   réglage de guide — vérifie la fiche projet).
+3. **bande `cree`** → crée sa refente (avec la bonne `entree`) ET son étape de tronçonnage.
+4. **bande `supprime`** → retire-la de sa refente, supprime son étape (l'établi refuse déjà
+   de supprimer une colonne qui porte des pièces).
+5. **Vide le calque, commite, et repasse `valide`** — l'établi contrôle en direct, mais
+   c'est le fichier consolidé qui fait foi.

@@ -95,6 +95,9 @@ COPY --chmod=755 git-credential-rosetta /usr/local/bin/git-credential-rosetta
 # BarcodeDetector (iOS Safari, Firefox). Folding it into launcher.js would bill
 # every single page load for a feature most sessions never open.
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css /fe/dist/scan.js ./app/static/
+# Le CLI atelier (valide/migre + les règles 3.0) descend dans le plugin : Alfred valide
+# et migre avec EXACTEMENT le code que l'établi exécute (cf. ATELIER-3.md D4).
+COPY --from=frontend /fe/dist/atelier.mjs ./plugins/atelier/tools/atelier.mjs
 
 RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /workspace \

@@ -520,17 +520,18 @@ def _clean_pose(pose: dict) -> dict:
 
 
 def _clean_bande(b: dict) -> dict:
-    """A band amended (or created) by hand. `supprime` wins over everything else."""
+    """A band amended (or created) by hand — 3.0 geometry: rectangle + cut axis.
+    `supprime` wins over everything else."""
     out: dict = {}
     if b.get("supprime"):
         return {"supprime": True}
-    for k in ("x", "y", "largeur", "longueur"):
+    for k in ("x", "y", "w", "h"):
         if k in b:
             if not isinstance(b[k], (int, float)) or isinstance(b[k], bool):
                 raise HTTPException(status_code=400, detail=f"bande.{k} must be a number (mm)")
             out[k] = b[k]
-    if b.get("sens") in ("court", "long"):
-        out["sens"] = b["sens"]
+    if b.get("axe") in ("x", "y"):
+        out["axe"] = b["axe"]
     if isinstance(b.get("plaque"), str):
         out["plaque"] = b["plaque"][:64]
     if b.get("cree"):
@@ -1652,17 +1653,6 @@ async def index():
     # sinon il sert un frontend périmé après un déploiement.
     return FileResponse(
         STATIC_DIR / "app.html",
-        headers={"Cache-Control": "no-cache, must-revalidate"},
-    )
-
-
-@app.get("/legacy")
-async def legacy():
-    # L'ancienne UI (arbre + 3 colonnes), gardée en filet de sécurité le temps
-    # de roder la nouvelle. À retirer avec app/static/index.html quand plus personne
-    # ne s'en sert.
-    return FileResponse(
-        STATIC_DIR / "index.html",
         headers={"Cache-Control": "no-cache, must-revalidate"},
     )
 
