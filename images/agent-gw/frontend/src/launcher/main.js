@@ -2516,7 +2516,7 @@ function renderLamello(body, st) {
     ? `<path d="M${x} ${y - 4.5} L${x + 4.5} ${y} L${x} ${y + 4.5} L${x - 4.5} ${y} Z" fill="var(--warn)" stroke="var(--warn)" stroke-width="1"/>`
     : `<circle cx="${x}" cy="${y}" r="3.6" fill="var(--shop)" fill-opacity=".45" stroke="var(--shop)" stroke-width="1.4"/>`;
   const chipsOf = (pieces) => pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
-  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>tout à la même échelle</b> — les surfaces fendues (about, rive, contre-face) rabattues en projection alignée : la fente y est un trait, la cote fait foi. <b style="color:var(--proj)">En pointillé bleu</b> : la planche qui vient se poser, cotée depuis son bord de référence — <b>une planche en butée lit 0</b>, c'est la cote qu'on règle au sabot (jamais l'axe de la fente). <span style="color:var(--shop)">●</span> Tenso/Clamex · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond.</div>`;
+  let html = `<div class="lede" style="margin-bottom:12px">Plan par pièce, <b>tout à la même échelle</b> — les surfaces fendues (about, rive, contre-face) rabattues en projection alignée : la fente y est un trait, la cote fait foi. <b style="color:var(--proj)">En pointillé bleu</b> : la planche qui vient se poser, cotée depuis son bord de référence — <b>une planche en butée lit 0</b>, c'est la cote qu'on règle au sabot (jamais l'axe de la fente). <b style="color:var(--agenda)">▬ établi</b> : sur un chant, la face à poser sur le banc — la lamelleuse cote depuis elle. <span style="color:var(--shop)">●</span> Tenso/Clamex · <span style="color:var(--warn)">◆</span> biscuit · <span style="color:var(--proj)">▬</span> rainure fond.</div>`;
   const SURLBL = { face: 'face', 'contre-face': 'contre-face', 'about-gauche': 'ab. G', 'about-droit': 'ab. D', 'rive-avant': 'rive av.', 'rive-arriere': 'rive ar.' };
   for (const g of groups.values()) {
     const { p0, preps } = g, len = p0.longueur || 0, larg = p0.largeur || 0, ep = epOf(wb.data, p0);
@@ -2525,10 +2525,12 @@ function renderLamello(body, st) {
     const M = { face: [], contre: [], aG: [], aD: [], rAv: [], rAr: [] }, surs = [];
     const DST = { face: M.face, 'contre-face': M.contre, 'about-gauche': M.aG, 'about-droit': M.aD, 'rive-avant': M.rAv, 'rive-arriere': M.rAr };
     const bandes = [];   // les planches qui viennent se poser (face / contre-face)
+    const APP = {};      // face posée sur l'ÉTABLI, par surface de chant (cf. `appui`)
     for (const pr of preps) {
       if (!DST[pr.sur]) continue;
       if (!surs.includes(pr.sur)) surs.push(pr.sur);
       DST[pr.sur].push(...lamPoints(pr, p0, ep));
+      if (pr.appui) APP[pr.sur] = pr.appui;
       if (pr.sur === 'face' || pr.sur === 'contre-face')
         for (const li of lamLignes(pr, ep))
           bandes.push({ sur: pr.sur, li, b: ligneBande(li, li.axe === 'u' ? len : larg) });
@@ -2580,13 +2582,31 @@ function renderLamello(body, st) {
     // le HAUT du meuble monté : liseré sur l'arête concernée, ou mention quand c'est une face
     svg += hautMark(p0.haut, { x: 0, y: 0, w: len * S2, h: bh }, true, FS.note);
     // bandes d'about rabattues (axe v partagé) — la fente est un trait qui traverse
+    /* L'ARÊTE D'APPUI. Fraiser un CHANT se fait la planche couchée : la lamelleuse cote
+       depuis son embase, donc depuis la face posée sur l'établi. Poser l'autre face décale
+       la fente dans l'épaisseur et la jonction ne tombe plus en face. Le rabattement place
+       la FACE du côté du dessin principal — on marque donc l'arête voulue en conséquence. */
+    const appuiEdge = (x0, sur, versDessin) => {
+      const a = APP[sur]; if (!a) return '';
+      const xFace = versDessin ? x0 + es : x0;
+      const x = a === 'face' ? xFace : (versDessin ? x0 : x0 + es);
+      return `<line x1="${x}" y1="0" x2="${x}" y2="${bh}" stroke="var(--agenda)" stroke-width="3" stroke-linecap="round"/>`
+        + `<text x="${x}" y="${bh / 2}" transform="rotate(-90 ${x} ${bh / 2})" text-anchor="middle" fill="var(--agenda)" font-family="var(--f-mono)" font-size="${FS.note}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">\u25ac \u00e9tabli</text>`;
+    };
     const strip = (x0, marks) => { let o = `<rect x="${x0}" y="0" width="${es}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) o += `<line x1="${x0}" y1="${(m.v * S2).toFixed(1)}" x2="${x0 + es}" y2="${(m.v * S2).toFixed(1)}" stroke="var(--shop)" stroke-width="2"/>`; return o; };
-    if (M.aG.length) svg += strip(-gap - es, M.aG) + `<text x="${-gap - es}" y="-4" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. G</text>`;
-    if (M.aD.length) svg += strip(len * S2 + gap, M.aD) + `<text x="${len * S2 + gap + es}" y="-4" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. D</text>`;
+    if (M.aG.length) svg += strip(-gap - es, M.aG) + appuiEdge(-gap - es, 'about-gauche', true) + `<text x="${-gap - es}" y="-4" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. G</text>`;
+    if (M.aD.length) svg += strip(len * S2 + gap, M.aD) + appuiEdge(len * S2 + gap, 'about-droit', false) + `<text x="${len * S2 + gap + es}" y="-4" text-anchor="end" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">ab. D</text>`;
     // rives rabattues (axe u partagé)
+    const appuiRive = (y0, sur, versDessin) => {
+      const a = APP[sur]; if (!a) return '';
+      const yFace = versDessin ? y0 + es : y0;
+      const y = a === 'face' ? yFace : (versDessin ? y0 : y0 + es);
+      return `<line x1="0" y1="${y}" x2="${len * S2}" y2="${y}" stroke="var(--agenda)" stroke-width="3" stroke-linecap="round"/>`
+        + `<text x="${len * S2 / 2}" y="${y - 3}" text-anchor="middle" fill="var(--agenda)" font-family="var(--f-mono)" font-size="${FS.note}" font-weight="700" paint-order="stroke" stroke="var(--surface)" stroke-width="3">\u25ac \u00e9tabli</text>`;
+    };
     const rive = (y0, marks) => { let o = `<rect x="0" y="${y0}" width="${len * S2}" height="${es}" rx="2" fill="var(--shop)" fill-opacity=".1" stroke="var(--shop)" stroke-width="1.2"/>`; for (const m of marks) o += `<line x1="${(m.u * S2).toFixed(1)}" y1="${y0}" x2="${(m.u * S2).toFixed(1)}" y2="${y0 + es}" stroke="var(--shop)" stroke-width="2"/>`; return o; };
-    if (M.rAv.length) svg += rive(-gap - es, M.rAv) + `<text x="2" y="${-gap - es - 3}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive av.</text>`;
-    if (M.rAr.length) svg += rive(bh + gap, M.rAr) + `<text x="2" y="${bh + gap + es + 9}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive ar.</text>`;
+    if (M.rAv.length) svg += rive(-gap - es, M.rAv) + appuiRive(-gap - es, 'rive-avant', true) + `<text x="2" y="${-gap - es - 3}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive av.</text>`;
+    if (M.rAr.length) svg += rive(bh + gap, M.rAr) + appuiRive(bh + gap, 'rive-arriere', false) + `<text x="2" y="${bh + gap + es + 9}" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="${FS.note}">rive ar.</text>`;
     // contre-face — PAR TRANSPARENCE (même orientation) : les cotes se lisent pareil
     if (hasContre) {
       svg += `<rect x="0" y="${yC}" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5" stroke-dasharray="6 3"/>`;

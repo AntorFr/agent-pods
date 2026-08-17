@@ -2,6 +2,21 @@
 
 > MàJ : 2026-08-17
 
+**`appui` — la face posée sur l'établi (0.75.0)** : contrainte machine soulevée par Monsieur,
+et c'est le pendant exact du sabot sur l'autre axe. On fraise un chant la planche COUCHÉE :
+la lamelleuse cote depuis son embase, donc depuis la face qui touche le banc. Poser l'autre
+face décale la fente dans l'épaisseur et la jonction ne tombe plus en face. Une prépa de
+chant déclare donc `appui: face|contre-face` (refusé sur une prépa de face) ; la vue Lamello
+pose un liseré violet « ▬ établi » sur l'arête correspondante de la bande rabattue — du bon
+côté, le rabattement plaçant la FACE vers le dessin principal.
+
+Le choix ne se devine pas : la face à coucher est celle qui **regarde le bord de référence**
+utilisé par la prépa de face d'en face (`depuis`), ce que `haut` permet de nommer. Documenté
+dans le contrat avec l'exemple de la tablette. ⚠️ Tant que les jonctions ne sont pas un objet
+de premier rang, RIEN ne vérifie la cohérence entre `appui` d'un côté et `depuis` de l'autre
+— c'est le troisième symptôme du même manque (après « déclarée d'un seul bord » et « les deux
+moitiés peuvent diverger »).
+
 **Quotas Claude dans les Réglages (0.74.0)** : nouvelle entrée « ◔ Quotas Claude » sous ⚙ —
 le corps relaie le guichet d'usage OAuth d'Anthropic (`GET /api/claude-token/usage`) et la
 modale montre, par fenêtre, le % consommé (jauge, ambre ≥ 80 %) et l'heure de remise à zéro.

@@ -16,6 +16,12 @@ export const CHANTS = ['rive-avant', 'rive-arriere', 'about-gauche', 'about-droi
 // déductible du débit (un flan couché sur la plaque ne dit pas comment il se dresse) — c'est
 // une donnée d'assemblage, et c'est ce qui évite de fraiser une pièce à l'envers.
 export const HAUTS = SURFACES;
+// `appui` : sur une prépa de CHANT (about ou rive), la face qu'on pose sur l'établi. La
+// lamelleuse prend sa cote depuis son embase, donc depuis cette face — la choisir à l'envers
+// décale la fente dans l'épaisseur et la jonction ne tombe plus en face. Elle doit être celle
+// qui regarde le bord de référence utilisé par la prépa de FACE d'en face (`depuis`).
+export const APPUIS = ['face', 'contre-face'];
+export const estChant = (sur) => String(sur || '').startsWith('about') || String(sur || '').startsWith('rive');
 export const GESTES = ['poser', 'coller', 'assembler', 'visser', 'serrer', 'verifier'];
 export const ST_TYPES = ['debit', 'tronconnage', 'rainure', 'lamello', 'assemblage', 'suivi'];
 

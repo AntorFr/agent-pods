@@ -97,6 +97,20 @@ Déclare-la sur toute pièce qui n'est pas symétrique haut/bas.
   pointillé, cote son bord de référence, et place la fente **au milieu** de la bande.
 - **Sur un chant : `points[]`** portant la seule coordonnée libre — `v` sur un about,
   `u` sur une rive (le validateur refuse l'autre).
+
+  ⚠️ **`appui` — LA FACE POSÉE SUR L'ÉTABLI, et elle n'est pas libre.** On fraise un chant la
+  planche **couchée** : la lamelleuse cote depuis son embase, donc depuis la face qui touche
+  le banc. Poser l'autre face décale la fente dans l'épaisseur, et la jonction ne tombe plus
+  en face — c'est le pendant exact du sabot, sur l'autre axe. Déclare-la : `appui: "face"` ou
+  `"contre-face"` (refusé sur une prépa de face, où la question ne se pose pas).
+
+  **Comment la choisir — ce n'est pas un goût, c'est une déduction.** La prépa de FACE d'en
+  face a mesuré la planche `depuis` un bord de référence ; la face de la planche qui **regarde
+  ce bord** est celle qui doit toucher l'établi. Exemple : une tablette positionnée sur le
+  côté `depuis: "about-gauche"` (le bas) a son **dessous** comme référence → on couche la
+  tablette **dessous contre le banc** pour fraiser ses abouts. Croiser `haut` te dit lequel
+  de `face`/`contre-face` est ce dessous. Les deux abouts d'une même pièce partagent
+  normalement le même appui (on retourne bout pour bout, jamais face pour face).
 - Chaque point doit tomber DANS la pièce (`0 ≤ u ≤ longueur`, `0 ≤ v ≤ largeur`) — c'est le
   contrôle qui attrape les transpositions d'axes, la plaie du 2.0.
 - `note` : texte libre. `ref` n'existe plus (le repère EST la référence de cotation).
