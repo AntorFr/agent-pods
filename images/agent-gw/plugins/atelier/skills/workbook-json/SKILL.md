@@ -107,7 +107,30 @@ pièce garde sa carte à plat historique (migration au fil de l'eau).
 
 - **`connecteurs[].w` est une cote le long de la PROFONDEUR** (la `longueur` de la
   pièce), mesurée depuis le bord AVANT. **Jamais** le long de la largeur.
-- **`abouts` = positions en LARGEUR** des deux lignes de connecteurs.
+- **`abouts` = positions en LARGEUR** des lignes de connecteurs.
+
+#### Une ligne peut porter SES propres connecteurs (forme longue)
+
+`abouts: [a1, a2]` + `connecteurs: [...]` est un **produit croisé** : toutes les lignes
+reçoivent le même jeu. C'est la bonne écriture quand elle dit vrai — elle signifie « même
+réglage, répété », ce qui est exactement le geste à la machine.
+
+Elle ne sait pas faire **varier le type d'une ligne à l'autre**. Pour ça, une ligne s'écrit
+en objet, comme un `niveau` :
+
+```json
+{ "type": "lamello", "sur": "face", "abouts": [
+    { "a": 50,  "connecteurs": [{"t":"tenso","w":9.5}, {"t":"tenso","w":360}, {"t":"tenso","w":710.5}] },
+    { "a": 335, "connecteurs": [{"t":"biscuit","w":9.5}, {"t":"biscuit","w":360}, {"t":"biscuit","w":710.5}] },
+    { "a": 620, "connecteurs": [{"t":"tenso","w":9.5}, {"t":"tenso","w":360}, {"t":"tenso","w":710.5}] } ] }
+```
+
+**N'éclate JAMAIS une prépa en plusieurs pour contourner le produit croisé** : une pièce,
+une surface, une préparation. Trois prépas pour trois lignes, c'est la même opération écrite
+trois fois — et le jour où la géométrie bouge, deux d'entre elles sont oubliées.
+
+⚠️ **`niveaux[]` vaut pour TOUT rôle**, pas seulement les `CÔTÉ`. (La carte à plat l'ignorait
+sur les pièces horizontales — elle ne dessinait alors rien du tout ; corrigé le 17/08/2026.)
 - Le rendu mappe donc `w` → axe profondeur, `abouts` → axe largeur. Sur le dessin de
   **débit**, `pose.rot` échange en plus ces deux axes (cf. `debit[]`).
 

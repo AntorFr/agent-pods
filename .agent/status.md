@@ -2,6 +2,27 @@
 
 > MàJ : 2026-08-17
 
+**Lamello : une ligne peut porter SES connecteurs (0.70.0, 2026-08-17)** : Alfred signalait
+avoir dû éclater la prépa du BAS d'imp3d en TROIS, une par ligne de profondeur, « le format ne
+sachant pas faire varier le type le long des abouts ». Diagnostic exact et rien de ce qu'on
+avait fait ne le corrigeait : `abouts[] × connecteurs[]` est un **produit croisé**, le type vit
+sur l'axe des connecteurs, donc il est le même sur toutes les lignes. Or son bas veut
+tenso / biscuit / tenso sur trois profondeurs.
+
+Le remède était déjà à moitié dans le format : `niveaux[]` porte, lui, `{h, connecteurs}` —
+chaque ligne avec les siens. On rend la symétrie : **`abouts[]` accepte des objets
+`{a, connecteurs}`**. Une prépa, trois lignes, types distincts. Le produit croisé reste la
+forme courte et reste la bonne quand elle dit vrai (elle signifie « même réglage, répété »,
+ce qui est le geste à la machine). Vérifié : la fiche du BAS rend **6 tenso + 3 biscuits**
+depuis UNE prépa — les neuf points d'Alfred, à l'identique.
+
+🔎 **Défaut trouvé au passage** : dans la carte à plat, `niveaux[]` n'était lu QUE pour les
+pièces de rôle `CÔTÉ` ; sur un horizontal la branche l'ignorait et **ne dessinait rien**. Les
+trois écritures passent maintenant par un seul `lamPoints()`, et les cotes se déduisent des
+points — elles ne peuvent plus diverger du dessin.
+
+Embarque 0.69.0 (l'établi manipule les colonnes), construite mais jamais épinglée.
+
 **L'établi manipule aussi les COLONNES (0.69.0, 2026-08-17)** : « pourquoi je peux pas le
 faire moi ? » — parce que mon calque ne savait qu'écraser des valeurs, jamais **ajouter ou
 retirer un objet**. Une pièce est une feuille (quatre valeurs) ; une bande est un nœud de la

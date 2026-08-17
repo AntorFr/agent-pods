@@ -2563,6 +2563,28 @@ function renderRainurage(body, st) {
 //    D'AXE, et la vérité est dans les cotes écrites, mesurées depuis les mêmes références.
 //  • aucune prépa ne déclare `sur` (l'existant) → carte à plat historique, par prépa.
 const LAM_SURS = ['face', 'contre-face', 'abouts', 'rive-avant', 'rive-arriere'];
+// Une prépa lamello → ses points, dans le repère du dessin. TROIS écritures acceptées :
+//   niveaux: [{h, connecteurs:[{t,w}]}]      chaque ligne porte SES connecteurs
+//   abouts:  [{a, connecteurs:[{t,w}]}]      idem sur l'autre axe — c'est ce qui permet au
+//                                            TYPE de varier d'une ligne à l'autre
+//   abouts:  [a1,a2] + connecteurs:[{t,w}]   forme courte : produit croisé, mêmes connecteurs
+//                                            partout (elle dit « même réglage, répété »)
+// La forme courte reste la bonne quand elle dit vrai ; la forme longue existe pour les cas
+// irréguliers, qu'elle seule sait écrire sans éclater la prépa en plusieurs.
+function lamPoints(pr, isCote) {
+  const out = [];
+  // le rôle décide de l'axe : sur un CÔTÉ la ligne monte (x), sur un horizontal elle traverse (y)
+  const push = (pos, c) => { if (c && typeof c.w === 'number') out.push(isCote ? { x: pos, y: c.w, t: c.t } : { x: c.w, y: pos, t: c.t }); };
+  for (const n of pr.niveaux || []) for (const c of n.connecteurs || []) push(n.h, c);
+  for (const a of pr.abouts || []) {
+    if (a && typeof a === 'object') for (const c of a.connecteurs || []) push(a.a, c);
+    else for (const c of pr.connecteurs || []) push(a, c);
+  }
+  return out;
+}
+// Les lignes d'une prépa sur un chant (about ou rive) : position + connecteurs de la ligne.
+const lamLignes = (pr) => (pr.abouts || []).map((a) => (a && typeof a === 'object')
+  ? { pos: a.a, cs: a.connecteurs || [] } : { pos: a, cs: pr.connecteurs || [] });
 const pieceEp = (p) => p.ep || (wb.matById.get((wb.pieceStep.get(p.etiquette) || {}).materiau) || {}).ep || 19;
 function renderLamello(body, st) {
   const legacy = new Map(), multi = new Map();
@@ -2608,15 +2630,14 @@ function renderLamello(body, st) {
       if (!surs.includes(sur)) surs.push(sur);
       if (sur === 'face' || sur === 'contre-face') {
         const dst = sur === 'face' ? M.face : M.contre;
-        if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs || []) dst.push({ x: n.h, y: c.w, t: c.t });
-        else for (const a of pr.abouts || []) for (const c of pr.connecteurs || []) dst.push(isCote ? { x: a, y: c.w, t: c.t } : { x: c.w, y: a, t: c.t });
+        for (const q of lamPoints(pr, isCote)) dst.push(q);
       } else if (sur === 'abouts') {
-        // `abouts[]` choisit le bout (0 → gauche, ≈longueur → droite) ; w court le long de la largeur
-        for (const a of pr.abouts || []) { const dst = a <= len / 2 ? M.aG : M.aD; for (const c of pr.connecteurs || []) dst.push({ y: c.w, t: c.t }); }
+        // la ligne choisit le bout (0 → gauche, ≈longueur → droite) ; w court le long de la largeur
+        for (const l of lamLignes(pr)) { const dst = l.pos <= len / 2 ? M.aG : M.aD; for (const c of l.cs) dst.push({ y: c.w, t: c.t }); }
       } else {
         const dst = sur === 'rive-avant' ? M.rAv : M.rAr;
-        if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs || []) dst.push({ x: n.h, t: c.t });
-        else for (const c of pr.connecteurs || []) dst.push({ x: c.w, t: c.t });
+        for (const n of pr.niveaux || []) for (const c of n.connecteurs || []) dst.push({ x: n.h, t: c.t });
+        if (!pr.niveaux) for (const l of lamLignes(pr)) for (const c of l.cs) dst.push({ x: c.w, t: c.t });
       }
     }
     const topE = M.rAv.length ? es + gap : 0;
@@ -2670,22 +2691,15 @@ function renderLamello(body, st) {
     // Axes selon le RÔLE (cf. contrat) : la barre a x = longueur (= profondeur d'un horizontal), y = largeur.
     //  • CÔTÉ       : x = position le long de la HAUTEUR (niveau h, ou about aux bouts) ; y = travers w (avant).
     //  • HORIZONTAL : x = w (le long de la PROFONDEUR / longueur) ; y = about (en LARGEUR).
+    // Un seul chemin pour les trois écritures — et `niveaux` cesse d'être réservé aux CÔTÉS
+    // (sur un horizontal, l'ancienne branche l'ignorait purement et simplement : rien ne se
+    // dessinait). Les cotes se déduisent des points, donc elles ne peuvent plus diverger.
     const isCote = p0.role === 'CÔTÉ';
-    const conns = [];
-    let botVals, leftVals, leftLbl;
-    if (isCote) {
-      botVals = pr.niveaux ? pr.niveaux.map((n) => n.h) : (pr.abouts || []);
-      const cs = pr.niveaux ? pr.niveaux.flatMap((n) => n.connecteurs) : (pr.connecteurs || []);
-      leftVals = [...new Set(cs.map((c) => c.w))].sort((a, b) => a - b);
-      leftLbl = 'avant↓';
-      if (pr.niveaux) for (const n of pr.niveaux) for (const c of n.connecteurs) conns.push({ x: n.h * S2, y: c.w * S2, t: c.t });
-      else for (const a of (pr.abouts || [])) for (const c of (pr.connecteurs || [])) conns.push({ x: a * S2, y: c.w * S2, t: c.t });
-    } else {
-      botVals = [...new Set((pr.connecteurs || []).map((c) => c.w))].sort((a, b) => a - b);
-      leftVals = pr.abouts || [];
-      leftLbl = 'largeur↓';
-      for (const a of (pr.abouts || [])) for (const c of (pr.connecteurs || [])) conns.push({ x: c.w * S2, y: a * S2, t: c.t });
-    }
+    const pts = lamPoints(pr, isCote);
+    const conns = pts.map((q) => ({ x: q.x * S2, y: q.y * S2, t: q.t }));
+    const botVals = [...new Set(pts.map((q) => q.x))].sort((a, b) => a - b);
+    const leftVals = [...new Set(pts.map((q) => q.y))].sort((a, b) => a - b);
+    const leftLbl = isCote ? 'avant↓' : 'largeur↓';
     let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Math.round(padT + bh + botC)}" style="max-width:100%;height:auto"><g transform="translate(${padL},${padT})">`;
     svg += `<rect x="0" y="0" width="${len * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".06" stroke="var(--shop)" stroke-width="1.5"/>`;
     // RAINURE de fond sur la MÊME pièce, si présente : bande près du bord ARRIÈRE (bas), à l'échelle,
@@ -2707,7 +2721,7 @@ function renderLamello(body, st) {
     for (const c of conns) svg += mk(c.x, c.y, c.t);
     svg += `</g></svg>`;
     const chips = g.pieces.map((p) => `<button class="colchip${wbDone('lamello-' + p.etiquette) ? ' done' : ''}" data-tick="lamello-${esc(p.etiquette)}">${wbDone('lamello-' + p.etiquette) ? '✓ ' : ''}${esc(p.etiquette.replace(/^[^-]+-/, ''))}</button>`).join('');
-    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role)} · ${len} × ${larg} mm</b><span>${pr.niveaux ? pr.niveaux.length + ' niveaux' : '2 abouts'} · ×${g.pieces.length}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
+    html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>${esc(p0.role)} · ${len} × ${larg} mm</b><span>${pr.niveaux ? pr.niveaux.length + ' niveaux' : (pr.abouts || []).length + ' lignes'} · ${pts.length} points · ×${g.pieces.length}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
   }
   body.innerHTML = html;
   body.querySelectorAll('[data-tick]').forEach((b) => b.addEventListener('click', () => tick(b.dataset.tick, !wbDone(b.dataset.tick))));
