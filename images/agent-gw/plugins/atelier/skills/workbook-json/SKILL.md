@@ -131,6 +131,34 @@ en **positions absolues sur la plaque brute**.
 `x`/`y` sont **absolus sur la plaque brute**, origine au coin haut-gauche : `x` le long de
 `materiaux[].plaque.l`, `y` le long de `.h`.
 
+### `entree` — les étapes forment une CHAÎNE
+
+`entree` désigne **ce qu'on met sous la scie**. Trois sources possibles, dans l'ordre du
+fichier (une source doit exister avant d'être reprise) :
+
+| `entree` | Le geste |
+|---|---|
+| `"plaque"` | la plaque brute |
+| l'`id` d'une **bande** | on reprend une bande déjà refendue |
+| l'`id` d'une **étape de tronçonnage** | on redéligne un tronçon |
+
+Trois usages, tous réels à l'atelier :
+
+1. **Dégrossissage** — une plaque de 2 800 ne passe pas au réglage final. `refente(plaque)`
+   en bandes larges, puis `refente(bande)` en colonnes. C'est ce que fait le claustra.
+2. **Orientations mixtes** — rien n'impose un `sens` unique par plaque : chaque refente porte
+   le sien, donc des bandes **verticales et horizontales** peuvent cohabiter, chacune
+   chaînée sur la région dont elle sort.
+3. **Deux pièces en travers d'une bande** — si `largeur(A) + kerf + largeur(B) ≤` largeur de
+   la bande, les deux pièces se posent **côte à côte en travers**, sont tronçonnées ensemble,
+   puis séparées par une **`refente` chaînée sur l'étape de tronçonnage**. C'est une étape de
+   plus, cochable, avec son propre réglage de guide — pas un tour de passe-passe géométrique.
+
+⚠️ **Le trait de scie n'est pas optionnel.** Deux pièces qui se font face doivent laisser au
+moins `meta.kerf` mm entre elles sur l'axe de la coupe qui les sépare. Collées bord à bord,
+elles sont géométriquement jointives et **physiquement insciables** — la lame mange l'une des
+deux. Le validateur le refuse.
+
 **`sens` sur une refente :**
 
 | `sens` | La bande | Le tronçonnage | Dessin |
@@ -151,6 +179,35 @@ occupe `longueur` en **x** et `largeur` en **y** (absent ou `false` : `largeur` 
 restent absolus et **sens-agnostiques** : c'est toi qui les poses justes, le front ne calcule
 aucun nesting. `rot` n'est lu que par la vue **Débit** — la vue Lamello dessine toujours la
 pièce à plat (`longueur` en x), il n'y entre pas.
+
+## L'établi — le calepinage remanié à la main, et ce que tu en fais
+
+La vue Plaques a un mode **établi** (bouton « ✎ Remanier ») : Monsieur y fait glisser les
+pièces, les tourne, les change de colonne. Ses gestes atterrissent dans un
+**`workbook-layout.json` voisin** (hors git), **jamais dans ton `workbook.json`** — même
+frontière que `workbook-state.json` :
+
+```jsonc
+{ "poses": { "IMP-C1-BAS": { "x": 690, "y": 54, "rot": true, "bande": "P2-C3" } },
+  "maj": "2026-08-17T…" }
+```
+
+**Ce que tu dois en faire — le consolider, comme les cases de todo (D28).** Quand Monsieur te
+le demande (« range mon calepinage », « valide ce que j'ai bougé ») : tu lis le calque, tu
+reportes chaque pose dans le `debit[]` du workbook — `x`, `y`, `rot`, et le **rattachement à
+la bonne étape de tronçonnage** si `bande` a changé —, tu **vides le calque**, et tu commites.
+Tant que tu ne l'as pas fait, l'affichage montre son calepinage et ton fichier garde le tien :
+c'est voulu, il peut revenir en arrière d'un bouton.
+
+**Ce que l'établi refuse déjà à sa place** (mêmes règles que le validateur, appliquées sous
+le doigt) : sortir de la zone utile, chevaucher une autre pièce, déborder de sa colonne,
+manger le trait de scie. Les bords **s'aimantent en ajoutant le kerf** automatiquement. Une
+pièce fautive est peinte en rouge et son grief écrit sous le plan — mais rien n'empêche de
+sauvegarder un état fautif : c'est un établi, pas un gendarme. **Revalide en consolidant.**
+
+**La rotation est bridée par la matière** : elle n'est offerte que si `meta.decorUni` ou
+`meta.sensFil === "libre"`. Sur un panneau à fil, tourner une pièce n'est pas un choix de
+calepinage, c'est un défaut.
 
 ## `calepinage[]` — schéma 1.0, et sa sémantique trompeuse
 

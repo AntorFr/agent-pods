@@ -2,6 +2,48 @@
 
 > MàJ : 2026-08-17
 
+**L'ÉTABLI — le calepinage se remanie à la main (0.68.0, 2026-08-17)** : grosse demande de
+Monsieur — glisser les pièces sur les plaques, les tourner, aimanter bord à bord, et voir les
+chants dès le calepinage pour optimiser l'orientation. Livré en quatre couches.
+
+**1. Le modèle enchaîné.** `entree` d'une étape désigne ce qu'on met sous la scie : la plaque,
+une **bande** déjà refendue, ou une **étape de tronçonnage** qu'on redéligne. Ça n'invente
+aucun vocabulaire et ça débloque les trois cas : dégrossissage (une plaque de 2 800 ne passe
+pas au réglage final), **orientations mixtes** sur une même plaque (chaque refente porte son
+`sens`), et **deux pièces côte à côte en travers d'une bande**, séparées à la refente
+suivante. ⚠️ Le validateur du workspace exigeait `entree: "plaque"` et **refusait depuis
+toujours le claustra**, qui fait un dégrossissage parfaitement légitime — les « 2 erreurs
+préexistantes » traînaient depuis des semaines. Corrigé, les trois workbooks réels passent.
+
+**2. Le trait de scie devient un contrôle.** Deux pièces qui se font face doivent laisser au
+moins `meta.kerf` sur l'axe de la coupe qui les sépare : collées bord à bord elles sont
+**insciables**. Validateur + établi.
+
+**3. La vue Tronçons lit les positions RÉELLES** au lieu de recalculer un empilement
+cumulatif — c'est ce qui rendait le deux-en-travers invisible. Les cotes se dédoublonnent par
+tranche (deux pièces en travers partagent leur coupe) et la **butée** affiche enfin les vraies
+positions de guide, une par trait (la fin d'une tranche et le début de la suivante ne sont
+séparées que du kerf : même coupe, une étiquette).
+
+**4. L'établi.** Bouton « ✎ Remanier » dans la vue Plaques : glissé au pointeur (souris ET
+doigt), **aimantation qui ajoute le kerf** d'office sur les bords à bords et propose aussi
+l'alignement franc, rotation **bridée par la matière** (`decorUni` / `sensFil`), changement de
+colonne par le centre de la pièce, et les **mêmes règles que le validateur appliquées en
+direct** — pièce fautive peinte en rouge, grief écrit sous le plan. Les gestes vont dans un
+**`workbook-layout.json` voisin** (hors git, endpoint `/api/workbook/layout` avec fusion
+serveur, calqué sur les ticks) : le front ne réécrit **jamais** la mémoire versionnée, et
+Alfred consolide sur demande — contrat documenté dans `atelier:workbook-json`. Un bouton
+« ↺ Rendre la main » reprend la proposition d'Alfred.
+
+**Les chants au calepinage**, enfin : le repère pièce → plaque se résout par le seul `rot` de
+la pose (le `sens` oriente la bande, pas la pièce) — l'objection que j'avais opposée en 0.64.0
+ne tenait pas. C'est ce qui permet d'orienter une pièce pour que son chant tombe sur le long
+bord de la bande, plaqué en une passe avant tronçonnage.
+
+Vérifié à l'œil ET au pointeur : workbook d'essai exerçant les trois cas du modèle, puis
+glissés réels via CDP — aimantation à `y=404` (400 + kerf) et à l'affleurement de bande,
+débordement détecté et nommé, rotation, reset. `npm test` 5/5.
+
 **Le demi-millimètre des cotes de scène (0.67.0, 2026-08-17)** : `sceneSVG` arrondissait les
 cotes mesurées au millimètre entier — la colonne de 331,5 du meuble imp3d affichait
 « 332 mm ». Mesure au 0,5 près désormais, virgule française. Déclencheur : la première

@@ -1888,6 +1888,25 @@ const pieceDims = (p) => `${p.longueur}×${p.largeur}`;
 // Hors liste → ignoré (on ne surligne pas un côté qu'on ne sait pas placer).
 const CHANTS = ['avant', 'arriere', 'gauche', 'droite', 'abouts'];
 const pieceChants = (p) => (p.chants || []).filter((c) => CHANTS.includes(c));
+// Repère LOCAL d'une pièce : u court le long de la `longueur`, v le long de la `largeur` ;
+// `avant` est l'arête v=0 (elle court sur toute la longueur), `gauche` l'arête u=0.
+// `swap` = true quand la longueur de la pièce tombe sur l'axe HORIZONTAL du dessin ; c'est
+// la seule chose à savoir pour poser les chants juste, quel que soit le dessin (le `rot` de
+// la pose et le `sens` de la bande s'y résument).
+function chantEdges(chants, x, y, w, h, swap) {
+  const top = [x, y, x + w, y], bot = [x, y + h, x + w, y + h];
+  const lef = [x, y, x, y + h], rig = [x + w, y, x + w, y + h];
+  const out = [];
+  for (const c of chants) {
+    if (c === 'avant') out.push(swap ? top : lef);
+    else if (c === 'arriere') out.push(swap ? bot : rig);
+    if (c === 'gauche' || c === 'abouts') out.push(swap ? lef : top);
+    if (c === 'droite' || c === 'abouts') out.push(swap ? rig : bot);
+  }
+  return out;
+}
+const chantSVG = (edges, sw) => edges.map(([x1, y1, x2, y2]) =>
+  `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="var(--warn)" stroke-width="${sw}" stroke-linecap="round"/>`).join('');
 
 // Conteneurs créés une fois : modale pièce + mode atelier plein écran.
 const pieceModal = document.createElement('div');
@@ -1922,17 +1941,19 @@ async function renderAtelierHub() {
 async function renderWorkbook(path) {
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: '…', hash: '#/atelier/' + encodeURIComponent(path) }]);
   page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
-  let data, state;
+  let data, state, layout;
   try {
-    const [rd, rs] = await Promise.all([
+    const [rd, rs, rl] = await Promise.all([
       fetch('/api/memory/raw/' + path, { headers: headers(false), cache: 'no-store' }),
       fetch('/api/workbook/state?wb=' + encodeURIComponent(path), { headers: headers(false), cache: 'no-store' }),
+      fetch('/api/workbook/layout?wb=' + encodeURIComponent(path), { headers: headers(false), cache: 'no-store' }),
     ]);
     if (!rd.ok) throw new Error(rd.status);
     data = await rd.json(); state = await rs.json();
+    layout = rl.ok ? await rl.json() : { poses: {} };
   } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
-  if (!wb || wb.path !== path) wbTab = 0;   // autre workbook = autre barre, l'index ne se transpose pas
-  wb = { path, data, state, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
+  if (!wb || wb.path !== path) { wbTab = 0; wbEditOn = false; wbSel = null; }   // autre workbook = autre barre, l'index ne se transpose pas
+  wb = { path, data, state, layout, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
   buildWbIndex();
   crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: data.titre || data.projet || 'Workbook', hash: '#/atelier/' + encodeURIComponent(path) }]);
   renderWb();
@@ -2010,11 +2031,103 @@ function renderWb() {
 // (pointillé, bords abîmés), la zone UTILE (trait plein, après dérasage), puis chaque pièce
 // à sa position ABSOLUE fournie par Alfred. La surface non couverte EST la chute. Le front
 // ne calcule aucun nesting : il pose ce qu'Alfred a posé.
+/* ── L'ÉTABLI : remanier le calepinage à la main ──────────────────────
+   La proposition d'Alfred vit dans `workbook.json` (mémoire, git). Le geste de Monsieur
+   vit dans `workbook-layout.json` VOISIN (hors git), superposé pose par pose — même
+   frontière que les cases cochées : le front ne réécrit jamais un fichier de mémoire, et
+   Alfred consolide sur demande. `wbPlaqueBands` / `wbPlaquePoses` rendent l'état EFFECTIF
+   (fichier + calque), seul état que le dessin et les contrôles connaissent. */
+let wbEditOn = false, wbSel = null;
+const wbPoses = () => (wb.layout && wb.layout.poses) || {};
+const wbUZ = (pl) => {                        // zone utile de la plaque, après dérasage
+  const m = wb.matById.get(pl.materiau) || {};
+  const L = m.plaque?.l || 2800, H = m.plaque?.h || 2070, d = m.derasage || 0;
+  return { x0: d, y0: d, x1: L - d, y1: d ? H - d : H, L, H, d };
+};
+function wbPlaqueBands(pl) {
+  const bands = new Map();
+  for (const st of pl.etapes || []) if (st.type === 'refente')
+    for (const b of st.bandes || []) bands.set(b.id, { ...b, sens: st.sens || 'court', poses: [], done: false });
+  return bands;
+}
+// Poses effectives : celles du fichier, chacune écrasée par le calque s'il en porte une.
+// `bande` est modifiable — faire glisser une pièce dans une autre colonne, c'est ça.
+function wbPlaquePoses(pl, bands) {
+  const out = [];
+  for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
+    const b0 = bands && bands.get(st.entree);
+    if (b0) b0.done = wbDone(st.id);
+    for (const pose of st.pieces || []) {
+      const eff = { ...pose, ...(wbPoses()[pose.etiquette] || {}) };
+      const r = poseRect(eff);
+      r.bande = eff.bande || st.entree;
+      r.stepId = st.id;
+      out.push(r);
+      if (bands) (bands.get(r.bande) || b0)?.poses.push(r);
+    }
+  }
+  return out;
+}
+// AIMANTATION : les arêtes s'attirent, mais bord à bord ajoute TOUJOURS le trait de scie —
+// deux pièces jointives sont physiquement insciables. On propose aussi l'alignement franc
+// (mêmes bords), qui lui ne coupe rien.
+function wbSnap(pl, et, x, y, w, h) {
+  const kerf = wb.data.meta?.kerf ?? 4;
+  const uz = wbUZ(pl), tol = 14;   // mm ; ~4 px à l'échelle du dessin
+  const xs = [uz.x0, uz.x1 - w], ys = [uz.y0, uz.y1 - h];
+  const bands = wbPlaqueBands(pl);
+  for (const o of wbPlaquePoses(pl)) {
+    if (o.et === et) continue;
+    xs.push(o.x + o.w + kerf, o.x - w - kerf, o.x, o.x + o.w - w);
+    ys.push(o.y + o.h + kerf, o.y - h - kerf, o.y, o.y + o.h - h);
+  }
+  for (const b of bands.values()) {
+    const bw = b.sens === 'long' ? b.longueur : b.largeur;
+    const bh = b.sens === 'long' ? b.largeur : b.longueur;
+    xs.push(b.x, b.x + bw - w); ys.push(b.y, b.y + bh - h);
+  }
+  const near = (v, cands) => { let bv = v, bd = tol; for (const c of cands) { const d = Math.abs(c - v); if (d < bd) { bd = d; bv = c; } } return bv; };
+  return { x: Math.round(near(x, xs) * 2) / 2, y: Math.round(near(y, ys) * 2) / 2 };
+}
+// Les MÊMES règles que le validateur du workspace, mais en direct sous le doigt : hors
+// zone utile, chevauchement, trait de scie mangé, pièce qui déborde de sa colonne.
+function wbIssues(pl) {
+  const kerf = wb.data.meta?.kerf ?? 4, uz = wbUZ(pl);
+  const bands = wbPlaqueBands(pl), poses = wbPlaquePoses(pl, bands);
+  const iss = new Map();
+  const add = (et, m) => { if (!iss.has(et)) iss.set(et, []); if (!iss.get(et).includes(m)) iss.get(et).push(m); };
+  for (const p of poses) {
+    if (p.x < uz.x0 - 0.01 || p.y < uz.y0 - 0.01 || p.x + p.w > uz.x1 + 0.01 || p.y + p.h > uz.y1 + 0.01) add(p.et, 'hors zone utile');
+    const b = bands.get(p.bande);
+    if (b) {
+      if (b.sens === 'long') { if (p.y < b.y - 0.01 || p.y + p.h > b.y + b.largeur + 0.01) add(p.et, `déborde de ${b.id}`); }
+      else if (p.x < b.x - 0.01 || p.x + p.w > b.x + b.largeur + 0.01) add(p.et, `déborde de ${b.id}`);
+    }
+  }
+  for (let i = 0; i < poses.length; i++) for (let j = i + 1; j < poses.length; j++) {
+    const a = poses[i], b = poses[j];
+    if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h) { add(a.et, `chevauche ${b.et.replace(/^[^-]+-/, '')}`); add(b.et, `chevauche ${a.et.replace(/^[^-]+-/, '')}`); continue; }
+    const gx = Math.max(a.x, b.x) - Math.min(a.x + a.w, b.x + b.w);
+    const gy = Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h);
+    const m = `trait de scie < ${kerf} mm`;
+    if ((gy < -0.01 && gx > -0.01 && gx < kerf - 0.01) || (gx < -0.01 && gy > -0.01 && gy < kerf - 0.01)) { add(a.et, m); add(b.et, m); }
+  }
+  return iss;
+}
+async function wbSavePose(body) {
+  try {
+    const r = await fetch('/api/workbook/layout', { method: 'POST', headers: headers(true), body: JSON.stringify({ wb: wb.path, ...body }) });
+    if (r.ok) wb.layout = await r.json();
+  } catch {}
+  renderWb();
+}
+
 function poseRect(pose) {                     // empreinte (mm) d'une pose depuis le catalogue
   const p = wb.byEtq.get(pose.etiquette) || {};
   const w = pose.rot ? p.longueur : p.largeur;
   const h = pose.rot ? p.largeur : p.longueur;
-  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0 };
+  return { et: pose.etiquette, x: pose.x || 0, y: pose.y || 0, w: w || 0, h: h || 0,
+    rot: !!pose.rot, chants: pieceChants(p) };
 }
 function plaqueSVG(pl, refL) {
   const mat = wb.matById.get(pl.materiau) || {};
@@ -2022,13 +2135,9 @@ function plaqueSVG(pl, refL) {
   const S = 0.30, pad = 40, top = 46;
   const SW = L * S, SH = H * S;
   // La COLONNE (bande) est l'objet : refente = géométrie, tronçonnage = poses + done (par colonne).
-  const bands = new Map();
-  for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bands.set(b.id, { ...b, sens: st.sens || 'court', poses: [], done: false });
-  for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
-    const band = bands.get(st.entree); if (!band) continue;
-    band.done = wbDone(st.id);
-    for (const pose of st.pieces || []) band.poses.push(poseRect(pose));
-  }
+  const bands = wbPlaqueBands(pl);
+  wbPlaquePoses(pl, bands);              // remplit band.poses avec l'état EFFECTIF (fichier + calque)
+  const issues = wbEditOn ? wbIssues(pl) : new Map();
   const vw = (refL || L) * S + pad * 2, vh = SH + top + pad;
   let g = `<g transform="translate(${pad},${top})"><rect x="0" y="0" width="${SW}" height="${SH}" rx="3" fill="var(--surface)" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
   if (d > 0) g += `<rect x="${d * S}" y="${d * S}" width="${(L - 2 * d) * S}" height="${(H - 2 * d) * S}" rx="2" fill="none" stroke="var(--ink)" stroke-width="1.5"/>`;
@@ -2054,10 +2163,20 @@ function plaqueSVG(pl, refL) {
       const px = r.x * S, py = r.y * S, pw = r.w * S, ph = r.h * S;
       const short = r.et.replace(/^[^-]+-/, '');
       const fontE = Math.max(9, Math.min(13, pw / (short.length * 0.8)));
-      g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${cc}" fill-opacity="${done ? .12 : .2}" stroke="${cc}" stroke-width="1" stroke-opacity=".45"/>`;
+      const bad = issues.has(r.et), sel = wbEditOn && wbSel === r.et;
+      const pk = bad ? 'var(--crit)' : sel ? 'var(--proj)' : cc;
+      // en mode établi chaque pièce est son propre <g> : le glissé la déplace par transform,
+      // sans redessiner la plaque à chaque pixel
+      g += `<g class="dragp" data-et="${esc(r.et)}" data-band="${esc(r.bande || '')}"${wbEditOn ? ' style="cursor:grab"' : ''}>`;
+      g += `<rect x="${px}" y="${py}" width="${pw}" height="${ph}" rx="2" fill="${pk}" fill-opacity="${bad ? .3 : done ? .12 : .2}" stroke="${pk}" stroke-width="${bad || sel ? 2.5 : 1}" stroke-opacity="${bad || sel ? 1 : .45}"/>`;
       g += `<text class="pname" data-et="${esc(r.et)}" x="${px + pw / 2}" y="${py + ph / 2 - 1}" text-anchor="middle" fill="${done ? 'var(--ink-faint)' : 'var(--ink)'}" font-family="var(--f-mono)" font-size="${fontE}" font-weight="700">${esc(short)}</text>`;
       g += `<text x="${px + pw / 2}" y="${py + ph / 2 + 13}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="9">${pc.longueur}×${pc.largeur}</text>`;
+      // CHANTS sur la plaque : ce sont eux qui décident de l'orientation au calepinage (un
+      // chant sur le long bord d'une bande se plaque en UNE passe avant tronçonnage). Le
+      // `rot` de la pose suffit à placer l'arête — le `sens` oriente la bande, pas la pièce.
+      if (!done && r.chants.length) g += chantSVG(chantEdges(r.chants, px, py, pw, ph, r.rot), 2.5);
       if (done) g += `<text x="${px + 5}" y="${py + 14}" fill="var(--good)" font-family="var(--f-mono)" font-size="13" font-weight="700">✓</text>`;
+      g += `</g>`;
     }
     // Cotes façon plan — l'axe suit le SENS : id + LARGEUR sur l'arête courte, LONGUEUR (flèches) sur l'axe long.
     const a = 4;
@@ -2085,48 +2204,135 @@ function plaqueSVG(pl, refL) {
   const sub = d > 0 ? ` · dérasage ${d} · tronçon +${wb.data.meta?.tronconnage || 10}` : '';
   return `<svg viewBox="0 0 ${vw} ${vh}"><text x="${pad + SW / 2}" y="${top - 30}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="12">plaque ${L} × ${H} mm${sub}</text>${g}</g></svg>`;
 }
+// Quelle colonne accueille une pièce lâchée ici ? Celle qui contient son CENTRE — à défaut,
+// la pièce garde la sienne (une pièce posée dans la chute n'est pas orpheline, elle est fausse).
+function wbBandAt(pl, cx, cy) {
+  for (const b of wbPlaqueBands(pl).values()) {
+    const bw = b.sens === 'long' ? b.longueur : b.largeur;
+    const bh = b.sens === 'long' ? b.largeur : b.longueur;
+    if (cx >= b.x && cx <= b.x + bw && cy >= b.y && cy <= b.y + bh) return b.id;
+  }
+  return null;
+}
+function wbWireEdit(scope, plaques) {
+  const S = 0.30;
+  scope.querySelectorAll('.blueprint[data-plaque]').forEach((bp) => {
+    const pl = plaques.find((p) => p.plaque === bp.dataset.plaque);
+    const svgEl = bp.querySelector('svg');
+    if (!pl || !svgEl) return;
+    bp.querySelectorAll('.dragp').forEach((gEl) => gEl.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      const et = gEl.dataset.et;
+      const p0 = wbPlaquePoses(pl).find((p) => p.et === et);
+      if (!p0) return;
+      wbSel = et;
+      const box = svgEl.getBoundingClientRect();
+      const vbw = svgEl.viewBox.baseVal.width || box.width;
+      const mmPerPx = (vbw / box.width) / S;      // px écran → mm réels, quelle que soit la taille rendue
+      const sx = ev.clientX, sy = ev.clientY;
+      let cur = { x: p0.x, y: p0.y }, moved = false;
+      try { gEl.setPointerCapture(ev.pointerId); } catch {}
+      const onMove = (e2) => {
+        const nx = p0.x + (e2.clientX - sx) * mmPerPx, ny = p0.y + (e2.clientY - sy) * mmPerPx;
+        if (Math.abs(nx - p0.x) > 1.5 || Math.abs(ny - p0.y) > 1.5) moved = true;
+        cur = wbSnap(pl, et, nx, ny, p0.w, p0.h);
+        gEl.setAttribute('transform', `translate(${((cur.x - p0.x) * S).toFixed(2)},${((cur.y - p0.y) * S).toFixed(2)})`);
+      };
+      const onUp = () => {
+        gEl.removeEventListener('pointermove', onMove);
+        if (!moved) { renderWb(); return; }       // pas bougé = simple sélection
+        wbSavePose({ etiquette: et, pose: { x: cur.x, y: cur.y, rot: p0.rot, bande: wbBandAt(pl, cur.x + p0.w / 2, cur.y + p0.h / 2) || p0.bande } });
+      };
+      gEl.addEventListener('pointermove', onMove);
+      gEl.addEventListener('pointerup', onUp, { once: true });
+      gEl.addEventListener('pointercancel', onUp, { once: true });
+    }));
+  });
+}
 function renderDebit(body, st) {
   const plaques = stPlaques(st);
   if (!plaques.length) { body.innerHTML = '<div class="empty">Pas de plan de débit.</div>'; return; }
   const refL = Math.max(...plaques.map((pl) => (wb.matById.get(pl.materiau)?.plaque?.l) || 2800));
-  body.innerHTML = plaques.map((pl) => {
+  const remanie = Object.keys(wbPoses()).length;
+  // La ROTATION est bridée par la matière : sur un panneau à fil, tourner une pièce change
+  // le sens du veinage — ce n'est pas un choix de calepinage, c'est un défaut.
+  const libre = !wb.data.meta?.sensFil || wb.data.meta.sensFil === 'libre' || wb.data.meta.decorUni;
+  let bar = `<div class="tgcols" style="margin-bottom:10px"><button class="colchip${wbEditOn ? ' done' : ''}" id="wbedit">${wbEditOn ? '✓ Établi ouvert' : '✎ Remanier'}</button>`;
+  if (wbEditOn) {
+    bar += `<button class="colchip" id="wbrot"${wbSel && libre ? '' : ' disabled style="opacity:.45"'} title="${libre ? 'Quart de tour' : 'Interdit : ' + esc(String(wb.data.meta.sensFil)) + ' — le fil du panneau impose le sens'}">⟲ Tourner${wbSel ? ' ' + esc(wbSel.replace(/^[^-]+-/, '')) : ''}</button>`;
+    if (remanie) bar += `<button class="colchip" id="wbreset" title="Reprendre la proposition d'Alfred">↺ Rendre la main (${remanie})</button>`;
+  }
+  bar += '</div>';
+  const allIss = wbEditOn ? plaques.map((pl) => [pl, wbIssues(pl)]).filter(([, m]) => m.size) : [];
+  body.innerHTML = bar + plaques.map((pl) => {
     const mat = wb.matById.get(pl.materiau) || {};
     const n = (pl.etapes || []).reduce((s, st) => s + (st.type === 'tronconnage' ? (st.pieces || []).length : 0), 0);
-    return `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>PLAQUE ${esc(pl.plaque || '')}</b><span>${esc(mat.label || pl.materiau || '')} · ${n} pièces</span></div><div class="cutwrap">${plaqueSVG(pl, refL)}</div></div></div>`;
+    return `<div class="blueprint" data-plaque="${esc(pl.plaque || '')}"><div class="bp-inner"><div class="bp-h"><b>PLAQUE ${esc(pl.plaque || '')}</b><span>${esc(mat.label || pl.materiau || '')} · ${n} pièces</span></div><div class="cutwrap">${plaqueSVG(pl, refL)}</div></div></div>`;
   }).join('')
-    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span style="color:var(--ink-faint)">clic colonne → détail/débiter · clic sur le nom → la pièce</span></div>`;
-  body.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('click', () => showColonne(gEl.dataset.band)));
-  body.querySelectorAll('.pname').forEach((t) => t.addEventListener('click', (e) => { e.stopPropagation(); showPiece(t.dataset.et); }));
+    + (allIss.length ? `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b style="color:var(--crit)">À corriger</b><span>le débit ne passera pas en l'état</span></div><div style="font-size:12.5px;line-height:1.6;margin-top:8px">${allIss.map(([pl, m]) => [...m.entries()].map(([et, ms]) => `<div><b style="font-family:var(--f-mono)">${esc(pl.plaque)} · ${esc(et.replace(/^[^-]+-/, ''))}</b> — ${esc(ms.join(' · '))}</div>`).join('')).join('')}</div></div></div>` : '')
+    + `<div class="legend"><span><i class="sw" style="background:var(--shop);opacity:.6"></i>à débiter</span><span><i class="sw" style="background:var(--ink-faint);opacity:.6"></i>débité ✓</span><span><i class="sw" style="background:var(--warn)"></i>arête à plaquer (chant)</span><span style="color:var(--ink-faint)">${wbEditOn ? 'glisser une pièce · les bords s’aimantent en ajoutant le trait de scie' : 'clic colonne → détail/débiter · clic sur le nom → la pièce'}</span></div>`;
+  $('wbedit').addEventListener('click', () => { wbEditOn = !wbEditOn; wbSel = null; renderWb(); });
+  if (wbEditOn) {
+    wbWireEdit(body, plaques);
+    $('wbrot')?.addEventListener('click', () => {
+      const pl = plaques.find((p) => wbPlaquePoses(p).some((q) => q.et === wbSel));
+      const p0 = pl && wbPlaquePoses(pl).find((q) => q.et === wbSel);
+      if (p0) wbSavePose({ etiquette: wbSel, pose: { x: p0.x, y: p0.y, rot: !p0.rot, bande: p0.bande } });
+    });
+    $('wbreset')?.addEventListener('click', () => {
+      if (confirm('Abandonner votre calepinage et reprendre celui d’Alfred ?')) { wbSel = null; wbSavePose({ reset: true }); }
+    });
+  } else {
+    body.querySelectorAll('.colc').forEach((gEl) => gEl.addEventListener('click', () => showColonne(gEl.dataset.band)));
+    body.querySelectorAll('.pname').forEach((t) => t.addEventListener('click', (e) => { e.stopPropagation(); showPiece(t.dataset.et); }));
+  }
 }
 // Vue TRONÇONS (2ᵉ station) : la plaque refendue, on raisonne PAR COLONNE. On regroupe les
 // colonnes identiques (même largeur + mêmes longueurs de tronçons) → une bande horizontale
 // cotée par type, avec la longueur de chaque tronçon ET la position de coupe cumulée (butée),
 // et une pastille cochable par colonne (= son tronçonnage fait).
 function renderTronconnage(body, st) {
-  const troncon = wb.data.meta?.tronconnage || 10;
   const groups = new Map();
   for (const pl of stPlaques(st)) {
-    const bandW = {};
-    for (const st of pl.etapes || []) if (st.type === 'refente') for (const b of st.bandes || []) bandW[b.id] = b.largeur;
-    for (const st of pl.etapes || []) if (st.type === 'tronconnage') {
-      const largeur = bandW[st.entree] || 0;
-      const troncs = (st.pieces || []).map((po) => { const p = wb.byEtq.get(po.etiquette) || {}; return { et: po.etiquette, longueur: p.longueur || 0, role: p.role || '', chants: pieceChants(p) }; });
-      // les chants entrent dans la signature : une colonne aux pièces plaquées ne se fond
-      // pas dans des jumelles nues — à l'établi, ce n'est pas la même colonne
-      const sig = largeur + '|' + troncs.map((t) => t.longueur + (t.chants.length ? ':' + t.chants.join('+') : '')).join('-');
+    // on groupe par BANDE (l'objet réel de l'atelier), pas par étape : une pièce déplacée à
+    // l'établi change de colonne, et c'est dans sa nouvelle colonne qu'elle doit apparaître
+    const bands = wbPlaqueBands(pl);
+    wbPlaquePoses(pl, bands);
+    const stepOf = new Map();
+    for (const e of pl.etapes || []) if (e.type === 'tronconnage') stepOf.set(e.entree, e.id);
+    for (const band of bands.values()) {
+      if (!band.poses.length) continue;
+      const long = band.sens === 'long';
+      // Positions RÉELLES ramenées dans le repère de la BANDE : `a` court le long, `c` en
+      // travers. Le cumul de longueurs d'autrefois supposait un empilement linéaire — il
+      // écrasait le cas « deux pièces côte à côte en travers », qui tiennent ensemble dans
+      // la largeur (cumul + trait de scie) et se séparent à la refente suivante.
+      const troncs = band.poses.map((r) => ({
+        et: r.et,
+        a0: long ? r.x - (band.x || 0) : r.y - (band.y || 0),
+        c0: long ? r.y - (band.y || 0) : r.x - (band.x || 0),
+        al: long ? r.w : r.h, cr: long ? r.h : r.w,
+        swap: long ? !!r.rot : !r.rot,   // la longueur de la pièce court-elle sur l'axe long de la bande ?
+        chants: r.chants,
+      })).sort((u, v) => u.a0 - v.a0 || u.c0 - v.c0);
+      const largeur = band.largeur || 0;
+      // la GÉOMÉTRIE entre dans la signature (et les chants) : deux colonnes ne se regroupent
+      // que si elles se débitent vraiment pareil
+      const sig = largeur + '|' + troncs.map((t) => `${t.a0},${t.c0},${t.al},${t.cr}${t.chants.length ? ':' + t.chants.join('+') : ''}`).join('-');
       if (!groups.has(sig)) groups.set(sig, { largeur, troncs, colonnes: [] });
-      groups.get(sig).colonnes.push({ id: pl.plaque + st.entree.split('-').pop(), stepId: st.id, done: wbDone(st.id), etqs: troncs.map((t) => t.et) });
+      const stepId = stepOf.get(band.id);
+      groups.get(sig).colonnes.push({ id: pl.plaque + String(band.id).split('-').pop(), stepId, done: stepId ? wbDone(stepId) : false, etqs: troncs.map((t) => t.et) });
     }
   }
   if (!groups.size) { body.innerHTML = '<div class="empty">Pas de colonnes.</div>'; return; }
   const S2 = 0.33, pad = 24;
   const sorted = [...groups.values()].sort((a, b) => b.largeur - a.largeur);
-  const tot = (g) => g.troncs.reduce((s, t) => s + t.longueur, 0) + Math.max(0, g.troncs.length - 1) * troncon;
+  const tot = (g) => g.troncs.reduce((m, t) => Math.max(m, t.a0 + t.al), 0);
   const W = Math.max(...sorted.map(tot)) * S2 + pad * 2;   // viewBox COMMUN → échelle identique d'une bande à l'autre
   let html = `<div class="lede" style="margin-bottom:12px">Plaques refendues → tronçonnage. Chaque type de colonne (identiques regroupées ×N), ses tronçons cotés, et la position de coupe cumulée (butée) — <b>à la même échelle</b> d'une bande à l'autre. Cocher une colonne = tronçonnée.</div>`;
   for (const g of sorted) {
     const total = tot(g);
-    const bh = Math.round(g.largeur * S2), top = 12, Hc = bh + top + 28;   // hauteur = largeur RÉELLE (même échelle) → ratio fidèle ; +place pour les cotes sous la bande
+    const bh = Math.round(g.largeur * S2), top = 12, Hc = bh + top + 50;   // hauteur = largeur RÉELLE (même échelle) → ratio fidèle ; +place pour les cotes et la butée
     let svg = `<svg viewBox="0 0 ${Math.round(W)} ${Hc}"><g transform="translate(${pad},${top})">`;
     svg += `<rect x="0" y="0" width="${total * S2}" height="${bh}" rx="3" fill="var(--shop)" fill-opacity=".07" stroke="var(--shop)" stroke-width="2"/>`;
     // largeur cotée sur le flanc (façon plan : largeur en Y, longueur en X)
@@ -2134,31 +2340,43 @@ function renderTronconnage(body, st) {
     const fx = -7;
     svg += `<line x1="${fx}" y1="0" x2="${fx}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="0" x2="${fx + 3}" y2="0" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${fx - 3}" y1="${bh}" x2="${fx + 3}" y2="${bh}" stroke="var(--ink-soft)" stroke-width="1"/>`;
     svg += `<text x="${fx - 6}" y="${bh / 2}" transform="rotate(-90 ${fx - 6} ${bh / 2})" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${g.largeur} mm</text>`;
-    let x = 0;
-    for (let i = 0; i < g.troncs.length; i++) {
-      const t = g.troncs[i], w = t.longueur * S2, short = t.et.replace(/^[^-]+-/, '');
-      const nf = Math.max(9, Math.min(12, w / (short.length * 0.62)));
-      svg += `<rect x="${x}" y="0" width="${w}" height="${bh}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
-      // chants : SEULS les côtés plaqués se surlignent — trait orange épais posé sur l'arête,
-      // légèrement rentré pour rester dans la forme. Repère : longueur en x, avant en haut.
-      const edge = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--warn)" stroke-width="3" stroke-linecap="round"/>`;
-      for (const c of t.chants) {
-        if (c === 'avant') svg += edge(x + 2.5, 1.5, x + w - 2.5, 1.5);
-        else if (c === 'arriere') svg += edge(x + 2.5, bh - 1.5, x + w - 2.5, bh - 1.5);
-        if (c === 'gauche' || c === 'abouts') svg += edge(x + 1.5, 2.5, x + 1.5, bh - 2.5);
-        if (c === 'droite' || c === 'abouts') svg += edge(x + w - 1.5, 2.5, x + w - 1.5, bh - 2.5);
-      }
-      // NOM de la pièce seul au centre (cliquable)
-      svg += `<text class="pname" data-et="${esc(t.et)}" x="${x + w / 2}" y="${bh / 2 + 3}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
-      // COTE longueur sous le tronçon — style cote (sur le bord), unité incluse
-      const cy = bh + 15;
-      svg += `<line x1="${x + 2}" y1="${cy}" x2="${x + w - 2}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + 2}" y1="${cy - 3}" x2="${x + 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${x + w - 2}" y1="${cy - 3}" x2="${x + w - 2}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
-      svg += `<text x="${x + w / 2}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${t.longueur} mm</text>`;
-      x += w;
-      if (i < g.troncs.length - 1) x += troncon * S2;
+    for (const t of g.troncs) {
+      const x = t.a0 * S2, y = t.c0 * S2, w = t.al * S2, h = t.cr * S2;
+      const short = t.et.replace(/^[^-]+-/, '');
+      const nf = Math.max(8, Math.min(12, w / (short.length * 0.62)));
+      svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--shop)" fill-opacity=".15" stroke="var(--shop)" stroke-width="1" stroke-opacity=".5"/>`;
+      // chants : SEULES les arêtes plaquées se surlignent, placées par `swap`
+      if (t.chants.length) svg += chantSVG(chantEdges(t.chants, x + 1.5, y + 1.5, w - 3, h - 3, t.swap), 3);
+      svg += `<text class="pname" data-et="${esc(t.et)}" x="${(x + w / 2).toFixed(1)}" y="${(y + h / 2 + 3).toFixed(1)}" text-anchor="middle" fill="var(--ink)" font-family="var(--f-mono)" font-size="${nf.toFixed(1)}" font-weight="700">${esc(short)}</text>`;
+    }
+    // COTES : une par TRANCHE le long de la bande — deux pièces en travers partagent la leur,
+    // c'est une seule coupe de tronçonnage. Puis la BUTÉE : la position cumulée de chaque trait.
+    const slices = [];
+    for (const t of g.troncs) if (!slices.some((s) => Math.abs(s.a0 - t.a0) < 0.01 && Math.abs(s.al - t.al) < 0.01)) slices.push({ a0: t.a0, al: t.al });
+    slices.sort((u, v) => u.a0 - v.a0);
+    const cy = bh + 15;
+    for (const s of slices) {
+      const x = s.a0 * S2, w = s.al * S2;
+      svg += `<line x1="${(x + 2).toFixed(1)}" y1="${cy}" x2="${(x + w - 2).toFixed(1)}" y2="${cy}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${(x + 2).toFixed(1)}" y1="${cy - 3}" x2="${(x + 2).toFixed(1)}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/><line x1="${(x + w - 2).toFixed(1)}" y1="${cy - 3}" x2="${(x + w - 2).toFixed(1)}" y2="${cy + 3}" stroke="var(--ink-soft)" stroke-width="1"/>`;
+      svg += `<text x="${(x + w / 2).toFixed(1)}" y="${cy - 4}" text-anchor="middle" fill="var(--ink-soft)" font-family="var(--f-mono)" font-size="9">${+s.al.toFixed(1)} mm</text>`;
+    }
+    // Une butée par TRAIT, pas par arête : la fin d'une tranche et le début de la suivante ne
+    // sont séparés que du trait de scie — c'est la même coupe, une seule position de guide.
+    const kerf = wb.data.meta?.kerf ?? 4;
+    const butees = [];
+    for (const b of [...new Set(slices.flatMap((s) => [s.a0, s.a0 + s.al]))].sort((u, v) => u - v))
+      if (!butees.length || b - butees[butees.length - 1] > kerf + 0.01) butees.push(b);
+    let lastBx = -1e9, brow = 0;
+    for (const b of butees) {
+      const bx = b * S2;
+      brow = bx - lastBx < 24 ? 1 - brow : 0;   // encore trop serré → deux rangs, jamais l'un sur l'autre
+      lastBx = bx;
+      svg += `<text x="${bx.toFixed(1)}" y="${cy + 17 + brow * 10}" text-anchor="middle" fill="var(--ink-faint)" font-family="var(--f-mono)" font-size="8">${+b.toFixed(1)}</text>`;
     }
     svg += `</g></svg>`;
-    const chips = g.colonnes.map((c) => `<button class="colchip${c.done ? ' done' : ''}" data-tick="${esc(c.stepId)}" title="${esc(c.etqs.join(', '))}">${c.done ? '✓ ' : ''}${esc(c.id)}</button>`).join('');
+    const chips = g.colonnes.map((c) => c.stepId
+      ? `<button class="colchip${c.done ? ' done' : ''}" data-tick="${esc(c.stepId)}" title="${esc(c.etqs.join(', '))}">${c.done ? '✓ ' : ''}${esc(c.id)}</button>`
+      : `<span class="colchip" style="opacity:.5" title="colonne sans étape de tronçonnage — à consolider par Alfred">${esc(c.id)}</span>`).join('');
     html += `<div class="blueprint"><div class="bp-inner"><div class="bp-h"><b>Guide ${g.largeur} mm</b><span>${g.troncs.length} tronçon${g.troncs.length > 1 ? 's' : ''} · ×${g.colonnes.length} colonne${g.colonnes.length > 1 ? 's' : ''}</span></div><div class="cutwrap">${svg}</div><div class="tgcols">${chips}</div></div></div>`;
   }
   // même pied de page que Plaques : la légende des conventions de la vue

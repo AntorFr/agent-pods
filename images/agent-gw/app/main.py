@@ -472,9 +472,10 @@ async def session_info():
 
 
 # Workbooks: per-project JSON emitted by the agent under the memory dir
-# (…/assets/workbook.json). The front renders them; the ONLY thing the
-# gateway ever writes is the sibling workbook-state.json (progress ticks,
-# a user gesture — not memory, hence kept out of git by the agent).
+# (…/assets/workbook.json). The front renders them; the ONLY things the gateway
+# ever writes are the siblings workbook-state.json (progress ticks) and
+# workbook-layout.json (a nesting reworked by hand). Both are user GESTURES —
+# not memory, hence kept out of git by the agent, who consolidates them on ask.
 
 
 def _workbook_file(rel: str) -> Path:
@@ -491,6 +492,15 @@ def _load_wb_state(wb: Path) -> dict:
         state = {}
     state.setdefault("fait", {})
     return state
+
+
+def _load_wb_layout(wb: Path) -> dict:
+    try:
+        lay = json.loads(wb.with_name("workbook-layout.json").read_text())
+    except (OSError, ValueError):
+        lay = {}
+    lay.setdefault("poses", {})
+    return lay
 
 
 @app.get("/api/workbook/list")
@@ -551,6 +561,51 @@ async def workbook_tick(request: Request):
         json.dumps(state, ensure_ascii=False, indent=1)
     )
     return state
+
+
+@app.get("/api/workbook/layout")
+async def workbook_layout(wb: str):
+    return _load_wb_layout(_workbook_file(wb))
+
+
+@app.post("/api/workbook/layout")
+async def workbook_layout_set(request: Request):
+    """One pose = one piece moved by hand. Same server-side merge as the ticks, so two
+    devices never clobber each other; `reset` drops the whole overlay and hands the
+    nesting back to the agent's proposal."""
+    body = await request.json()
+    p = _workbook_file(body.get("wb") or "")
+    lay = _load_wb_layout(p)
+    poses = lay["poses"]
+    if body.get("reset"):
+        poses.clear()
+    else:
+        et = (body.get("etiquette") or "").strip()
+        if not et:
+            raise HTTPException(status_code=400, detail="etiquette required")
+        pose = body.get("pose")
+        if pose is None:
+            poses.pop(et, None)
+        elif not isinstance(pose, dict):
+            raise HTTPException(status_code=400, detail="pose must be an object")
+        else:
+            # Only the geometry we own — never free-form keys coming from a browser.
+            kept = {}
+            for k in ("x", "y"):
+                if k in pose:
+                    if not isinstance(pose[k], (int, float)) or isinstance(pose[k], bool):
+                        raise HTTPException(status_code=400, detail=f"{k} must be a number (mm)")
+                    kept[k] = pose[k]
+            if "rot" in pose:
+                kept["rot"] = bool(pose["rot"])
+            if isinstance(pose.get("bande"), str):
+                kept["bande"] = pose["bande"][:64]
+            poses[et] = kept
+    lay["maj"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    p.with_name("workbook-layout.json").write_text(
+        json.dumps(lay, ensure_ascii=False, indent=1)
+    )
+    return lay
 
 
 # Todo: a task is a `type: tache` fiche in the memory dir — the source, in git.
