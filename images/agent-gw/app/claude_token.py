@@ -14,14 +14,17 @@ la chaîne d'auth du CLI, sur des credentials périmés du home partagé.
 
 import asyncio
 import fcntl
+import json
 import os
 import re
 import shutil
 import struct
 import termios
+import time
 import uuid
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter(prefix="/api/claude-token")
@@ -245,6 +248,102 @@ async def start():
     if _active.state == "error" or not _active.authorize_url:
         raise HTTPException(502, _active.error or "Démarrage impossible.")
     return {"sessionId": _active.id, "authorizeUrl": _active.authorize_url}
+
+
+# ── Quotas d'usage de l'abonnement ───────────────────────────────────────────
+# Le même guichet que le `/usage` du CLI : fenêtres serveur (session 5 h,
+# plafonds hebdomadaires) avec pourcentage consommé et heure de remise à zéro.
+# Endpoint non documenté mais stable, utilisé par tout l'outillage communautaire.
+
+USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
+# L'amont rate-limite sévèrement (anthropics/claude-code#31637) : on ne le
+# sollicite jamais plus d'une fois par fenêtre de 3 min, modale ouverte ou pas.
+USAGE_TTL = 180.0
+
+_usage_cache: dict = {"token": None, "at": 0.0, "payload": None}
+_cli_version: str | None = None
+
+
+def _usage_token() -> str | None:
+    """Le token géré ici, sinon les credentials `claude login` du home partagé."""
+    token = stored_token()
+    if token:
+        return token
+    try:
+        creds = json.loads((Path.home() / ".claude" / ".credentials.json").read_text())
+        return (creds.get("claudeAiOauth") or {}).get("accessToken") or None
+    except (OSError, ValueError):
+        return None
+
+
+async def _ua_version() -> str:
+    """Version du CLI pour le User-Agent — sans `claude-code/x.y.z`, l'amont
+    répond des 429 persistants (bucket anonyme). Résolue une fois par process."""
+    global _cli_version
+    if _cli_version:
+        return _cli_version
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            _claude_bin(),
+            "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            stdin=asyncio.subprocess.DEVNULL,
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), 10)
+        match = re.search(r"\d+\.\d+\.\d+\S*", out.decode("utf-8", errors="replace"))
+        _cli_version = match.group(0) if match else "2.0.0"
+    except (OSError, HTTPException, asyncio.TimeoutError):
+        _cli_version = "2.0.0"
+    return _cli_version
+
+
+def _usage_stale_or(reason: str, token: str) -> dict:
+    """Amont injoignable : mieux vaut le dernier relevé, marqué `stale`, que rien."""
+    cache = _usage_cache
+    if cache["payload"] and cache["token"] == token:
+        return {**cache["payload"], "stale": True}
+    return {"available": False, "reason": reason}
+
+
+@router.get("/usage")
+async def usage():
+    token = _usage_token()
+    if not token:
+        return {
+            "available": False,
+            "reason": "Aucun token d'abonnement connu du corps — passe d'abord par « Connexion Claude ».",
+        }
+    cache = _usage_cache
+    if cache["payload"] and cache["token"] == token and time.monotonic() - cache["at"] < USAGE_TTL:
+        return cache["payload"]
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "anthropic-beta": "oauth-2025-04-20",
+        "User-Agent": f"claude-code/{await _ua_version()}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(USAGE_URL, headers=headers)
+    except httpx.HTTPError as exc:
+        return _usage_stale_or(f"Anthropic injoignable ({exc.__class__.__name__}).", token)
+    if resp.status_code == 401:
+        return {
+            "available": False,
+            "reason": "Token refusé par Anthropic (périmé ou révoqué) — renouvelle la connexion Claude.",
+        }
+    if resp.status_code == 429:
+        return _usage_stale_or("Le guichet d'usage d'Anthropic rate-limite — réessaie dans quelques minutes.", token)
+    if resp.status_code != 200:
+        return _usage_stale_or(f"Réponse {resp.status_code} du guichet d'usage d'Anthropic.", token)
+    try:
+        data = resp.json()
+    except ValueError:
+        return _usage_stale_or("Réponse illisible du guichet d'usage d'Anthropic.", token)
+    payload = {"available": True, "stale": False, "fetchedAt": int(time.time()), "usage": data}
+    _usage_cache.update(token=token, at=time.monotonic(), payload=payload)
+    return payload
 
 
 @router.post("/code")

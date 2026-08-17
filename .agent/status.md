@@ -2,6 +2,17 @@
 
 > MàJ : 2026-08-17
 
+**Quotas Claude dans les Réglages (0.74.0)** : nouvelle entrée « ◔ Quotas Claude » sous ⚙ —
+le corps relaie le guichet d'usage OAuth d'Anthropic (`GET /api/claude-token/usage`) et la
+modale montre, par fenêtre, le % consommé (jauge, ambre ≥ 80 %) et l'heure de remise à zéro.
+Les fenêtres sont celles qui existent côté Anthropic : session 5 h + plafonds hebdomadaires
+(tous modèles / Opus / Sonnet) — il n'y a pas de quota « jour ». Points durs, appris de
+l'outillage communautaire : `User-Agent: claude-code/<version>` **obligatoire** (sans lui,
+bucket anonyme → 429 persistants, cf. anthropics/claude-code#31637), cache serveur 180 s
+(l'amont rate-limite), dernier relevé servi marqué `stale` quand l'amont tousse. Token : celui
+de la modale Connexion, sinon les credentials `claude login` du home partagé. Banc
+claude_token porté à 16 asserts.
+
 **Graduations par bloc + le contrat dit ce qu'est une ligne (0.73.0)** : deux retours de
 Monsieur sur la vue Lamello.
 

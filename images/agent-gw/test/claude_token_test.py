@@ -88,9 +88,104 @@ async def flow_bad_code():
     check("pas de token stocké sur échec", ct.stored_token() is None)
 
 
+"""Quotas d'usage (/usage) : on rejoue le guichet d'Anthropic avec un faux
+httpx — testés : le cas sans token, les en-têtes requis, le cache TTL, le
+service du dernier relevé sur 429, et le 401 (token périmé)."""
+
+
+class _FakeResp:
+    def __init__(self, status, data=None):
+        self.status_code = status
+        self._data = data
+
+    def json(self):
+        if self._data is None:
+            raise ValueError("pas de JSON")
+        return self._data
+
+
+class _FakeClient:
+    plan = []
+    calls = 0
+    last_headers = None
+
+    def __init__(self, timeout=None):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url, headers=None):
+        _FakeClient.calls += 1
+        _FakeClient.last_headers = headers
+        item = _FakeClient.plan.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def _expire_cache():
+    ct._usage_cache["at"] = -1e9
+
+
+async def usage_flows():
+    import types
+
+    real_httpx = ct.httpx
+    ct.httpx = types.SimpleNamespace(AsyncClient=_FakeClient, HTTPError=real_httpx.HTTPError)
+    ct._cli_version = "9.9.9"  # court-circuite `claude --version` (faux binaire inadapté)
+
+    # Sans token (ni fichier géré, ni credentials.json dans le home du test).
+    ct.TOKEN_FILE.unlink(missing_ok=True)
+    home_creds = Path.home() / ".claude" / ".credentials.json"
+    res = await ct.usage()
+    check("usage sans token → indisponible", res["available"] is False or home_creds.exists())
+
+    # Nominal : réponse du guichet relayée, en-têtes corrects.
+    ct._save_token("sk-ant-oat01-FAKETOKEN0123456789abcdefghijklmnop")
+    windows = {
+        "five_hour": {"utilization": 33.0, "resets_at": "2026-08-17T18:00:00+00:00"},
+        "seven_day": {"utilization": 13.0, "resets_at": "2026-08-21T00:59:59+00:00"},
+        "seven_day_opus": None,
+    }
+    _FakeClient.plan = [_FakeResp(200, windows)]
+    _FakeClient.calls = 0
+    res = await ct.usage()
+    check("usage nominal → disponible", res["available"] is True and res["stale"] is False)
+    check("fenêtres relayées telles quelles", res["usage"] == windows)
+    check(
+        "en-têtes requis (beta + User-Agent claude-code/…)",
+        _FakeClient.last_headers["anthropic-beta"] == "oauth-2025-04-20"
+        and _FakeClient.last_headers["User-Agent"] == "claude-code/9.9.9"
+        and _FakeClient.last_headers["Authorization"].startswith("Bearer sk-ant-oat01-"),
+    )
+
+    # Cache TTL : un second appel ne resollicite pas l'amont (il rate-limite).
+    await ct.usage()
+    check("cache TTL — un seul appel amont", _FakeClient.calls == 1)
+
+    # 429 après expiration du cache : on sert le dernier relevé, marqué stale.
+    _expire_cache()
+    _FakeClient.plan = [_FakeResp(429)]
+    res = await ct.usage()
+    check("429 → dernier relevé servi, marqué stale", res["available"] is True and res["stale"] is True)
+
+    # 401 : token périmé/révoqué — pas de relevé, un motif clair.
+    _expire_cache()
+    _FakeClient.plan = [_FakeResp(401)]
+    res = await ct.usage()
+    check("401 → indisponible avec motif", res["available"] is False and "token" in res["reason"].lower())
+
+    ct.httpx = real_httpx
+
+
 async def main():
     await flow_ok()
     await flow_bad_code()
+    await usage_flows()
 
 
 asyncio.run(main())

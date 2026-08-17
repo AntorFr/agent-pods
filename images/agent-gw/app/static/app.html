@@ -66,6 +66,7 @@
         <button id="set-theme" type="button">◐ Thème clair / sombre</button>
         <button id="vsc" type="button">⧉ Tunnel VS Code</button>
         <button id="claude-login" type="button">✳ Connexion Claude</button>
+        <button id="claude-usage" type="button">◔ Quotas Claude</button>
         <button id="set-logout" type="button">⎋ Déconnexion</button>
       </div>
       <div class="setver" id="set-version">agent-gw …</div>
@@ -94,6 +95,18 @@
       <div id="claude-body"><div class="row">chargement…</div></div>
       <div class="actions">
         <button id="claude-close" type="button">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="usage-modal" hidden>
+    <div class="card">
+      <h2>Quotas Claude</h2>
+      <div class="row">Les fenêtres d’usage de l’abonnement, telles que les compte Anthropic : la session de 5 h et les plafonds de la semaine, avec leur remise à zéro.</div>
+      <div id="usage-body"><div class="row">chargement…</div></div>
+      <div class="actions">
+        <button id="usage-refresh" type="button">⟳ Rafraîchir</button>
+        <button id="usage-close" type="button">Fermer</button>
       </div>
     </div>
   </div>

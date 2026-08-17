@@ -3386,6 +3386,62 @@ async function claudeStart() {
   claudeBody.appendChild(ok);
 }
 
+/* ── Quotas Claude (fenêtres d'usage de l'abonnement) ────────────── */
+/* Le corps relaie le guichet d'usage d'Anthropic (cache serveur 3 min — l'amont
+   rate-limite) : pourcentage consommé par fenêtre + heure de remise à zéro.
+   Les fenêtres réelles sont la session de 5 h et les plafonds hebdomadaires —
+   il n'existe pas de quota « jour » côté Anthropic. */
+const usageModal = $('usage-modal'), usageBody = $('usage-body');
+$('claude-usage').addEventListener('click', () => { setModal.hidden = true; usageModal.hidden = false; refreshUsage(); });
+$('usage-close').addEventListener('click', () => { usageModal.hidden = true; });
+$('usage-refresh').addEventListener('click', refreshUsage);
+usageModal.addEventListener('click', (e) => { if (e.target === usageModal) usageModal.hidden = true; });
+const USAGE_WINDOWS = [
+  ['five_hour', 'Session (5 h)'],
+  ['seven_day', 'Semaine — tous modèles'],
+  ['seven_day_opus', 'Semaine — Opus'],
+  ['seven_day_sonnet', 'Semaine — Sonnet'],
+];
+function fmtReset(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return '';
+  const min = Math.floor((t - Date.now()) / 60000);
+  if (min <= 1) return 'remise à zéro imminente';
+  const d = Math.floor(min / 1440), h = Math.floor((min % 1440) / 60), m = min % 60;
+  const dur = d ? d + ' j ' + h + ' h' : h ? h + ' h ' + String(m).padStart(2, '0') : m + ' min';
+  const hm = t.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const at = d ? t.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'numeric' }) + ' ' + hm : hm;
+  return 'remise à zéro dans ' + dur + ' (' + at + ')';
+}
+async function refreshUsage() {
+  usageBody.innerHTML = '<div class="row">chargement…</div>';
+  let u;
+  try { const r = await fetch('/api/claude-token/usage', { headers: headers(false), cache: 'no-store' }); if (!r.ok) throw new Error(r.status); u = await r.json(); }
+  catch (e) { usageBody.innerHTML = '<div class="row">État indisponible (' + esc(String(e)) + ').</div>'; return; }
+  if (!u.available) { usageBody.innerHTML = '<div class="row">' + esc(u.reason || 'Quotas indisponibles.') + '</div>'; return; }
+  const d = u.usage || {};
+  usageBody.innerHTML = '';
+  for (const [key, label] of USAGE_WINDOWS) {
+    const w = d[key];
+    if (!w || w.utilization == null) continue; // fenêtre absente = plan sans ce plafond, pas un zéro
+    const pct = Math.max(0, Math.min(100, Math.round(w.utilization)));
+    usageBody.insertAdjacentHTML('beforeend',
+      '<div class="usewin' + (pct >= 80 ? ' attn' : '') + '"><div class="uk"><b>' + esc(label) + '</b><span class="upct">' + pct + ' %</span></div>'
+      + '<div class="ubar"><i style="width:' + pct + '%"></i></div>'
+      + (w.resets_at ? '<div class="ureset">' + esc(fmtReset(w.resets_at)) + '</div>' : '')
+      + '</div>');
+  }
+  if (!usageBody.children.length) usageBody.innerHTML = '<div class="row">Aucune fenêtre active — rien de consommé pour l’instant.</div>';
+  const x = d.extra_usage;
+  if (x && x.is_enabled) {
+    const used = x.used_credits != null ? Number(x.used_credits).toLocaleString('fr-FR') : '?';
+    const cap = x.monthly_limit != null ? Number(x.monthly_limit).toLocaleString('fr-FR') : '∞';
+    usageBody.insertAdjacentHTML('beforeend', '<div class="row">Crédits supplémentaires : ' + esc(used + ' / ' + cap) + ' ce mois-ci.</div>');
+  }
+  const read = new Date(u.fetchedAt * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  usageBody.insertAdjacentHTML('beforeend', '<div class="hint">relevé de ' + read + (u.stale ? ' — amont injoignable, dernier relevé connu' : '') + '</div>');
+}
+
 /* ── Boot ────────────────────────────────────────────────────────── */
 window.addEventListener('hashchange', renderRoute);
 (async function boot() {
