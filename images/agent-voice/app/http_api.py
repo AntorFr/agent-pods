@@ -19,7 +19,7 @@ from aioesphomeapi import APIClient
 
 from . import __version__, wyo
 
-log = logging.getLogger("alfred-voice.http")
+log = logging.getLogger("agent-voice.http")
 
 DESCRIBE_TIMEOUT_S = 4.0
 

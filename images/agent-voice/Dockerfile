@@ -1,7 +1,7 @@
-# alfred-voice — voice satellite server for ESPHome voice_assistant devices.
+# agent-voice — voice satellite server for ESPHome voice_assistant devices.
 # Talks the ESPHome native API directly (the role HA normally plays), runs
 # STT/TTS through Wyoming services, and routes utterances by wake word to the
-# Alfred gateway (MCP) or Home Assistant. See README.md.
+# agent gateway (MCP) or Home Assistant. See README.md.
 
 FROM python:3.12-slim
 

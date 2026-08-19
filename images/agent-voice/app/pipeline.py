@@ -25,7 +25,7 @@ from .device import DeviceLink
 from .tts_store import TtsStore
 from .vad import EnergyEndpointer, Verdict
 
-log = logging.getLogger("alfred-voice.pipeline")
+log = logging.getLogger("agent-voice.pipeline")
 
 ERROR_MESSAGE = "Désolé, je n'ai pas pu obtenir de réponse."
 STT_TIMEOUT_S = 30.0

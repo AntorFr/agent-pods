@@ -1,7 +1,7 @@
 """Runtime configuration store.
 
 The config is a single JSON file on the shared pod volume, owned by the
-gateway's settings UI (the PWA writes it, alfred-voice reads it). Changes are
+gateway's settings UI (the PWA writes it, agent-voice reads it). Changes are
 picked up by mtime polling — no restart needed to add/remove a device or
 switch a voice.
 """
@@ -15,7 +15,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger("alfred-voice.config")
+log = logging.getLogger("agent-voice.config")
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "language": "fr",
@@ -31,7 +31,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     #               async flow when the backend is slower than expected.
     "routes": {
         "hey_jarvis": {
-            "backend": "alfred",
+            "backend": "agent",
             "voice": "nestor",
             "mode": "async",
             "ack": "Bien reçu, je m'en occupe.",
@@ -45,7 +45,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "default_route": "hey_jarvis",
     # Devices are ESPHome voice satellites; host defaults to
-    # <name>.<ALFRED_VOICE_DEVICE_DOMAIN> when no explicit host is given.
+    # <name>.<AGENT_VOICE_DEVICE_DOMAIN> when no explicit host is given.
     "devices": [],
     "sync_timeout_s": 8,
     "backend_timeout_s": 240,

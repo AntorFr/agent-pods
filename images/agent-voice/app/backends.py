@@ -1,8 +1,10 @@
 """Conversation backends: where a transcribed utterance goes.
 
-- "alfred": the agent gateway's MCP endpoint (ask_alfred tool), in-pod on
+- "agent": the agent gateway's MCP endpoint (its `ask_<agent>` tool), in-pod on
   localhost. This is the slow, thinking backend — the caller handles the
-  ack/announce dance around it.
+  ack/announce dance around it. Accepted as "alfred" too: that was its name
+  before this image served more than one agent, and the value is persisted in a
+  config file on a volume this code does not get to rewrite.
 - "ha": Home Assistant's conversation API — the fast intent backend
   ("allume la lumière"), kept for wake words routed to the house brain.
 """
@@ -18,7 +20,7 @@ import aiohttp
 
 from . import __version__
 
-log = logging.getLogger("alfred-voice.backends")
+log = logging.getLogger("agent-voice.backends")
 
 MCP_PROTOCOL_VERSION = "2025-06-18"
 
@@ -31,21 +33,27 @@ class Backends:
     def __init__(self) -> None:
         self.gw_mcp_url = os.environ.get("GW_MCP_URL", "http://localhost:8000/mcp")
         self.gw_mcp_token = os.environ.get("GW_MCP_TOKEN", "")
+        # Le nom de l'outil MCP suit l'agent servi : la gateway expose
+        # `ask_<GW_AGENT>`, pas un nom fixe. Il était écrit en dur ici — ce qui
+        # rendait cette image utilisable par UN SEUL corps, alors que rien
+        # d'autre ne l'y liait. Défaut inchangé : un déploiement existant ne
+        # bouge pas tant qu'il ne pose pas la variable.
+        self.gw_mcp_tool = os.environ.get("GW_MCP_TOOL", "ask_alfred")
         self.ha_url = os.environ.get(
             "HA_URL", "http://home-assistant.home.svc.cluster.local:8123")
         self.ha_token = os.environ.get("HA_TOKEN", "")
 
     async def ask(self, backend: str, text: str, *, language: str,
                   timeout: float) -> str:
-        if backend == "alfred":
-            return await self._ask_alfred(text, timeout=timeout)
+        if backend in ("agent", "alfred"):
+            return await self._ask_agent(text, timeout=timeout)
         if backend == "ha":
             return await self._ask_ha(text, language=language, timeout=timeout)
         raise BackendError(f"unknown backend {backend!r}")
 
-    # --- Alfred via the gateway's MCP endpoint -----------------------------
+    # --- The agent, through the gateway's MCP endpoint ---------------------
 
-    async def _ask_alfred(self, text: str, *, timeout: float) -> str:
+    async def _ask_agent(self, text: str, *, timeout: float) -> str:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
@@ -60,7 +68,7 @@ class Backends:
                 "params": {
                     "protocolVersion": MCP_PROTOCOL_VERSION,
                     "capabilities": {},
-                    "clientInfo": {"name": "alfred-voice", "version": __version__},
+                    "clientInfo": {"name": "agent-voice", "version": __version__},
                 },
             }
             async with session.post(self.gw_mcp_url, json=init,
@@ -80,7 +88,7 @@ class Backends:
 
             call = {
                 "jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                "params": {"name": "ask_alfred",
+                "params": {"name": self.gw_mcp_tool,
                            "arguments": {"request": text, "agent": "voice"}},
             }
             async with session.post(self.gw_mcp_url, json=call,
@@ -94,9 +102,9 @@ class Backends:
                  if c.get("type") == "text"]
         answer = "\n".join(p for p in parts if p).strip()
         if result.get("isError"):
-            raise BackendError(answer or "ask_alfred returned an error")
+            raise BackendError(answer or f"{self.gw_mcp_tool} returned an error")
         if not answer:
-            raise BackendError("ask_alfred returned no text")
+            raise BackendError(f"{self.gw_mcp_tool} returned no text")
         return answer
 
     # --- Home Assistant conversation API -----------------------------------

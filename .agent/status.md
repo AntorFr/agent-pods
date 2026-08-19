@@ -1,7 +1,7 @@
 # Status — agent-pods
 > MàJ : 2026-08-19
 
-**État :** Trois images en production (`agent-gw`, `claude-pod`, `alfred-voice`), trois
+**État :** Trois images en production (`agent-gw`, `claude-pod`, `agent-voice`), trois
 corps servis par la même `agent-gw` — Alfred, Skippy, Nestor — l'identité venant du
 `/workspace` monté, jamais de l'image. **`agent-gw` 0.76.0 déployée sur les trois**
 (2026-08-19). Dernier chantier livré : **l'arbre des plugins**. Un plugin porte désormais

@@ -20,7 +20,7 @@ from typing import Any, Callable
 from aioesphomeapi import APIClient
 from aioesphomeapi.model import VoiceAssistantFeature
 
-log = logging.getLogger("alfred-voice.device")
+log = logging.getLogger("agent-voice.device")
 
 RECONNECT_MIN_S = 5
 RECONNECT_MAX_S = 60

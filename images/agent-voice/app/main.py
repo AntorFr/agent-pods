@@ -2,16 +2,20 @@
 
 Environment:
   ESPHOME_NOISE_KEY     shared noise PSK of the ESPHome fleet (required)
-  ALFRED_VOICE_DEVICE_DOMAIN  DNS suffix for bare device names
+  AGENT_VOICE_DEVICE_DOMAIN   DNS suffix for bare device names
                               (default: intra.sberard.fr)
-  ALFRED_VOICE_CONFIG   config JSON path
+  AGENT_VOICE_CONFIG    config JSON path
                               (default: /home/agent/.agent-voice/config.json)
-  ALFRED_VOICE_PORT     control/TTS HTTP port (default: 8100)
-  ALFRED_VOICE_TTS_BASE public base URL satellites use to fetch TTS WAVs
+  AGENT_VOICE_PORT      control/TTS HTTP port (default: 8100)
+  AGENT_VOICE_TTS_BASE  public base URL satellites use to fetch TTS WAVs
                               (default: http://<pod-ip>:8100/tts — LAN setups
                               should point this at the ingress /tts route)
-  GW_MCP_URL, GW_MCP_TOKEN    Alfred gateway MCP endpoint (backend "alfred")
+  GW_MCP_URL, GW_MCP_TOKEN    agent gateway MCP endpoint (backend "agent")
   HA_URL, HA_TOKEN            Home Assistant API (backend "ha")
+
+The `ALFRED_VOICE_*` spellings still work: this image was named after one agent
+before it served several, and a deployment must not break on a rename it did not
+ask for. New deployments should use `AGENT_VOICE_*`.
 """
 
 from __future__ import annotations
@@ -31,9 +35,21 @@ from .http_api import AppContext, build_app
 from .pipeline import VoiceRun
 from .tts_store import TtsStore
 
-log = logging.getLogger("alfred-voice")
+log = logging.getLogger("agent-voice")
 
 CONFIG_WATCH_INTERVAL_S = 2.0
+
+
+def env(name: str, default: str = "") -> str:
+    """Read `AGENT_VOICE_<name>`, falling back to the historical `ALFRED_VOICE_*`.
+
+    The image was named after one agent before it served several. Renaming the
+    variables without a fallback would break any deployment that still sets the
+    old spelling — including ones this repository cannot see.
+    """
+    return os.environ.get("AGENT_VOICE_" + name) \
+        or os.environ.get("ALFRED_VOICE_" + name) \
+        or default
 
 
 async def run() -> None:
@@ -44,12 +60,11 @@ async def run() -> None:
     noise_psk = os.environ.get("ESPHOME_NOISE_KEY", "")
     if not noise_psk:
         raise SystemExit("ESPHOME_NOISE_KEY is required")
-    device_domain = os.environ.get("ALFRED_VOICE_DEVICE_DOMAIN", "intra.sberard.fr")
-    config_path = os.environ.get(
-        "ALFRED_VOICE_CONFIG", "/home/agent/.agent-voice/config.json")
-    port = int(os.environ.get("ALFRED_VOICE_PORT", "8100"))
-    tts_base = os.environ.get(
-        "ALFRED_VOICE_TTS_BASE",
+    device_domain = env("DEVICE_DOMAIN", "intra.sberard.fr")
+    config_path = env("CONFIG", "/home/agent/.agent-voice/config.json")
+    port = int(env("PORT", "8100"))
+    tts_base = env(
+        "TTS_BASE",
         f"http://{socket.gethostbyname(socket.gethostname())}:{port}/tts")
 
     store = ConfigStore(config_path)
@@ -87,7 +102,7 @@ async def run() -> None:
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    log.info("alfred-voice up on :%d — tts base %s, config %s",
+    log.info("agent-voice up on :%d — tts base %s, config %s",
              port, tts_base, config_path)
 
     sync_links()

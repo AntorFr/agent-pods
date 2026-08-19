@@ -1,4 +1,4 @@
-# alfred-voice
+# agent-voice
 
 Voice satellite server for **ESPHome `voice_assistant` devices** — the pod-side
 half of talking to an agent instead of Home Assistant.
@@ -14,10 +14,10 @@ real answer arrives later as an announcement.
 ESPHome satellite (stock firmware, on-device wake word)
    │ native API (noise-encrypted TCP, port 6053)
    ▼
-alfred-voice ── STT ──► wyoming-whisper
+agent-voice ── STT ──► wyoming-whisper
    │        ── TTS ──► nestor-voice (Wyoming, multi-voice)
    │
-   ├── wake word "hey jarvis" ──► Alfred gateway (MCP ask_alfred, localhost)
+   ├── wake word "hey jarvis" ──► agent gateway (MCP ask_<agent>, localhost)
    └── wake word "okay nabu"  ──► Home Assistant conversation API
 ```
 
@@ -46,7 +46,7 @@ nothing.
 
 ## Configuration
 
-Runtime config is one JSON file (`ALFRED_VOICE_CONFIG`), owned by the
+Runtime config is one JSON file (`AGENT_VOICE_CONFIG`), owned by the
 gateway's settings UI and hot-reloaded on change (see `app/config.py` for the
 schema and defaults): Wyoming service endpoints, wake-word routes
 (backend / voice / mode / ack), device list.
