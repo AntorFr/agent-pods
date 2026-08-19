@@ -14,7 +14,7 @@ import { resolveSkin } from './skins/index.js';
 import { resolveApps } from './apps/index.js';
 import { FORMATS, createBasket, scanFrame, dropCode, composeMessage } from '../scan/codes.js';
 // Le socle atelier 3.0 : conversion des vieux livres au chargement, géométrie et règles
-// partagées avec le CLI valide/migre — UNE source (cf. ATELIER-3.md).
+// partagées avec le CLI valide/migre — UNE source (cf. plugins/atelier/ATELIER-3.md).
 import { normalise } from '../atelier/convert.js';
 import {
   SURFACES, CHANTS, epOf, kerfOf, zoneUtile, bandBox, bandGuide, bandLong,
@@ -2888,7 +2888,7 @@ function renderShop() {
 }
 
 /* ── App Voyages : timeline par jour + tray de suggestions ───────────
-   Spec : images/agent-gw/VOYAGES.md. La donnée (voyage.json) est écrite par
+   Spec : images/agent-gw/plugins/voyages/VOYAGES.md. La donnée (voyage.json) est écrite par
    Alfred ; les gestes (drag & drop) vont dans l'overlay voyage-state.json via
    l'API ; météo et liaisons sont dérivées au rendu, jamais stockées. */
 const VTYPE = {
@@ -2950,7 +2950,7 @@ async function vroute(a, b, mode) {
     return j;
   } catch { return { available: false }; }
 }
-// Liaison dérivée (VOYAGES.md) : filtre par modes déclarés du voyage, présélection
+// Liaison dérivée (plugins/voyages/VOYAGES.md) : filtre par modes déclarés du voyage, présélection
 // à vol d'oiseau (gratuite), vérification API, escalade si plafond crevé
 // (marche > 30 min, vélo > 45 min), zone grise 20-30 min = les deux modes.
 async function vliaison(a, b, modes) {

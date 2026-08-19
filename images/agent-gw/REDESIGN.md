@@ -243,7 +243,7 @@ donne des objectifs (jour / week-end) et on suit une **liste de focus** — mais
   pièce jointe, `[[wikilinks]]`, barre de propriétés (statut/type/tags depuis le frontmatter).
 - **Projets** : galerie facettée.
 - **Voyages** : app-module timeline par jour + tray de suggestions en drag & drop, météo
-  dérivée — spec complète dans `VOYAGES.md`.
+  dérivée — spec complète dans `plugins/voyages/VOYAGES.md`.
 
 ## Ordre de construction proposé
 

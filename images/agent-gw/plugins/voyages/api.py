@@ -1,4 +1,4 @@
-"""Voyages — app-module « planificateur de vacances » (spec : ../VOYAGES.md).
+"""Voyages — app-module « planificateur de vacances » (spec : ./VOYAGES.md).
 
 Trois familles d'endpoints, calquées sur le patron workbook :
 

@@ -30,4 +30,5 @@ pas un écran, et tous les corps n'y ont pas droit.
 > Ce fichier est une **synthèse**, pas un journal : l'historique détaillé de chaque
 > chantier est dans `git log` (messages de commit longs, un par intention) et le
 > « pourquoi » des choix dans les commentaires du code et les archives de conception
-> (`ATELIER-3.md`, `VOYAGES.md`, `PARCOURS.md`, `REDESIGN.md`).
+> (`plugins/*/`, `REDESIGN.md`) — chaque archive vit désormais à côté du plugin
+> qu'elle décrit.

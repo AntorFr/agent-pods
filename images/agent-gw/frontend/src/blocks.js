@@ -160,7 +160,7 @@ export const config = {
     // An anchor rather than a drawing, and the reason is not laziness: a 3 km
     // town loop is 328 track points. Inlining them in the fiche would put the
     // whole geometry back through the model on every edit — the exact cost the
-    // parcours file exists to avoid (see PARCOURS.md). So the block resolves
+    // parcours file exists to avoid (see plugins/parcours/PARCOURS.md). So the block resolves
     // the path and stops there; `parcours.js` fetches and paints at mount, the
     // same contract `outil` already declares.
     // DEUX VUES, et c'est ce qui évite un domaine « balades ». Un parcours n'a

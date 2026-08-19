@@ -1,4 +1,4 @@
-/* ── 1.0 / 2.0 → 3.0 : le convertisseur (cf. ATELIER-3.md §4) ────────────
+/* ── 1.0 / 2.0 → 3.0 : le convertisseur (cf. plugins/atelier/ATELIER-3.md §4) ────────────
    C'est l'UNIQUE endroit où les vieilles conventions ont encore le droit d'exister :
    les heuristiques de rôle, le produit croisé, le `sens` des bandes, le `rot` inversé —
    tout entre ici une dernière fois et n'en ressort qu'en repère 3.0. Utilisé par le

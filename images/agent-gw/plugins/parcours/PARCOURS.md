@@ -5,7 +5,7 @@
 > **`socle`** et non `app` : un parcours est de la mémoire adressable, comme une fiche —
 > il n'a ni tuile ni route propre, donc rien à éteindre.
 >
-> Le fichier de parcours et le GPX qu'on en dérive. Frère de `VOYAGES.md`, même
+> Le fichier de parcours et le GPX qu'on en dérive. Frère de `../voyages/VOYAGES.md`, même
 > patron : la donnée est en git, le rendu est calculé.
 
 ## La décision qui commande tout : deux matières, deux auteurs

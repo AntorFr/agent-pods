@@ -1,4 +1,4 @@
-/* ── Le contrat workbook 3.0, en code exécutable (cf. ATELIER-3.md) ──────────
+/* ── Le contrat workbook 3.0, en code exécutable (cf. plugins/atelier/ATELIER-3.md) ──────────
    UNE source pour trois consommateurs : l'établi (bundlé dans le lanceur), le CLI
    valide/migre (node, livré par l'image), et la conversion au chargement. Écrire une
    règle ici, c'est l'écrire partout — c'est le point du chantier 3.0.

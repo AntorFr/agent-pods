@@ -260,7 +260,7 @@ le retrait ou le déplacement d'un repère demande de relancer `trace-geom`.
 
 N'écris pas de `.gpx` dans `memory/` : il n'en existe plus. Le fichier est **assemblé à la
 demande** à partir du parcours, donc toujours à jour. Le contrat complet est dans
-`PARCOURS.md` (repo agent-pods).
+`images/agent-gw/plugins/parcours/PARCOURS.md` (repo agent-pods).
 
 Blocs standard aussi : titres `#`, listes `-` / `1.`, gras `**`, tableaux, code — markdown normal.
 
@@ -315,7 +315,7 @@ pour parler d'eux.
 Un voyage est un **app-module** (timeline + suggestions dans la PWA), pas une fiche : sa
 donnée vit dans **`assets/voyage.json`**, source unique — titre, `status`, `debut`/`fin`,
 `lieux` (géocodés une fois), `items` (cartes : hébergement, resto, activité, visite,
-trajet-résa). Le contrat détaillé du JSON est dans `images/agent-gw/VOYAGES.md` (repo
+trajet-résa). Le contrat détaillé du JSON est dans `images/agent-gw/plugins/voyages/VOYAGES.md` (repo
 `agent-pods`) — en cas de doute, c'est lui qui tranche.
 
 - **Ne duplique pas** dates/statut dans un frontmatter : le front lit le JSON.

@@ -19,7 +19,7 @@ check('pas d\'erreur de schéma', p.errors.length === 0);
 check('rend une ancre .parcours', p.html.includes('class="parcours"'));
 check('le chemin est résolu contre le dossier de la fiche',
   p.html.includes('data-src="/api/memory/raw/domaines/voyages/baden-2026/assets/vannes.parcours.json"'));
-// L'ancre ne doit porter AUCUNE géométrie : c'est tout le propos (cf. PARCOURS.md).
+// L'ancre ne doit porter AUCUNE géométrie : c'est tout le propos (cf. plugins/parcours/PARCOURS.md).
 check('l\'ancre ne porte aucune coordonnée', !/\d{2}\.\d{4}/.test(p.html));
 check('l\'ancre est légère (moins de 200 octets)', p.html.length < 200);
 
