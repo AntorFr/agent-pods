@@ -27,7 +27,11 @@ ENV GW_VERSION=${VERSION}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     LANG=C.UTF-8 \
-    DISABLE_AUTOUPDATER=1
+    DISABLE_AUTOUPDATER=1 \
+    # Aucun terminal dans ce pod : sans ce garde-fou, un git privé de credential
+    # essaie d'INVITER à saisir un mot de passe, et l'invite ne devient pas une
+    # erreur — elle devient un blocage silencieux. On veut l'échec, tout de suite.
+    GIT_TERMINAL_PROMPT=0
 
 # Node is required by the Claude Agent SDK (it drives the Claude Code CLI);
 # git because the agent commits its memory writes.
@@ -64,27 +68,28 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
-# Contrats de FORMAT livrés par l'image, un dossier de plugin Claude Code par
-# module (`--plugin-dir`, via ClaudeAgentOptions.plugins). Ils descendent avec le
-# code qui les lit, donc ils ne peuvent pas dériver de lui : c'est tout l'objet.
-# ⚠️ `app/main.py` les cherche en `<parent de app>/plugins` — cette copie n'est PAS
-# optionnelle, sans elle aucun contrat ne part et personne ne s'en plaint.
+# Les PLUGINS — tout ce qui étend un agent sans toucher au corps : contrats de
+# format (skills Claude Code), API, exécutables. Le corps les découvre par leur
+# manifeste ; il n'en connaît aucun par son nom. Contrat : plugins/README.md.
+# ⚠️ `app/plugins.py` les cherche en `<parent de app>/plugins` — cette copie n'est
+# PAS optionnelle, sans elle aucun contrat ne part et personne ne s'en plaint.
 COPY plugins ./plugins
+# Les exécutables des plugins vont sur le PATH, sans qu'aucun nom n'apparaisse ici :
+# un plugin déposé depuis un autre dépôt est servi par la même ligne. Sans condition,
+# et ce n'est pas un trou dans le gating — le Dockerfile ne connaît pas l'env du pod,
+# et un binaire est INERTE tant que rien ne l'appelle. C'est le `setup` du plugin qui
+# le câble, et lui ne tourne que si le plugin est actif.
+RUN set -eu; \
+    for f in ./plugins/*/bin/*; do \
+        [ -f "$f" ] || continue; \
+        install -m 0755 "$f" /usr/local/bin/; \
+    done
 # rosetta-bridge : relais stdio->HTTP vers le hub rosetta (refresh de token
 # client_credentials intégré, stdlib seule). Copie identique dans claude-pod.
 COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
 # memory-sync : écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
 # conflit remonté jamais deviné). Configure son helper git depuis $GITHUB_TOKEN.
 COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
-# trace-geom : calcule la trace d'un parcours (hub rosetta, addon `trace`) et
-# l'écrit dans son .parcours.json. La géométrie va du hub au disque sans passer
-# par la conversation — 328 points recopiés par un modèle, c'est une trace fausse.
-COPY --chmod=755 trace-geom /usr/local/bin/trace-geom
-# git-credential-rosetta : le pod pousse vers le hub (addon `git`) et ne detient
-# aucun credential GitHub. Le helper est la SEULE source du jeton, donc l'endroit
-# ou se decide si un push part : canal + bouclier PWA, comme google_guard.py. Le
-# nom compte — `credential.helper rosetta` fait chercher git-credential-rosetta.
-COPY --chmod=755 git-credential-rosetta /usr/local/bin/git-credential-rosetta
 # Bundled content engine + launcher shell (built once, never at runtime).
 # scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
 # weighs 116 kB gzipped and is fetched only when the browser has no

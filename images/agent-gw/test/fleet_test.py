@@ -11,7 +11,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app import fleet  # noqa: E402
+# Le module a déménagé dans son plugin (cf. plugins/README.md) : on le charge par le
+# socle, comme le corps le fait au démarrage — pas par un chemin recopié à la main,
+# qui mentirait le jour où l'arborescence bouge.
+from app import plugins as plugin_host  # noqa: E402
+
+fleet = plugin_host.api_module(
+    next(p for p in plugin_host.discover() if p.id == "repos")
+)
 
 FAILS = []
 

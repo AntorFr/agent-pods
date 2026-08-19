@@ -36,10 +36,19 @@ def load(value):
     test échouait sans qu'aucun code ne soit en cause — un banc qui dépend de son
     hôte n'apprend rien à personne.
     """
-    for var in ("GW_APPS", "GW_FEATURES", "GW_THEME"):
+    for var in ("GW_APPS", "GW_FEATURES", "GW_THEME", "GW_TOOLS"):
         os.environ.pop(var, None)
     if value is not None:
         os.environ["GW_APPS"] = value
+    return importlib.reload(main)
+
+
+def load_tools(value):
+    """Idem, sur le TROISIÈME axe (`GW_TOOLS`) — les capacités de l'agent."""
+    for var in ("GW_APPS", "GW_FEATURES", "GW_THEME", "GW_TOOLS"):
+        os.environ.pop(var, None)
+    if value is not None:
+        os.environ["GW_TOOLS"] = value
     return importlib.reload(main)
 
 
@@ -66,6 +75,7 @@ check(
     asyncio.run(m.version()) == {
         "version": m.GW_VERSION, "apps": ["repos"],
         "features": ["scan", "attach", "eph", "tunnel", "sujets"], "theme": "alfred",
+        "tools": [],
     },
 )
 
@@ -199,17 +209,68 @@ m = load("fiches,fiches")
 check("aucun doublon de chemin même si le socle est aussi listé dans GW_APPS",
       len(_names(m)) == len(set(_names(m))))
 
-# Un plugin Claude Code est un DOSSIER portant un manifeste et des skills. Sans le
-# manifeste, le CLI ignore le dossier en silence : le contrat ne partirait pas, et
-# l'agent écrirait au jugé sans qu'aucune erreur ne le dise.
+print("\n--- GW_TOOLS : les capacités de l'agent (troisième axe) ---")
+
+m = load_tools(None)
+check("absent -> aucun outil (une capacité ne s'allume pas toute seule)", m.TOOLS == [])
+check("un plugin `outil` éteint n'apporte pas son contrat",
+      "git" not in _names(m))
+check("…et son API n'est pas montée non plus",
+      not any(p.id == "git" for p in m.PLUGINS_ACTIVE))
+
+m = load_tools("git")
+check("nommé -> actif, et son contrat part", "git" in _names(m))
+check("publié sur /api/version (les Réglages disent ce que ce corps sait faire)",
+      asyncio.run(m.version())["tools"] == ["git"])
+check("un outil n'est PAS un module (il n'a aucun pixel)", "git" not in m.APPS)
+check("l'agent l'apprend dans les faits d'instance",
+      any(f.startswith("outils — git") for f in m._instance_facts()))
+
+m = load_tools("git, , inconnu ")
+check("espaces rognés, entrées vides ignorées", m.TOOLS == ["git", "inconnu"])
+check("un outil nommé mais non livré n'invente rien",
+      not any(p.id == "inconnu" for p in m.PLUGINS_ACTIVE))
+
+print("\n--- l'arborescence des plugins (contrat : plugins/README.md) ---")
+
+# Un plugin est un DOSSIER portant `gw-plugin.json`. Le contrat Claude Code
+# (`.claude-plugin/` + `skills/`) est OPTIONNEL depuis que « plugin » ne veut plus
+# dire « contrat de format » : `parcours` et `repos` n'apportent qu'une API. Ce qui
+# n'est pas optionnel, c'est que ce qui est déclaré soit valide — un manifeste muet
+# ferait ignorer le dossier en silence, et personne n'en saurait rien.
 _PLUG = Path(__file__).resolve().parents[1] / "plugins"
-for d in sorted(p for p in _PLUG.iterdir() if p.is_dir()):
+_DIRS = sorted(p for p in _PLUG.iterdir() if p.is_dir())
+
+check("tout dossier de plugins/ porte un manifeste (sinon il n'est pas découvert)",
+      all((d / "gw-plugin.json").is_file() for d in _DIRS))
+
+for d in _DIRS:
+    gw = _pj.loads((d / "gw-plugin.json").read_text(encoding="utf-8"))
+    check("%s : id = nom du dossier, kind connu" % d.name,
+          gw.get("id") == d.name and gw.get("kind") in ("socle", "app", "outil"))
     manifest = d / ".claude-plugin" / "plugin.json"
-    check("%s : manifeste présent et valide" % d.name,
-          manifest.is_file() and _pj.loads(manifest.read_text())["name"] == d.name)
-    skills = sorted((d / "skills").glob("*/SKILL.md")) if (d / "skills").is_dir() else []
-    check("%s : au moins une skill, avec frontmatter" % d.name,
-          bool(skills) and all(s.read_text(encoding="utf-8").startswith("---") for s in skills))
+    if manifest.is_file():
+        check("%s : manifeste Claude valide" % d.name,
+              _pj.loads(manifest.read_text())["name"] == d.name)
+        skills = sorted((d / "skills").glob("*/SKILL.md"))
+        check("%s : au moins une skill, avec frontmatter" % d.name,
+              bool(skills) and all(s.read_text(encoding="utf-8").startswith("---") for s in skills))
+
+# Le corps ne doit atteindre AUCUN plugin en particulier : c'est la propriété qui
+# rend un plugin tiers possible, et elle se casse en silence — un `import` de
+# complaisance ne fait rien tomber, il rend juste le dossier `plugins/` décoratif.
+#
+# ⚠️ On ne teste PAS « le nom d'un plugin n'apparaît pas dans main.py » : « repos »
+# et « fiches » sont aussi des mots français, et la version naïve de ce test a
+# échoué sur un commentaire parlant de fiches de mémoire. On teste les DEUX gestes
+# qui percent réellement la frontière : construire un chemin, ou importer.
+_MAIN = (Path(__file__).resolve().parents[1] / "app" / "main.py").read_text(encoding="utf-8")
+check("le corps ne construit aucun chemin vers un plugin",
+      "PLUGINS_DIR" not in _MAIN)
+check("le corps n'importe aucun module de plugin",
+      not re.search(r"^\s*from\s+\.?plugins[. ]", _MAIN, re.M))
+check("la découverte est bien déléguée au socle",
+      "plugin_host.discover()" in _MAIN and "plugin_host.claude_plugins" in _MAIN)
 
 print("\n--- GW_THEME ---")
 

@@ -1,0 +1,5 @@
+{
+  "id": "voyages",
+  "kind": "app",
+  "description": "App Voyages : le format de voyage.json, et l'API qui sert la timeline, l'overlay des gestes et les derives (meteo, liaisons)."
+}

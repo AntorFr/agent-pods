@@ -1,0 +1,5 @@
+{
+  "id": "fiches",
+  "kind": "socle",
+  "description": "Contrat d'ecriture du contenu rendu par la PWA. Socle : tout agent qui ecrit dans memory/ produit du markdown que le moteur rend, ce n'est pas un module qu'on eteint."
+}

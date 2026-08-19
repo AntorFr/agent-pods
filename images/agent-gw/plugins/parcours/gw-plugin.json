@@ -1,0 +1,5 @@
+{
+  "id": "parcours",
+  "kind": "socle",
+  "description": "Balades et randonnees : l'API du .parcours.json et du GPX, plus trace-geom qui ecrit la geometrie sans la faire transiter par la conversation. Socle et non app : un parcours est de la memoire adressable, comme une fiche — il n'a ni tuile ni route propre."
+}

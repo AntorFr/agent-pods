@@ -31,7 +31,8 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, claude_token, fleet, parcours, planif, voyages
+from . import auth, claude_token, planif
+from . import plugins as plugin_host
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 CHANNEL = os.environ.get("GW_CHANNEL", "pwa")
@@ -108,6 +109,19 @@ APPS = [a.strip() for a in os.environ.get(
 FEATURES = [f.strip() for f in os.environ.get(
     "GW_FEATURES", "scan,attach,eph,tunnel,sujets",
 ).split(",") if f.strip()]
+# TROISIÈME axe. `GW_APPS` dit où l'on peut ALLER, `GW_FEATURES` ce que le chat sait
+# FAIRE — tous deux consommés par le NAVIGATEUR. Celui-ci dit ce que l'AGENT a dans
+# les mains : des capacités sans le moindre pixel d'interface, dont `git` (publier du
+# code) est le cas d'école. Elles ne sont pas données à tous les corps : un majordome
+# n'a pas à publier, un agent de code oui.
+#
+# Défaut VIDE, et c'est délibéré : une capacité qu'on n'a pas demandée ne s'allume
+# pas toute seule à la montée de version. Le corps qui en veut une la nomme.
+TOOLS = [t.strip() for t in os.environ.get("GW_TOOLS", "").split(",") if t.strip()]
+# Les plugins livrés par l'image, et ceux que CE corps allume. Calculés une fois à
+# l'import : les trois axes viennent de l'environnement, ils ne bougent pas à chaud.
+PLUGINS = plugin_host.discover()
+PLUGINS_ACTIVE = plugin_host.active(PLUGINS, APPS, TOOLS)
 # Identité visuelle du pod. Le front pose `data-agent=<theme>` sur <html> au boot,
 # ce qui arme les surcharges de jetons de `theme-<theme>.css` (bundlées avec le
 # reste, inertes tant que l'attribut est absent). `alfred` = pas d'attribut, donc
@@ -119,8 +133,6 @@ THEME = os.environ.get("GW_THEME", "alfred").strip() or "alfred"
 # Seuls le nom de l'outil et une cible courte sortent — jamais l'input complet,
 # qui peut porter le contenu d'un fichier ou une commande entière.
 TRACE = os.environ.get("GW_TRACE", "0").strip().lower() in ("1", "true", "yes", "on")
-# Dossier des clones de la flotte, relatif au workspace — source de la vue `repos`.
-FLEET_DIR = os.environ.get("GW_FLEET_DIR", "repos")
 # Champs candidats pour résumer un appel, du plus parlant au plus générique.
 _TRACE_KEYS = (
     "file_path", "path", "notebook_path", "command", "pattern", "query",
@@ -221,6 +233,11 @@ mcp_server = FastMCP(
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
+    # Le `setup` des plugins actifs, avant tout le reste : c'est lui qui câble ce
+    # qu'un pod recréé aurait perdu (le helper de credential du plugin `git`, par
+    # exemple). Idempotent par contrat, donc rejoué à chaque démarrage sans état à
+    # tenir. Un setup en échec est signalé et n'empêche pas le corps de servir.
+    await asyncio.to_thread(plugin_host.run_setups, PLUGINS_ACTIVE)
     async with mcp_server.session_manager.run():
         # L'horloge des tâches planifiées (D30). Une tâche asyncio, pas un process :
         # elle réinjecte un message dans le MÊME chemin que la PWA (_run_alfred, donc
@@ -241,9 +258,13 @@ async def _lifespan(_app: FastAPI):
 app = FastAPI(title="agent-gw", lifespan=_lifespan)
 app.include_router(auth.router)
 app.include_router(claude_token.router)
-app.include_router(voyages.router)
-app.include_router(parcours.router)
+# L'horloge reste au corps (elle rappelle `_run_alfred`, cf. plugins/README.md) ;
+# tout le reste vient des plugins ACTIFS. Un plugin éteint ne monte pas son API :
+# sa surface disparaît au lieu de répondre dans le vide, ce qui est cohérent avec
+# sa tuile absente côté front.
 app.include_router(planif.router)
+for _plugin, _router in plugin_host.routers(PLUGINS_ACTIVE):
+    app.include_router(_router)
 _query_lock = asyncio.Lock()
 
 # Paths reachable without a session (PWA shell plumbing + auth flow itself).
@@ -695,17 +716,16 @@ async def version():
     its tiles, routes and controls on this payload; and again when the settings
     panel opens, so the version shown always reflects the server actually
     answering rather than a cached bundle."""
-    return {"version": GW_VERSION, "apps": APPS, "features": FEATURES, "theme": THEME}
-
-
-@app.get("/api/repos")
-async def repos_board():
-    """Le tableau de flotte : un scan des `.agent/status.md` des clones locaux.
-
-    Synchrone mais borné (git en lecture, timeout 5 s par appel) : sur une
-    vingtaine de dépôts le scan tient largement sous la seconde, et l'alternative
-    — un cache à invalider — coûterait plus cher qu'elle ne rapporte."""
-    return await asyncio.to_thread(fleet.scan, WORKSPACE, FLEET_DIR)
+    return {
+        "version": GW_VERSION,
+        "apps": APPS,
+        "features": FEATURES,
+        "theme": THEME,
+        # Troisième axe. Le front n'en fait rien (une capacité d'agent n'a pas de
+        # pixel), mais les Réglages doivent pouvoir dire ce que ce corps sait faire
+        # sans qu'on aille lire un manifeste k8s.
+        "tools": TOOLS,
+    }
 
 
 @app.get("/api/todo/state")
@@ -1055,34 +1075,21 @@ async def reset():
 # détectait la dérive : un bloc ajouté dans `blocks.js` n'obligeait personne.
 #
 # Désormais le contrat DESCEND AVEC LE CODE QUI LE LIT, sous forme de plugins
-# Claude Code livrés dans l'image et activés selon `GW_APPS`. Un module éteint
-# n'apporte pas son contrat ; un module allumé l'apporte forcément à jour, puisque
-# c'est le même tag d'image.
+# Claude Code livrés dans l'image. Un plugin éteint n'apporte pas son contrat ; un
+# plugin allumé l'apporte forcément à jour, puisque c'est le même tag d'image.
 #
 # LA FRONTIÈRE, et elle seule rend la chose tenable : ici, le FORMAT (comment on
 # écrit un workbook). Dans le workspace, le MÉTIER (pourquoi on groupe les débits
 # par largeur). Le format ne change qu'avec le code, donc un build de toute façon ;
 # le métier se corrige au fil de l'usage, et n'a rien à faire dans une image.
-PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
-# Le socle : la mémoire (fiches, domaines) n'est PAS un module — tout agent qui
-# écrit dans memory/ produit du markdown que le moteur rend. Son contrat suit donc
-# le corps, pas la liste des apps.
-PLUGINS_ALWAYS = ("fiches",)
-
-
+#
+# ⚠️ Ce qui suit ne nomme AUCUN plugin, et c'est la propriété à ne pas casser : un
+# plugin se découvre par son manifeste, pas par une liste ici. C'est ce qui permet
+# d'en déposer un venu d'un autre dépôt. Le mécanisme vit dans `app/plugins.py`,
+# le contrat pour qui en écrit un dans `plugins/README.md`.
 def _module_plugins() -> list[dict]:
-    """Les plugins à charger : le socle + un par app active qui en fournit un.
-
-    Silencieux sur l'absence : un module sans dossier de plugin n'en a simplement
-    pas besoin (`todo`, `planif` n'ont pas de format propre). On ne réclame pas ce
-    qui n'existe pas.
-    """
-    out: list[dict] = []
-    for name in (*PLUGINS_ALWAYS, *APPS):
-        p = PLUGINS_DIR / name
-        if p.is_dir() and not any(x["path"] == str(p) for x in out):
-            out.append({"type": "local", "path": str(p)})
-    return out
+    """Les contrats à passer au SDK : ceux des plugins actifs qui en portent un."""
+    return plugin_host.claude_plugins(PLUGINS_ACTIVE)
 
 
 def _instance_facts() -> list[str]:
@@ -1103,6 +1110,10 @@ def _instance_facts() -> list[str]:
     return [
         "modules — " + (", ".join(APPS) or "aucun"),
         "capacités du chat — " + (", ".join(FEATURES) or "aucune"),
+        # Le troisième axe, et le seul qui s'adresse VRAIMENT à l'agent : les deux
+        # premiers décrivent ce que Monsieur voit, celui-ci ce que l'agent a dans
+        # les mains. Un corps qui ne sait pas qu'il peut publier ne publie pas.
+        "outils — " + (", ".join(TOOLS) or "aucun"),
     ]
 
 

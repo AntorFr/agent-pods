@@ -1,0 +1,5 @@
+{
+  "id": "atelier",
+  "kind": "app",
+  "description": "App Atelier : le format de workbook.json, et le CLI qui le valide/migre avec exactement le code que l'etabli execute."
+}

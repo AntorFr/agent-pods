@@ -14,10 +14,19 @@ avec un timeout court : un dépôt corrompu ralentit sa carte, jamais la page.
 
 from __future__ import annotations
 
+import asyncio
+import os
 import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from fastapi import APIRouter
+
+WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
+# Dossier des clones, relatif au workspace. Lu ici et non plus dans le corps : un
+# plugin porte ses propres réglages, sinon le corps garde une case à son nom.
+FLEET_DIR = os.environ.get("GW_FLEET_DIR", "repos")
 
 # Chemin de la fiche, dans l'ordre de préférence. Le second est l'ancienne
 # convention : deux dépôts la portent encore, l'agrégateur les tolère plutôt que
@@ -164,3 +173,21 @@ def scan(workspace: str, fleet_dir: str) -> dict:
         "en_attente": sum(1 for c in repos if c["etapes"]),
         "racine": str(root),
     }
+
+
+# ── L'API du plugin ──────────────────────────────────────────────────────────
+# Le scan ci-dessus était appelé depuis le corps ; il est désormais servi par le
+# plugin lui-même, comme n'importe quel autre. Le corps ne le connaît plus.
+router = APIRouter()
+
+
+@router.get("/api/repos")
+async def repos_board():
+    """Le tableau de flotte : un scan des `.agent/status.md` des clones locaux.
+
+    Synchrone mais borné (git en lecture, timeout 5 s par appel) : sur une
+    vingtaine de dépôts le scan tient largement sous la seconde, et l'alternative
+    — un cache à invalider — coûterait plus cher qu'elle ne rapporte. Déporté sur
+    un thread pour ne pas tenir la boucle événementielle pendant les `git`.
+    """
+    return await asyncio.to_thread(scan, WORKSPACE, FLEET_DIR)
