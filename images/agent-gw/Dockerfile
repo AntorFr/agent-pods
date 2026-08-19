@@ -89,7 +89,7 @@ RUN set -eu; \
 # `plugins/<id>/bin/` = ce qu'un plugin apporte. Là où un binaire est rangé dit donc
 # s'il est optionnel, sans avoir à le savoir par ailleurs.
 #
-#   rosetta-bridge  relais stdio->HTTP vers le hub rosetta (refresh de token
+#   mcp-bridge      relais stdio->HTTP vers le hub MCP (refresh de token
 #                   client_credentials intégré, stdlib seule). Tout agent parle au
 #                   hub — c'est par lui qu'arrivent TOUS ses outils MCP.
 #                   ⚠️ Copie octet pour octet dans claude-pod, vérifiée par
@@ -98,6 +98,15 @@ RUN set -eu; \
 #   memory-sync     écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
 #                   conflit remonté jamais deviné). Helper git scopé sur github.com.
 COPY --chmod=755 bin/ /usr/local/bin/
+# Alias de compatibilité, et il n'est pas cosmétique. Le nom du pont est écrit dans
+# le `.mcp.json` de chaque workspace, qui vit sur un volume persistant et se met à
+# jour INDÉPENDAMMENT de cette image : à l'instant du déploiement, le clone dit
+# encore `rosetta-bridge`. Sans cet alias, la montée de version ferait disparaître
+# TOUS les outils MCP de l'agent jusqu'au prochain pull.
+# Mesuré le 2026-08-19 sur les pods, pas supposé : 9 serveurs chez Alfred, 2 chez
+# Skippy, et 0 chez Nestor — qui n'a aucun `.mcp.json`. À retirer quand les clones
+# déployés diront tous `mcp-bridge`.
+RUN ln -s mcp-bridge /usr/local/bin/rosetta-bridge
 # Bundled content engine + launcher shell (built once, never at runtime).
 # scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
 # weighs 116 kB gzipped and is fetched only when the browser has no

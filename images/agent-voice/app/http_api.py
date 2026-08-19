@@ -152,7 +152,12 @@ async def handle_tts(request: web.Request) -> web.Response:
 
 
 def _host_of(name: str, domain: str) -> str:
-    return name if "." in name else f"{name}.{domain}"
+    """Complète un nom court par le suffixe DNS, s'il y en a un de déclaré.
+
+    Sans suffixe (le défaut : aucun domaine privé n'est codé dans cette image),
+    on rend le nom nu — `f"{name}."` produirait un point orphelin.
+    """
+    return name if "." in name or not domain else f"{name}.{domain}"
 
 
 def _pick_link(ctx: AppContext, device: str | None) -> Any | None:

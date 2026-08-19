@@ -60,14 +60,21 @@ COPY --from=vscode-cli /usr/local/bin/code /usr/local/bin/code
 # The body's executables. `bin/` at an image root holds what every body owns, the
 # same convention as agent-gw (where `plugins/<id>/bin/` holds what a plugin adds).
 #
-#   rosetta-bridge  stdio->HTTP MCP relay to the rosetta hub, spawned by the
-#                   workspace .mcp.json. Stdlib-only on purpose: the bare python3
-#                   above suffices, no venv to keep in sync. Token lifecycle
+#   mcp-bridge      stdio->HTTP MCP relay to the hub, spawned by the workspace
+#                   .mcp.json. Stdlib-only on purpose: the bare python3 above
+#                   suffices, no venv to keep in sync. Token lifecycle
 #                   (client_credentials) lives inside.
-#                   ⚠️ Byte-for-byte copy of agent-gw's, now enforced by
+#                   ⚠️ Byte-for-byte copy of agent-gw's, enforced by
 #                   `images/agent-gw/test/bin_test.py`: both containers must spawn
 #                   the same relay, and a comment guaranteed nothing.
 COPY --chmod=755 bin/ /usr/local/bin/
+# Compatibility alias — not cosmetic. The relay's name is written in each
+# workspace's `.mcp.json`, which lives on a persistent volume and updates
+# INDEPENDENTLY of this image: at deploy time the clone still says
+# `rosetta-bridge`. Without the alias, upgrading would make ALL of that agent's
+# MCP tools vanish until the next pull. Drop it once the deployed clones say
+# `mcp-bridge`.
+RUN ln -s mcp-bridge /usr/local/bin/rosetta-bridge
 
 # Rename the stock `node` user (uid 1000) — this pod hosts an agent, not a build
 RUN usermod -l agent -d /home/agent -m node \

@@ -2,8 +2,10 @@
 
 Environment:
   ESPHOME_NOISE_KEY     shared noise PSK of the ESPHome fleet (required)
-  AGENT_VOICE_DEVICE_DOMAIN   DNS suffix for bare device names
-                              (default: intra.sberard.fr)
+  AGENT_VOICE_DEVICE_DOMAIN   DNS suffix appended to bare device names.
+                              No default: a private domain baked into a public
+                              image is someone else's network. Unset means
+                              device names must already be resolvable.
   AGENT_VOICE_CONFIG    config JSON path
                               (default: /home/agent/.agent-voice/config.json)
   AGENT_VOICE_PORT      control/TTS HTTP port (default: 8100)
@@ -60,7 +62,7 @@ async def run() -> None:
     noise_psk = os.environ.get("ESPHOME_NOISE_KEY", "")
     if not noise_psk:
         raise SystemExit("ESPHOME_NOISE_KEY is required")
-    device_domain = env("DEVICE_DOMAIN", "intra.sberard.fr")
+    device_domain = env("DEVICE_DOMAIN")
     config_path = env("CONFIG", "/home/agent/.agent-voice/config.json")
     port = int(env("PORT", "8100"))
     tts_base = env(
@@ -82,7 +84,11 @@ async def run() -> None:
             if not name:
                 continue
             host = dev.get("host") or (
-                name if "." in name else f"{name}.{device_domain}")
+                # Un nom court n'est complété que si un suffixe est déclaré :
+                # sans lui, f"{name}." donnerait un point orphelin qu'aucun
+                # résolveur n'attend. Le nom nu est le bon repli.
+                name if "." in name or not device_domain
+                else f"{name}.{device_domain}")
             desired[name] = host
         for name in list(links):
             if name not in desired:

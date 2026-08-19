@@ -181,8 +181,13 @@ MCP_DESCRIPTION = os.environ.get("GW_MCP_DESCRIPTION", "").strip() or (
     "index updates, git commit). Use it to add a todo, update a project, "
     "record a note, or ask what the user noted about something."
 )
+# Garde anti-rebinding DNS de FastMCP : les hôtes sous lesquels ce corps accepte
+# d'être appelé. AUCUN DÉFAUT — le défaut était `<agent>.berard.me`, c'est-à-dire
+# mon domaine dans une image publique. Vide, seuls les hôtes locaux ajoutés plus
+# bas passent : un pod qui expose son /mcp doit déclarer son nom, et c'est très
+# bien ainsi — cette liste EST la garde, la deviner n'a jamais eu de sens.
 MCP_ALLOWED_HOSTS = [
-    h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", f"{AGENT}.berard.me").split(",") if h.strip()
+    h.strip() for h in os.environ.get("GW_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()
 ]
 # --- Surface MCP asynchrone ---------------------------------------------------
 # `ask_<agent>` rend un ACCUSÉ DE RÉCEPTION, plus la réponse. Le tour s'exécute
@@ -1562,6 +1567,11 @@ async def chat(request: Request):
     if session_user:
         user_token = await auth.user_access_token(session_user)
         if user_token:
+            # Les DEUX noms : `HUB_USER_TOKEN` est le nom courant, `ROSETTA_*`
+            # l'historique. Le pont et le credential helper lisent déjà les deux,
+            # mais un hook de workspace peut lire l'ancien — et les workspaces ne
+            # se déploient pas avec cette image.
+            turn_env["HUB_USER_TOKEN"] = user_token
             turn_env["ROSETTA_USER_TOKEN"] = user_token
 
     async def run_turn() -> None:

@@ -355,7 +355,13 @@ for var in ("GW_AGENT", "GW_MCP_DESCRIPTION", "GW_MCP_ALLOWED_HOSTS"):
 m = importlib.reload(main)
 check("défaut -> alfred (le majordome ne bouge pas)", m.AGENT == "alfred")
 check("outils ask_alfred + son statut", sorted(tools_of(m)) == ["ask_alfred", "ask_alfred_status"])
-check("hôte MCP dérivé de l'agent", m.MCP_ALLOWED_HOSTS == ["alfred.berard.me"])
+# L'hôte n'est PLUS dérivé de l'agent : le défaut valait `<agent>.berard.me`,
+# c'est-à-dire un domaine privé dans une image publique. Vide par défaut — seuls
+# les hôtes locaux, ajoutés par le code, restent acceptés. Un corps qui expose son
+# /mcp au-dehors DOIT déclarer son nom, et c'est très bien : cette liste EST la
+# garde anti-rebinding, la deviner n'a jamais eu de sens.
+check("aucun hôte deviné (plus de domaine privé en défaut)",
+      m.MCP_ALLOWED_HOSTS == [])
 
 os.environ["GW_AGENT"] = "skippy"
 os.environ["GW_MCP_DESCRIPTION"] = "Confie une tâche technique à Skippy."
@@ -363,10 +369,11 @@ m = importlib.reload(main)
 check("GW_AGENT=skippy -> outils ask_skippy + son statut",
       sorted(tools_of(m)) == ["ask_skippy", "ask_skippy_status"])
 check("serveur MCP renommé aussi", m.mcp_server.name == "skippy")
-# Sans dérivation, l'hôte serait resté alfred.berard.me et FastMCP aurait répondu
-# 421 sur skippy.berard.me : la protection anti-rebinding DNS valide le Host.
-check("hôte suit l'agent (sinon 421 sur son propre domaine)",
-      m.MCP_ALLOWED_HOSTS == ["skippy.berard.me"])
+# ⚠️ Le nom de l'agent ne fabrique plus d'hôte. Corollaire à ne pas rater : un pod
+# appelé depuis l'extérieur DOIT poser GW_MCP_ALLOWED_HOSTS, sinon FastMCP répond
+# 421 — la validation du Host étant sa protection anti-rebinding DNS. Les trois
+# manifestes le posent déjà ; c'est ce qui rend ce défaut vide sans danger.
+check("changer d'agent ne fabrique aucun hôte", m.MCP_ALLOWED_HOSTS == [])
 check("description du corps servie aux autres agents",
       asyncio.run(m.mcp_server.list_tools())[0].description.startswith("Confie une tâche"))
 

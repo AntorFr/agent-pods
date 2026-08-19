@@ -28,15 +28,26 @@ Usage :
   trace-geom <fichier.parcours.json> [--profil pieton|rando|velo|vtt|direct]
                                      [--altimetrie routeur|ign]
 
-Env (mêmes variables que rosetta-bridge, même identité machine) :
-  ROSETTA_URL        défaut https://rosetta.mcp.berard.me
-  ROSETTA_TOKEN_URL  défaut https://auth.berard.me/api/oidc/token
-  ROSETTA_SCOPE      défaut mcp
+Env (mêmes variables que mcp-bridge, même identité machine) :
+  HUB_URL            REQUIS — URL de base du hub MCP
+  HUB_TOKEN_URL      REQUIS — endpoint de jetons OIDC
+  HUB_SCOPE          défaut mcp
   AGENT_CLIENT_ID / AGENT_CLIENT_SECRET
 
-Bibliothèque standard uniquement, comme rosetta-bridge : ce script doit tourner
+Les anciens noms `ROSETTA_*` restent lus en repli. Aucun défaut ne pointe un
+domaine privé : une image publique qui devine un nom d'hôte est une image qui
+publie le déploiement de quelqu'un.
+
+Bibliothèque standard uniquement, comme mcp-bridge : ce script doit tourner
 sur le python3 nu de l'image, sans dépendance à tenir à jour.
 """
+
+
+def env(name: str, default: str = "") -> str:
+    """Lit `HUB_<name>`, avec repli sur l'historique `ROSETTA_<name>`."""
+    return os.environ.get("HUB_" + name) \
+        or os.environ.get("ROSETTA_" + name) \
+        or default
 
 import base64
 import json
@@ -58,17 +69,19 @@ def die(message: str, code: int = 1):
 
 
 def token() -> str:
-    """Un jeton machine par client_credentials — le même que rosetta-bridge.
+    """Un jeton machine par client_credentials — le même que mcp-bridge.
 
     Volontairement sans cache : le script vit le temps d'un appel, un fichier
     de jeton sur disque serait un secret de plus à faire vivre pour rien.
     """
-    url = os.environ.get("ROSETTA_TOKEN_URL", "https://auth.berard.me/api/oidc/token")
+    url = env("TOKEN_URL")
+    if not url:
+        die("HUB_TOKEN_URL absent de l'environnement.")
     client_id = os.environ.get("AGENT_CLIENT_ID", "")
     client_secret = os.environ.get("AGENT_CLIENT_SECRET", "")
     if not client_id or not client_secret:
         die("AGENT_CLIENT_ID / AGENT_CLIENT_SECRET absents de l'environnement.")
-    scope = os.environ.get("ROSETTA_SCOPE", "mcp")
+    scope = env("SCOPE", "mcp")
     basic = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
     req = urllib.request.Request(
         url,
@@ -86,7 +99,9 @@ def token() -> str:
 
 
 def fetch(points: str, profil: str, altimetrie: str) -> dict:
-    base = os.environ.get("ROSETTA_URL", "https://rosetta.mcp.berard.me").rstrip("/")
+    base = env("URL").rstrip("/")
+    if not base:
+        die("HUB_URL absent de l'environnement.")
     query = {"points": points, "profil": profil}
     if altimetrie == "ign":
         query["altimetrie"] = "ign"

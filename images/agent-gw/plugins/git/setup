@@ -1,5 +1,5 @@
 #!/bin/sh
-# setup du plugin `git` — câble le credential helper sur le hub rosetta.
+# setup du plugin `git` — câble le credential helper sur le hub.
 #
 # Lancé par le corps à CHAQUE démarrage, et seulement si `git` est dans GW_TOOLS :
 # c'est là toute la modularité. Un corps qui n'a pas le droit de publier n'a pas le
@@ -13,13 +13,29 @@
 # câble ne peut pas être oublié.
 #
 # ⚠️ Le helper est scopé SUR L'HÔTE DU HUB, jamais global. Un helper global
-# répondrait aussi pour github.com et prendrait la place du credential légitime.
+# répondrait aussi pour github.com et prendrait la place du credential légitime —
+# c'est exactement le défaut qu'avait `memory-sync`, corrigé le 2026-08-19.
 set -eu
 
-HUB="${ROSETTA_URL:-https://rosetta.mcp.berard.me}"
+# Aucun défaut : une URL de hub codée en dur dans une image publique, c'est le
+# déploiement de quelqu'un d'autre. Elle se déclare dans le manifeste du pod.
+HUB="${HUB_URL:-${ROSETTA_URL:-}}"
+if [ -z "$HUB" ]; then
+    echo "HUB_URL absent : le plugin git ne câble rien (publier échouera)" >&2
+    exit 1
+fi
 
-# Le nom compte : `credential.<hub>.helper rosetta` fait chercher un exécutable
-# nommé git-credential-rosetta sur le PATH (posé par le bin/ de ce plugin).
-git config --global "credential.${HUB}.helper" rosetta
+# ── Désarmer l'ancien nom, avant de poser le nouveau ────────────────────────
+# Le home d'un pod est PERSISTANT : un ~/.gitconfig écrit par une version
+# précédente garde `helper rosetta`, qui fait chercher un `git-credential-rosetta`
+# désormais absent. Git consulte les helpers dans l'ordre et n'en tire rien : le
+# push échoue sur une erreur qui ne parle de rien. On nettoie donc AVANT de poser.
+# `|| true` : `--unset-all` sort en 5 quand la clé n'existe pas, ce qui est le cas
+# normal sur un home neuf — et `set -e` ferait échouer le setup pour ça.
+git config --global --unset-all "credential.${HUB}.helper" 2>/dev/null || true
+
+# Le nom compte : `credential.<hub>.helper hub` fait chercher un exécutable nommé
+# git-credential-hub sur le PATH (posé par le bin/ de ce plugin).
+git config --global "credential.${HUB}.helper" hub
 
 echo "helper de credential câblé sur ${HUB}"

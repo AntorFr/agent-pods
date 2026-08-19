@@ -37,8 +37,8 @@ print("\n--- rangement : bin/ à la racine d'une image ---")
 # racine » : la version heuristique attrapait `.dockerignore`, et `entrypoint.sh`
 # de claude-pod est légitimement à la racine (c'est l'entrypoint du conteneur,
 # pas un outil du PATH). Une règle qui crie au loup finit désactivée.
-OUTILS = {"agent-gw": ("rosetta-bridge", "memory-sync"),
-          "claude-pod": ("rosetta-bridge",)}
+OUTILS = {"agent-gw": ("mcp-bridge", "memory-sync"),
+          "claude-pod": ("mcp-bridge",)}
 for image, outils in OUTILS.items():
     root = IMAGES / image
     egares = [n for n in outils if (root / n).exists()]
@@ -48,13 +48,13 @@ for image, outils in OUTILS.items():
           all((root / "bin" / n).is_file() for n in outils))
 
 check("agent-gw/bin/ porte les deux exécutables du corps",
-      (AGENT_GW / "bin/rosetta-bridge").is_file()
+      (AGENT_GW / "bin/mcp-bridge").is_file()
       and (AGENT_GW / "bin/memory-sync").is_file())
 
-print("\n--- la copie partagée : rosetta-bridge, octet pour octet ---")
+print("\n--- la copie partagée : mcp-bridge, octet pour octet ---")
 
-COPIES = [IMAGES / "agent-gw/bin/rosetta-bridge",
-          IMAGES / "claude-pod/bin/rosetta-bridge"]
+COPIES = [IMAGES / "agent-gw/bin/mcp-bridge",
+          IMAGES / "claude-pod/bin/mcp-bridge"]
 
 check("les deux images l'embarquent", all(p.is_file() for p in COPIES))
 
@@ -68,6 +68,38 @@ if all(p.is_file() for p in COPIES):
     import os
     check("exécutables dans le dépôt, pas seulement dans l'image",
           all(os.access(p, os.X_OK) for p in COPIES))
+
+print("\n--- aucun domaine privé en VALEUR PAR DÉFAUT ---")
+
+# La faute que ce banc empêche de revenir, et elle est facile à commettre : une
+# image PUBLIQUE qui devine un nom d'hôte publie le déploiement de son auteur, et
+# rend l'image inutilisable par quiconque d'autre. Les endpoints se déclarent dans
+# le manifeste du pod ; le code refuse franchement quand ils manquent.
+#
+# ⚠️ On ne cherche PAS le domaine partout : raconter d'où l'on vient dans un
+# commentaire est utile (« le défaut était … »), c'est le rendre par défaut qui ne
+# l'est pas. D'où la recherche restreinte aux formes qui FIXENT une valeur —
+# `os.environ.get(…, "…")` et l'expansion shell `${VAR:-…}`.
+import re  # noqa: E402
+
+LIVRES = [IMAGES / "agent-gw/bin/mcp-bridge",
+          IMAGES / "claude-pod/bin/mcp-bridge",
+          IMAGES / "agent-gw/plugins/parcours/bin/trace-geom",
+          IMAGES / "agent-gw/plugins/git/bin/git-credential-hub",
+          IMAGES / "agent-gw/plugins/git/setup",
+          IMAGES / "agent-voice/app/main.py",
+          IMAGES / "agent-gw/app/main.py"]
+DEFAUT = re.compile(r"(environ\.get\(|:-)[^)\n]*(sberard|berard)")
+
+for f in LIVRES:
+    if not f.is_file():
+        check("%s : présent" % f.name, False)
+        continue
+    fautes = [l.strip() for l in f.read_text(encoding="utf-8").splitlines()
+              if DEFAUT.search(l)]
+    check("%s : aucun domaine privé en défaut" % f.name, not fautes)
+    for l in fautes:
+        print("        " + l[:100])
 
 print()
 if FAILS:

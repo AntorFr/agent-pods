@@ -1,33 +1,44 @@
 #!/usr/bin/env python3
-# Identical copy in images/agent-gw/rosetta-bridge — keep both in sync (the
-# docker build context is images/<name>, so the file cannot be shared).
-"""rosetta-bridge — stdio-to-HTTP MCP relay with OAuth token handling.
+# Byte-identical copy in the other image's bin/ — the docker build context is
+# images/<name>, so the file cannot be shared. `bin_test.py` enforces it.
+"""mcp-bridge — stdio-to-HTTP MCP relay with OAuth token handling.
 
-Claude Code only supports static headers for HTTP MCP servers, but rosetta
-(the MCP hub) wants short-lived OAuth access tokens. This bridge closes the
-gap: Claude talks newline-delimited JSON-RPC on stdio (as with any local MCP
-server), the bridge forwards every message to the hub over HTTPS and handles
-the tokens itself, in memory only.
+Claude Code only supports static headers for HTTP MCP servers, but an MCP hub
+wants short-lived OAuth access tokens. This bridge closes the gap: Claude talks
+newline-delimited JSON-RPC on stdio (as with any local MCP server), the bridge
+forwards every message to the hub over HTTPS and handles the tokens itself, in
+memory only.
 
 Two identities, tried in order:
-  1. ROSETTA_USER_TOKEN — a per-session USER access token injected by the
+  1. HUB_USER_TOKEN — a per-session USER access token injected by the
      gateway at Claude spawn time (the PWA session rebond). Required by
-     user-data addons (/google), accepted everywhere else too.
+     user-data addons, accepted everywhere else too.
   2. The body's machine identity (AGENT_CLIENT_ID/SECRET, client_credentials),
      fetched and refreshed against Authelia. Enough for the generic addons.
 
 Standard library only, on purpose: it must run on the bare python3 of every
 agent body image, with zero dependency to keep in sync.
 
-Usage:  rosetta-bridge <addon>          (e.g. rosetta-bridge maps)
+Usage:  mcp-bridge <addon>              (e.g. mcp-bridge maps)
 
 Env:
-  ROSETTA_USER_TOKEN                     per-session user identity (optional)
-  AGENT_CLIENT_ID / AGENT_CLIENT_SECRET  machine identity (Authelia client)
-  ROSETTA_URL        default https://rosetta.mcp.berard.me
-  ROSETTA_TOKEN_URL  default https://auth.berard.me/api/oidc/token
-  ROSETTA_SCOPE      default mcp
+  HUB_USER_TOKEN                         per-session user identity (optional)
+  AGENT_CLIENT_ID / AGENT_CLIENT_SECRET  machine identity (OIDC client)
+  HUB_URL            REQUIRED — base URL of the MCP hub
+  HUB_TOKEN_URL      OIDC token endpoint (required with a machine identity)
+  HUB_SCOPE          default mcp
+
+The historical `ROSETTA_*` spellings are still read as a fallback: `rosetta` is
+the name of one particular hub deployment, not of this relay. Nothing has a
+default pointing at someone's private domain — a public image that guesses a
+hostname is a public image that leaks a setup.
 """
+
+def env(name: str, default: str = "") -> str:
+    """Read `HUB_<name>`, falling back to the historical `ROSETTA_<name>`."""
+    return os.environ.get("HUB_" + name) \
+        or os.environ.get("ROSETTA_" + name) \
+        or default
 
 import base64
 import json
@@ -40,17 +51,17 @@ import urllib.request
 
 TIMEOUT = 60.0  # generous: some upstream tools wait on slow provider APIs
 
-USER_TOKEN = os.environ.get("ROSETTA_USER_TOKEN", "")
+USER_TOKEN = env("USER_TOKEN")
 
 
 class TokenManager:
     """Serves a valid machine bearer token, refreshing it under a lock."""
 
     def __init__(self):
-        self.url = os.environ.get("ROSETTA_TOKEN_URL", "https://auth.berard.me/api/oidc/token")
+        self.url = env("TOKEN_URL")
         self.client_id = os.environ.get("AGENT_CLIENT_ID", "")
         self.client_secret = os.environ.get("AGENT_CLIENT_SECRET", "")
-        self.scope = os.environ.get("ROSETTA_SCOPE", "mcp")
+        self.scope = env("SCOPE", "mcp")
         self._lock = threading.Lock()
         self._token = ""
         self._expiry = 0.0
@@ -118,7 +129,7 @@ def relay(message: dict, endpoint: str, tokens: TokenManager, out_lock: threadin
         attempts.append(("machine", lambda retry: tokens.get(force=retry)))
 
     replies = None
-    failure = "aucune identité configurée (ni ROSETTA_USER_TOKEN ni AGENT_CLIENT_ID)"
+    failure = "aucune identité configurée (ni HUB_USER_TOKEN ni AGENT_CLIENT_ID)"
     try:
         for label, supply in attempts:
             try:
@@ -146,12 +157,12 @@ def relay(message: dict, endpoint: str, tokens: TokenManager, out_lock: threadin
 
     if replies is None:
         if "id" not in message:
-            print(f"rosetta-bridge: dropped notification: {failure}", file=sys.stderr, flush=True)
+            print(f"mcp-bridge: dropped notification: {failure}", file=sys.stderr, flush=True)
             return
         replies = [{
             "jsonrpc": "2.0",
             "id": message["id"],
-            "error": {"code": -32000, "message": f"rosetta-bridge: {failure}"},
+            "error": {"code": -32000, "message": f"mcp-bridge: {failure}"},
         }]
 
     with out_lock:
@@ -162,9 +173,15 @@ def relay(message: dict, endpoint: str, tokens: TokenManager, out_lock: threadin
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("usage: rosetta-bridge <addon>", file=sys.stderr)
+        print("usage: mcp-bridge <addon>", file=sys.stderr)
         return 2
-    base = os.environ.get("ROSETTA_URL", "https://rosetta.mcp.berard.me").rstrip("/")
+    base = env("URL").rstrip("/")
+    if not base:
+        # Refuser franchement plutôt que deviner : un défaut codé en dur, c'est
+        # le déploiement de quelqu'un d'autre dans une image publique.
+        print("mcp-bridge: HUB_URL is required (base URL of the MCP hub)",
+              file=sys.stderr)
+        return 2
     endpoint = f"{base}/{sys.argv[1]}/"
     tokens = TokenManager()
     out_lock = threading.Lock()
@@ -177,7 +194,7 @@ def main() -> int:
         try:
             message = json.loads(line)
         except json.JSONDecodeError as exc:
-            print(f"rosetta-bridge: bad JSON from client: {exc}", file=sys.stderr, flush=True)
+            print(f"mcp-bridge: bad JSON from client: {exc}", file=sys.stderr, flush=True)
             continue
         threading.Thread(
             target=relay, args=(message, endpoint, tokens, out_lock), daemon=True
