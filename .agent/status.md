@@ -18,13 +18,32 @@ Deux chantiers livrés coup sur coup :
   code refuse franchement. Les manifestes déclarent ces valeurs — dans cet ordre, jamais
   l'inverse. `bin_test` tient la garde pour que la faute ne revienne pas.
 
-**Dettes de transition à solder** (pas urgentes, mais elles s'oublient) :
-- l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ; les `.mcp.json`
-  d'Alfred et du cockpit sont passés au nouveau nom, l'alias tombe quand les clones
-  déployés l'auront pris ;
-- les replis `ROSETTA_*` dans le code, et `ALFRED_VOICE_*` dans agent-voice ;
-- les manifestes disent encore `ROSETTA_URL` / `ROSETTA_TOKEN_URL` : les renommer en
-  `HUB_*` permettra de retirer les replis ci-dessus.
+**Dettes de transition — toutes bloquées sur le MÊME verrou** (2026-08-20). Les
+manifestes sont passés en `HUB_URL` / `HUB_TOKEN_URL`, et le clone d'Alfred lance bien
+`mcp-bridge`. Ne restent que des replis, et ils tombent **ensemble**, en une seule
+livraison, le jour où le clone déployé du **cockpit** aura rattrapé :
+
+- l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ;
+- l'injection du jeton de session sous les deux noms (`_run_alfred`) — le `.mcp.json`
+  déployé du cockpit interpole encore `${ROSETTA_USER_TOKEN}` dans ses en-têtes ;
+- la lecture des `ROSETTA_*` dans `mcp-bridge`, `trace-geom` et `git-credential-hub` ;
+- le repli `ALFRED_VOICE_*` dans agent-voice — celui-là est déjà mort (plus personne ne
+  pose ces variables), il attend juste de partir avec les autres plutôt que de coûter
+  un cycle de déploiement pour lui seul.
+
+⚠️ **Le verrou n'est pas technique, il est chez Skippy-pod** : son clone du cockpit porte
+**44 commits non publiés**, qui attendent un bouclier (il le sait, c'est écrit dans son
+propre status). Un `memory-sync pull` tenté depuis le Mac le 2026-08-20 a été **abandonné
+volontairement** — 13 conflits sur 43 commits, dans du travail dont je n'ai pas le
+contexte. Ce n'est pas à faire de l'extérieur : c'est une session avec Monsieur, bouclier
+armé. Le pod est resté intact.
+
+Quand il publiera, un conflit trivial l'attend sur `.mcp.json` (j'ai poussé le passage à
+`mcp-bridge` sur `origin`). La résolution est déjà arbitrée, sur mesure et non sur
+mémoire : garder SON bloc `unifi` (`unifi-agent.mcp.berard.me` en Basic — vérifié le
+2026-08-20, l'hôte résout et un `initialize` MCP répond **200**, contrairement à ce
+qu'affirmait une note d'`origin` datée du 11/08), garder le `ha` d'`origin`, et adopter
+`mcp-bridge`.
 
 **Prochaines étapes :**
 - [ ] **Un job de test dans la CI, avant le build.** Aujourd'hui `docker-publish.yml`
@@ -40,8 +59,6 @@ Deux chantiers livrés coup sur coup :
       dont la résolution est figée depuis longtemps.
 - [ ] Un push sur `main` **depuis le pod** — le dernier chemin du proxy git non éprouvé
       (les branches neuves, elles, passent depuis le 2026-08-10).
-- [ ] Supprimer `pod/git-0.15.0` sur `origin` : fusionnée, mais le proxy refuse les
-      suppressions de ref → geste du Mac.
 - [ ] **La frontière non franchie** : un plugin tiers peut livrer un contrat, une API et
       un exécutable, mais pas encore une **vue** — le front garde son registre
       (`frontend/src/launcher/apps/index.js`) et les modules historiques vivent toujours
