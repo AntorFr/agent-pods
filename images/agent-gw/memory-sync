@@ -32,9 +32,20 @@ git_q() { git -c core.pager=cat "$@"; }
 # Configure (idempotent) l'auth GitHub à partir de l'env GITHUB_TOKEN, sans jamais
 # écrire le token sur disque : le helper l'expose à la demande, expansé au moment où
 # git l'appelle. Absent (machine de dev, credential via keychain) → on ne touche à rien.
+#
+# ⚠️ SCOPÉ SUR github.com, et ce n'est pas de la cosmétique. Ce helper ne filtre pas
+# l'hôte : posé en `credential.helper` global, il rendait GITHUB_TOKEN à N'IMPORTE
+# QUEL serveur — y compris le hub rosetta, quand le dépôt y pointe. Il aurait alors
+# répondu AVANT git-credential-rosetta (helper global consulté en premier, et git
+# s'arrête au premier qui donne un mot de passe), donc :
+#   - le bouclier PWA n'aurait jamais été consulté — la garde du canal sautait ;
+#   - et le push aurait échoué sur un 403 incompréhensible, le jeton du pod étant
+#     en lecture seule, au lieu de demander une autorisation.
+# Aucun dépôt de mémoire ne pointe encore le hub : c'était un piège armé, pas une
+# panne. Il se désarme d'un préfixe.
 ensure_auth() {
   [ -n "${GITHUB_TOKEN:-}" ] || return 0
-  git config --global credential.helper \
+  git config --global credential.https://github.com.helper \
     '!f() { if [ "$1" = get ]; then printf "username=x-access-token\npassword=%s\n" "$GITHUB_TOKEN"; fi; }; f'
 }
 
