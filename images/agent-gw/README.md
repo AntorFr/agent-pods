@@ -11,8 +11,9 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
 
 1. **Sert la PWA** — l'appli web de chat (`https://alfred.berard.me`), front + statics.
 2. **Fait tourner l'agent** — appelle le SDK Claude avec le cerveau dans
-   `/workspace/memory`, les skills et les MCP (workspace-mcp Google, etc.). Un message =
-   un tour d'agent exécuté ici.
+   `/workspace/memory`, les skills du workspace, les **plugins livrés par l'image**
+   (`plugins/`, cf. son README) et les MCP déclarés par le `.mcp.json` du workspace (tous
+   relayés par `rosetta-bridge`). Un message = un tour d'agent exécuté ici.
 3. **Authentifie** — OIDC via Authelia, cookie de session signé, bouclier 🛡 des actions
    sensibles.
 4. **Expose `/mcp`** — endpoints `ask_alfred` / `ask_alfred_status` (bearer `GW_MCP_TOKEN`) :
@@ -21,11 +22,11 @@ Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
 5. **Sert la mémoire** — API `/api/memory/raw/...` (md, images, pièces jointes) que le
    moteur de rendu de la PWA consomme.
 6. **App-modules d'état** — workbooks menuiserie (`/api/workbook/*`) et voyages
-   (`/api/voyage/*`, spec `VOYAGES.md`) : la donnée (`workbook.json` / `voyage.json`) est
+   (`/api/voyage/*`, plugin `voyages`) : la donnée (`workbook.json` / `voyage.json`) est
    écrite par l'agent, les gestes de l'UI vont dans un overlay `*-state.json` frère (hors
    git) ; météo et liaisons des voyages sont dérivées via les API Google (clé
-   `GOOGLE_MAPS_API_KEY`, déjà dans l'env du pod pour le MCP maps) et jamais stockées.
-7. **Horloge des tâches planifiées** (`app/planif.py`, `GET /api/planif` — cerveau : D30) —
+   `GOOGLE_MAPS_API_KEY`, lue par le plugin `voyages` lui-même) et jamais stockées.
+7. **Horloge des tâches planifiées** (plugin `planif`, `GET /api/planif` — cerveau : D30) —
    une boucle asyncio lit les fiches `type: planif` de `memory/planif/*.md` et, à l'heure
    dite, ouvre un tour Alfred ordinaire avec **le corps de la fiche pour prompt** (précédé
    d'un court cadre de provenance, sur le patron d'`ask_alfred` : sans lui l'agent ne peut
@@ -80,9 +81,11 @@ vers `/workspace` — accès dev direct, indépendant de la gateway.
 | `GW_AUTH_TOKEN` | — | bearer de secours, **uniquement si OIDC absent** (mode dev) | **inutilisé en prod** (OIDC actif) → hors coffre volontairement |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, sinon session `~/.claude` | **pas lu par agent-gw** — seulement par le SDK Claude | Alfred tourne sur `~/.claude` (persistant, auto-refresh) → hors coffre volontairement |
 
-> Absent de la liste : `GOOGLE_MAPS_API_KEY` (clé du MCP Maps) — tirée du coffre
-> `secret/llm/google-api` → `google_map_api_key` via `externalSecrets`, consommée par le
-> serveur MCP Maps, pas par agent-gw lui-même.
+> Absent de la liste : `GOOGLE_MAPS_API_KEY` — tirée du coffre
+> `secret/llm/google-api` → `google_map_api_key` via `externalSecrets`. Elle servait au
+> serveur MCP Maps bundlé, retiré depuis (les outils `maps` viennent du hub rosetta) ;
+> elle reste **nécessaire** au plugin `voyages`, qui appelle les API Google en direct
+> pour dériver météo et liaisons.
 
 ## Pièces jointes du chat
 

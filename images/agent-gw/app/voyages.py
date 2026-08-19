@@ -9,9 +9,9 @@ Trois familles d'endpoints, calquées sur le patron workbook :
   workbook-state.json — qu'Alfred consolide dans voyage.json à son prochain
   passage sur le dossier ;
 - les DÉRIVÉS (météo par jour, liaisons entre cartes) sont calculés à la demande
-  contre les API Google (même clé que le MCP maps, qui vit dans ce conteneur) et
-  cachés en mémoire process — jamais écrits dans un fichier. Sans clé, on répond
-  « indisponible » proprement : le front affiche l'absence, pas une fiction.
+  contre les API Google et cachés en mémoire process — jamais écrits dans un
+  fichier. Sans clé, on répond « indisponible » proprement : le front affiche
+  l'absence, pas une fiction.
 """
 
 import json
@@ -27,8 +27,10 @@ from fastapi import APIRouter, HTTPException, Request
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
-# La même clé que mcp_servers/maps.py : le MCP tourne dans ce conteneur, la
-# variable est déjà dans l'environnement du pod.
+# Appel DIRECT aux API Google, pas via le hub : ces dérivés se calculent au moment
+# de rendre la carte, hors de tout tour d'agent. La clé vient de l'env du pod — et
+# depuis le retrait des serveurs MCP bundlés, ce module en est le SEUL consommateur,
+# donc la seule raison pour laquelle elle y reste.
 GOOGLE_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 TIMEOUT = 12.0
 

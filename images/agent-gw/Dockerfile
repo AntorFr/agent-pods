@@ -70,10 +70,6 @@ COPY app ./app
 # ⚠️ `app/main.py` les cherche en `<parent de app>/plugins` — cette copie n'est PAS
 # optionnelle, sans elle aucun contrat ne part et personne ne s'en plaint.
 COPY plugins ./plugins
-# Serveurs MCP stdio bundlés (maps/weather), lancés par le .mcp.json du workspace.
-# DEPRECATED : remplacés par le hub rosetta (via rosetta-bridge) — à retirer,
-# avec leurs clés d'API dans l'env du pod, une fois la bascule vérifiée en prod.
-COPY mcp_servers ./mcp_servers
 # rosetta-bridge : relais stdio->HTTP vers le hub rosetta (refresh de token
 # client_credentials intégré, stdlib seule). Copie identique dans claude-pod.
 COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
