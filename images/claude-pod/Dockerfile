@@ -48,14 +48,12 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
-# Google Workspace MCP server (stdio) in its own venv — same pinned version
-# as agent-gw so both containers spawn identical tools from .mcp.json.
+# Bare python3 — the interpreter `rosetta-bridge` runs on (see below). No venv and
+# no pip on purpose: every MCP server this pod talks to now lives behind the hub,
+# so nothing is installed here that could drift from what the hub actually serves.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv \
-    && rm -rf /var/lib/apt/lists/* \
-    && python3 -m venv /opt/workspace-mcp \
-    && /opt/workspace-mcp/bin/pip install --no-cache-dir workspace-mcp==1.22.0 \
-    && ln -s /opt/workspace-mcp/bin/workspace-mcp /usr/local/bin/workspace-mcp
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=vscode-cli /usr/local/bin/code /usr/local/bin/code
 
