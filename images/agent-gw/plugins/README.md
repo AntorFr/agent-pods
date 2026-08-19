@@ -67,9 +67,14 @@ and `setup` only runs when the plugin is active.
 
 ## What stays in the body, and why
 
-Two executables live at the `agent-gw` root rather than in a plugin: `rosetta-bridge`
-(every agent talks to the hub) and `memory-sync` (every agent writes its memory). They
-are not optional — a body without them is not a reduced body, it is a dead one.
+Two executables live in **`bin/` at the image root** rather than in a plugin:
+`rosetta-bridge` (every agent talks to the hub — it is how *all* its MCP tools arrive)
+and `memory-sync` (every agent writes its memory). They are not optional — a body
+without them is not a reduced body, it is a dead one.
+
+That gives the symmetry worth remembering: **`bin/` at the image root = what every body
+owns; `plugins/<id>/bin/` = what a plugin adds.** Where a binary sits tells you whether
+it is optional, without having to know it from somewhere else.
 
 **The scheduled-task clock** (`app/planif.py`) also stays in the body, even though it
 has a tile. The reason is sharp: it needs to start an agent turn (`_run_alfred`), so it

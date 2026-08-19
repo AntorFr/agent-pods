@@ -84,12 +84,20 @@ RUN set -eu; \
         [ -f "$f" ] || continue; \
         install -m 0755 "$f" /usr/local/bin/; \
     done
-# rosetta-bridge : relais stdio->HTTP vers le hub rosetta (refresh de token
-# client_credentials intégré, stdlib seule). Copie identique dans claude-pod.
-COPY --chmod=755 rosetta-bridge /usr/local/bin/rosetta-bridge
-# memory-sync : écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
-# conflit remonté jamais deviné). Configure son helper git depuis $GITHUB_TOKEN.
-COPY --chmod=755 memory-sync /usr/local/bin/memory-sync
+# Les exécutables DU CORPS, par opposition à ceux des plugins juste au-dessus. La
+# symétrie est voulue : `bin/` à la racine d'une image = ce que tout corps possède,
+# `plugins/<id>/bin/` = ce qu'un plugin apporte. Là où un binaire est rangé dit donc
+# s'il est optionnel, sans avoir à le savoir par ailleurs.
+#
+#   rosetta-bridge  relais stdio->HTTP vers le hub rosetta (refresh de token
+#                   client_credentials intégré, stdlib seule). Tout agent parle au
+#                   hub — c'est par lui qu'arrivent TOUS ses outils MCP.
+#                   ⚠️ Copie octet pour octet dans claude-pod, vérifiée par
+#                   `test/bin_test.py` : les deux conteneurs doivent lancer le même
+#                   relais, et un commentaire ne garantissait rien.
+#   memory-sync     écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
+#                   conflit remonté jamais deviné). Helper git scopé sur github.com.
+COPY --chmod=755 bin/ /usr/local/bin/
 # Bundled content engine + launcher shell (built once, never at runtime).
 # scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
 # weighs 116 kB gzipped and is fetched only when the browser has no
