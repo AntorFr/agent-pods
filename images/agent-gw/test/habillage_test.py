@@ -71,8 +71,13 @@ HUES = ["rouge", "orange", "ambre", "vert", "emeraude", "turquoise",
 src = (Path(__file__).resolve().parents[1] / "frontend/src/launcher/main.js").read_text(encoding="utf-8")
 check("les 12 teintes documentées existent dans main.js",
       all((h + ":") in src for h in HUES))
-check("AUTHORING.md documente le même vocabulaire",
-      all(("`" + h + "`") in (Path(__file__).resolve().parents[1] / "frontend/AUTHORING.md").read_text(encoding="utf-8")
+# Le contrat que lisent RÉELLEMENT les agents, livré par l'image avec le moteur.
+# Ce banc pointait sur frontend/AUTHORING.md, qui décrivait le même vocabulaire dans
+# un troisième exemplaire — supprimé. Vérifier la copie qui ne part nulle part ne
+# prouvait rien : c'est celle-ci qui entre dans le contexte d'un agent.
+check("le contrat livré documente le même vocabulaire",
+      all(("`" + h + "`") in (Path(__file__).resolve().parents[1]
+          / "plugins/fiches/skills/fiches-format/SKILL.md").read_text(encoding="utf-8")
           for h in HUES))
 
 print()

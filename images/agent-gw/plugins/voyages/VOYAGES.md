@@ -33,7 +33,7 @@
 - **Météo par jour : régime dérivé, jamais stockée** (détail plus bas).
 - **Suggestions écartées conservées** (statut `ecartee`, masquées) — anti re-proposition.
 
-## Arborescence mémoire (raccord au contrat AUTHORING)
+## Arborescence mémoire (raccord au contrat `fiches`)
 
 ```
 domaines/voyages/
@@ -46,7 +46,7 @@ domaines/voyages/
   `status` (cycle **`idée → prépa → en-cours → clos`**, `idée` ⇔ pas de dates), `debut`/`fin`,
   lieux, items. **Pas de double vérité** : la fiche `.md` est *optionnelle* (prose libre,
   `type: voyage`, sans `status` ni dates). Le type `voyage` est ajouté au vocabulaire
-  AUTHORING avec cette règle.
+  du contrat `fiches` avec cette règle.
 - La **vue domaine est le hub de l'app** (`#/dom/voyages` intercepté par le module, comme
   la tuile L'Atelier) : cartes dérivées de `/api/voyage/list` — dates, statut, compteurs.
 - Le module est routé (`#/voyage/<chemin>`), patron des workbooks — pas de tag
@@ -267,5 +267,5 @@ de la timeline ; carte géographique des étapes (candidate v2 naturelle : les i
 2. ✅ **`voyage.json` figé** (le geste a révélé `desc`/`web`/`docs` et l'overlay d'état).
 3. ✅ **Corps** (2026-07-18) : le routeur (list, état/gestes, météo, routes) — devenu depuis
    `plugins/voyages/api.py` —, module launcher (`renderVoyagesHub`/`renderVoyage`), type
-   `voyage` dans AUTHORING.md.
+   `voyage` au contrat `fiches`.
 4. **Cerveau** : skill `voyages` + entrée DECISIONS.md.

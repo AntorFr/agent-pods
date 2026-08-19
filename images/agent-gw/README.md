@@ -1,185 +1,188 @@
-# agent-gw — gateway d'Alfred
+# agent-gw — the agent gateway
 
-Conteneur principal du pod Alfred : **la porte d'entrée utilisateur *et* le runtime de
-l'agent**. FastAPI + PWA de chat + SDK Claude (`query()`).
+Main container of an agent pod: **the user's front door *and* the agent runtime**.
+FastAPI + a chat PWA + the Claude Agent SDK (`query()`).
 
-Déployé via `smart-home-charts` (chart `agent-pod`) ; manifeste :
-`k8s-home-lab/clusters/homenode/home/assist/alfred-helm.yml`. Image publiée sur
+Deployed through `smart-home-charts` (chart `agent-pod`); manifest example:
+`k8s-home-lab/clusters/homenode/home/assist/alfred-helm.yml`. Image published to
 `ghcr.io/antorfr/agent-gw` (repo `agent-pods`).
 
-## Rôle
+The image is **agent-agnostic**: identity, persona and instructions come from the
+mounted `/workspace`, never from here. Alfred (a butler), Skippy (a coding agent) and
+Nestor all run this same image.
 
-1. **Sert la PWA** — l'appli web de chat (`https://alfred.berard.me`), front + statics.
-2. **Fait tourner l'agent** — appelle le SDK Claude avec le cerveau dans
-   `/workspace/memory`, les skills du workspace, les **plugins livrés par l'image**
-   (`plugins/`, cf. son README) et les MCP déclarés par le `.mcp.json` du workspace (tous
-   relayés par `rosetta-bridge`). Un message = un tour d'agent exécuté ici.
-3. **Authentifie** — OIDC via Authelia, cookie de session signé, bouclier 🛡 des actions
-   sensibles.
-4. **Expose `/mcp`** — endpoints `ask_alfred` / `ask_alfred_status` (bearer `GW_MCP_TOKEN`) :
-   d'autres agents confient des tâches à Alfred sans intermédiaire. **Asynchrone** :
-   `ask_alfred` rend un `job_id` immédiatement, `ask_alfred_status` récolte la réponse.
-5. **Sert la mémoire** — API `/api/memory/raw/...` (md, images, pièces jointes) que le
-   moteur de rendu de la PWA consomme.
-6. **App-modules d'état** — workbooks menuiserie (`/api/workbook/*`) et voyages
-   (`/api/voyage/*`, plugin `voyages`) : la donnée (`workbook.json` / `voyage.json`) est
-   écrite par l'agent, les gestes de l'UI vont dans un overlay `*-state.json` frère (hors
-   git) ; météo et liaisons des voyages sont dérivées via les API Google (clé
-   `GOOGLE_MAPS_API_KEY`, lue par le plugin `voyages` lui-même) et jamais stockées.
-7. **Horloge des tâches planifiées** (plugin `planif`, `GET /api/planif` — cerveau : D30) —
-   une boucle asyncio lit les fiches `type: planif` de `memory/planif/*.md` et, à l'heure
-   dite, ouvre un tour Alfred ordinaire avec **le corps de la fiche pour prompt** (précédé
-   d'un court cadre de provenance, sur le patron d'`ask_alfred` : sans lui l'agent ne peut
-   pas savoir qu'il est dans un tour planifié — le corps, lui, passe mot pour mot). Session
-   neuve, `GW_CHANNEL=planif` injecté par `ClaudeAgentOptions.env` (le hook du workspace
-   ferme alors TOUTE la surface Google, lectures comprises), pas de rattrapage au-delà de la
-   fenêtre de grâce, journal dans `planif/planif-state.json` (hors git). L'onglet PWA est en
-   **lecture** : créer ou suspendre passe par un message à Alfred, qui édite la fiche.
+## Role
 
-Le pod porte un **2ᵉ conteneur `tunnel`** (image `claude-pod`) dédié au tunnel VS Code
-vers `/workspace` — accès dev direct, indépendant de la gateway.
+1. **Serves the PWA** — the chat web app, front end and static assets.
+2. **Runs the agent** — calls the Claude SDK with the brain in `/workspace/memory`, the
+   workspace skills, the **plugins shipped by the image** (`plugins/`, see its README)
+   and the MCP servers declared by the workspace `.mcp.json` (all relayed through
+   `rosetta-bridge`). One message = one agent turn, executed here.
+3. **Authenticates** — OIDC through Authelia, signed session cookie, and the 🛡 shield
+   that gates sensitive actions.
+4. **Exposes `/mcp`** — `ask_<agent>` / `ask_<agent>_status` (bearer `GW_MCP_TOKEN`), so
+   other agents can hand over work directly. **Asynchronous**: `ask_<agent>` returns a
+   `job_id` immediately, `ask_<agent>_status` collects the answer.
+5. **Serves memory** — `/api/memory/raw/...` (markdown, images, attachments), consumed by
+   the PWA rendering engine.
+6. **Stateful app modules** — woodworking workbooks (`/api/workbook/*`) and trips
+   (`/api/voyage/*`, plugin `voyages`): the data (`workbook.json` / `voyage.json`) is
+   written by the agent, while UI gestures land in a sibling `*-state.json` overlay (out
+   of git). Trip weather and legs are derived through the Google APIs
+   (`GOOGLE_MAPS_API_KEY`, read by the `voyages` plugin itself) and never stored.
+7. **Scheduled-task clock** (plugin-free, `app/planif.py`, `GET /api/planif`) — an
+   asyncio loop reads the `type: planif` notes under `memory/planif/*.md` and, at the
+   appointed minute, opens an ordinary agent turn using **the note's body as the prompt**
+   (preceded by a short provenance frame, patterned on `ask_<agent>`: without it the
+   agent cannot know it is in a scheduled turn — the body itself passes through word for
+   word). Fresh session, `GW_CHANNEL=planif` injected through
+   `ClaudeAgentOptions.env` (the workspace hook then closes the *entire* Google surface,
+   reads included), no catch-up beyond the grace window, journal in
+   `planif/planif-state.json` (out of git). The PWA tab is **read-only**: creating or
+   suspending a task goes through a message to the agent, which edits the note.
 
-## Configuration (variables d'environnement)
+A pod may carry a second `tunnel` container (image `claude-pod`) dedicated to the VS Code
+tunnel into `/workspace` — direct developer access, independent of the gateway.
 
-| Variable | Défaut | Rôle |
+## Configuration (environment variables)
+
+| Variable | Default | Role |
 |---|---|---|
-| `GW_CHANNEL` | `pwa` | Identité du canal. Sa **présence** = mode headless (personne pour répondre à une invite) → le bouclier s'applique. Posé au niveau conteneur, hors d'atteinte du modèle. |
-| `GW_PERMISSION_MODE` | `bypassPermissions` | Mode permission du SDK Claude. En `bypass`, les `permissions.deny` sont ignorées → **seul un hook `exit 2` bloque** (cf. `alfred/.claude/hooks/google_guard.py`). |
-| `GW_WORKSPACE` | `/workspace` | Racine du cerveau (repo mémoire d'Alfred). |
-| `GW_MEMORY_DIR` | `memory` | Dossier mémoire, relatif au workspace. |
-| `GW_TODO_FILE` | `todo/taches.md` | Fichier todo, relatif à la mémoire. |
-| `GW_FLEET_DIR` | `repos` | Dossier des clones de la flotte, relatif au workspace — source de `GET /api/repos` et de la vue `repos`. Le scan lit le **disque**, pas l'API GitHub : ce qui s'affiche est ce que le pod a fetché. |
-| `GW_TRACE` | `0` | Trace d'outils dans le fil : chaque appel apparaît en `◇ <outil> · <cible>`, groupé sous son compte, jusqu'au message texte suivant. **Live seulement** — `/api/history` ne la rejoue pas, elle disparaît au rechargement (témoin d'exécution, pas archive). Seuls le **nom** et une **cible courte** (78 car. max, champ parlant de l'input) sortent : jamais l'input complet, qui porte le contenu d'un fichier ou une commande entière. Défaut off — un majordome reste discret ; un agent de code qui cache ce qu'il touche est un agent qu'on ne peut pas corriger. |
-| `GW_THEME` | `alfred` | Identité visuelle du pod. Le lanceur pose `data-agent=<thème>` sur `<html>` au boot, ce qui arme les surcharges de jetons de `theme-<thème>.css` — bundlées avec le reste, **inertes** tant que l'attribut est absent. `alfred` ⇒ aucun attribut, charte historique, un pod existant ne bouge pas d'un pixel. `skippy` ⇒ sombre, monospace en titrage, ambre, coins à 3 px, sans ombre portée. `nestor` ⇒ porcelaine le jour, veilleuse prune la nuit, améthyste, coins à 16–22 px, et un lapin dont le ventre pulse en guise de témoin de travail. Le bouton de thème clair/sombre continue de fonctionner dans les trois cas — `nestor` **suit en plus le réglage du téléphone** par défaut (son public est une famille), là où `skippy` impose sa nuit. ⚠️ Un thème inconnu n'est pas une erreur : le lanceur retombe sur le socle et le serveur sert les actifs d'Alfred, ce qui donne une PWA parfaitement fonctionnelle **au nom et à l'icône d'un autre corps**. Poser la variable ne suffit donc pas — il faut que le skin soit livré par l'image. |
-| `GW_APPS` | `todo,projets,atelier,planif,voyages` | Modules exposés par le lanceur, séparés par des virgules. L'image est agent-agnostique, le lanceur ne l'était pas : ses tuiles et ses routes étaient câblées sur le monde d'un seul agent. Un pod majordome veut l'atelier et les voyages ; un pod de code n'en veut aucun. Le front masque **la tuile ET la route** de tout module absent (une URL en marque-page ne ressuscite rien). La mémoire (fiches, domaines) n'est pas un module : elle est toujours là. Défaut = jeu historique, donc une montée de version ne change rien à un pod existant. |
-| `GW_FEATURES` | `scan,attach,eph,tunnel,sujets` | Capacités de la coque, séparées par des virgules — le **second axe** de modularité. `GW_APPS` dit où l'on peut **aller** (tuiles et routes), celui-ci dit ce que le chat sait **faire** (contrôles du composeur et du chrome). Un lecteur de code-barres n'a aucun sens chez un agent de code. Ce qui n'est pas listé est **retiré du DOM**, pas masqué : un nœud absent ne reçoit aucun événement, ne prend pas le focus clavier, et ne peut pas déclencher le chargement paresseux d'un bundle (le décodeur pèse 448 Ko) — un `display:none` laisserait les trois. Les capacités à plusieurs portes d'entrée sont gardées **à la source** : retirer `attach` coupe aussi le coller et le glisser-déposer, pas seulement le bouton 📎. Valeurs : `scan` (▥ code-barres), `attach` (📎 + coller + glisser-déposer), `eph` (⚡ mode éphémère), `tunnel` (⧉ tunnel VS Code dans les Réglages), `sujets` (▤ reprendre un fil). ⚠️ **Le bouclier 🛡 n'est délibérément PAS de cette liste** : c'est une garde, pas un composant — la seule façon de consentir à une action sensible. Une garde qu'on éteint par variable d'environnement est un piège. Défaut = jeu historique, donc une montée de version ne change rien à un pod existant. |
-| `GW_TOOLS` | *(vide)* | Capacités de l'**agent**, séparées par des virgules — le **troisième axe**. Les deux premiers décrivent ce que Monsieur voit (`GW_APPS` où l'on va, `GW_FEATURES` ce que le chat sait faire) ; celui-ci dit ce que l'agent a **dans les mains**, sans le moindre pixel d'interface. `git` en est le cas d'école : publier du code n'est pas un écran, et tous les corps n'y ont pas droit. Un outil nommé ici active son plugin — son contrat part au SDK, son `setup` câble ce qu'il faut câbler. **Défaut vide, délibérément** : une capacité qu'on n'a pas demandée ne s'allume pas toute seule à la montée de version. Valeurs livrées : `git` (pousser vers le hub rosetta). |
-| `GW_STATE_DIR` | `~/.agent-gw` | État **côté serveur** : pointeur de session (`session-<canal>.json`) + corbeille des pièces jointes (`inbox/`). Persistant (hostPath home). |
-| `GW_MAX_UPLOAD_MB` | `25` | Taille max (Mo) d'un fichier joint au chat (par fichier). |
-| `GW_MAX_UPLOAD_FILES` | `8` | Nombre max de fichiers joints à un même message. |
-| `GW_INBOX_TTL` | `86400` (24 h) | Âge (s) au-delà duquel une pièce jointe déposée est balayée (`0` = jamais). Purge best-effort à chaque upload. |
-| `GW_SESSION_TTL` | `14400` (4 h) | Inactivité (s) au-delà de laquelle la session n'est **plus reprise** : le tour suivant repart vierge (`0` = jamais). L'état durable vit dans `memory/` (D5), le transcript est jetable — le reprendre fait repayer tout le contexte accumulé à chaque message (cache prompt ~5 min, froid entre deux visites). |
-| `GW_CONFIRM_TTL` | `120` | Durée de validité (s) d'une autorisation bouclier 🛡. |
-| `GW_PLANIF` | `1` | Horloge des tâches planifiées. `0` la coupe (debug, ou pour geler les tours planifiés sans toucher aux fiches). Une seule instance d'`agent-gw` monte le workspace — les conteneurs voisins (`tunnel`, `voice`) ne lancent pas la gateway, donc pas de double horloge. **Le jour où on scale la gateway, ce flag devient obligatoire sur les répliques.** |
-| `GW_PLANIF_DIR` | `planif` | Dossier des fiches `type: planif`, relatif à la mémoire. |
-| `GW_PLANIF_TICK` | `30` | Période (s) du tick. Doit rester `< 60` : la boucle matche la **minute** courante. |
-| `GW_PLANIF_GRACE` | `5` | Fenêtre de rattrapage (min). Couvre un tour long qui tenait le verrou, **pas** une panne : au-delà, l'occurrence est perdue, à dessein (D30). `0` = aucun rattrapage. |
-| `GW_PLANIF_TIMEOUT` | `900` | Durée max (s) d'un tour planifié. Au-delà : annulé et journalisé en échec. |
-| `GW_PLANIF_MIN_PERIOD` | `15` | Plancher de fréquence (min). Un cron plus fin rend la fiche **invalide** (affichée telle quelle) au lieu d'être lissé en silence — le quota d'abonnement n'est pas gratuit. |
-| `GW_PLANIF_TZ` | `Europe/Paris` | Fuseau par défaut si la fiche n'en déclare pas. |
-| `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Hôtes autorisés du transport MCP (anti DNS-rebinding). |
-| `GW_MCP_MAX_PENDING` | `4` | Profondeur de la file `ask_<agent>`. Au-delà, refus **immédiat** plutôt qu'une mise en attente derrière un verrou qui ne se rendra pas avant des heures : un refus est une information, un silence n'en est pas une. Plancher dur à 1. |
-| `GW_PEER_MCP_URL` / `GW_PEER_MCP_TOKEN` / `GW_PEER_MCP_TOOL` | `""` | Rappel croisé : à la fin d'un travail, ouvrir un tour chez le demandeur avec le compte rendu (`https://<pair>/mcp/`, son `GW_MCP_TOKEN`, et le nom de **son** outil, ex. `ask_skippy`). Les trois ou rien — non câblé, l'appelant interroge `ask_<agent>_status`. Le rappel pose `notify=False` : sans ce garde-fou, deux agents se renverraient des comptes rendus indéfiniment. |
-| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_REDIRECT_URI` / `OIDC_ALLOWED_GROUP` | `""` / `""` / `""` / `admins` | Client OIDC Authelia. Dès qu'`OIDC_ISSUER` est posé, l'auth passe en OIDC (le bearer `GW_AUTH_TOKEN` devient inutilisé). |
+| `GW_CHANNEL` | `pwa` | Channel identity. Its **presence** means headless (nobody there to answer a prompt) → the shield applies. Set at container level, out of the model's reach. |
+| `GW_PERMISSION_MODE` | `bypassPermissions` | Claude SDK permission mode. Under `bypass`, `permissions.deny` is ignored → **only a hook exiting 2 can block** (see `alfred/.claude/hooks/google_guard.py`). |
+| `GW_WORKSPACE` | `/workspace` | Root of the brain (the agent's memory repository). |
+| `GW_MEMORY_DIR` | `memory` | Memory folder, relative to the workspace. |
+| `GW_TODO_FILE` | `todo/taches.md` | Todo file, relative to memory. |
+| `GW_FLEET_DIR` | `repos` | Fleet clones folder, relative to the workspace — source of `GET /api/repos` and the `repos` view (read by the `repos` plugin). The scan reads the **disk**, not the GitHub API: what you see is what the pod has fetched. |
+| `GW_TRACE` | `0` | Tool trace in the thread: every call shows as `◇ <tool> · <target>`, grouped under its turn, until the next text message. **Live only** — `/api/history` does not replay it, it vanishes on reload (an execution witness, not an archive). Only the **name** and a **short target** (78 chars max, the most telling input field) are emitted: never the full input, which may carry a file's contents or an entire command. Off by default — a butler stays discreet; a coding agent that hides what it touches is one you cannot correct. |
+| `GW_THEME` | `alfred` | Visual identity. The launcher sets `data-agent=<theme>` on `<html>` at boot, arming the token overrides in `theme-<theme>.css` — bundled with the rest, **inert** while the attribute is absent. `alfred` ⇒ no attribute, historical look, an existing pod does not move a pixel. `skippy` ⇒ dark, monospace headings, amber, 3 px corners, no drop shadow. `nestor` ⇒ porcelain by day, plum night-light after dark, amethyst, 16–22 px corners, and a rabbit whose belly pulses as the working indicator. The light/dark toggle keeps working in all three; `nestor` additionally **follows the phone setting** by default (its audience is a family), where `skippy` imposes its night. ⚠️ An unknown theme is not an error: the launcher falls back to the base and the server serves Alfred's assets, which yields a perfectly working PWA **under another body's name and icon**. Setting the variable is not enough — the skin must be shipped by the image. |
+| `GW_APPS` | `todo,projets,atelier,planif,voyages` | Launcher modules, comma-separated. The image is agent-agnostic, the launcher was not: its tiles and routes were wired to one agent's world. A butler pod wants the workbench and the trip planner; a coding pod wants neither. The front end hides **both the tile and the route** of any absent module (a bookmarked URL resurrects nothing), and an inactive plugin does not even mount its API. Memory is not a module: it is always there. Default = the historical set, so upgrading changes nothing for an existing pod. |
+| `GW_FEATURES` | `scan,attach,eph,tunnel,sujets` | Shell capabilities, comma-separated — the **second axis**. `GW_APPS` says where you can *go* (tiles and routes), this says what the chat can *do* (composer and chrome controls). A barcode reader makes no sense for a coding agent. What is not listed is **removed from the DOM**, not hidden: an absent node receives no events, takes no keyboard focus, and cannot trigger the lazy load of a bundle (the decoder weighs 448 kB) — `display:none` would leave all three. Capabilities with several entry points are gated **at the source**: dropping `attach` also kills paste and drag-and-drop, not just the 📎 button. Values: `scan` (▥ barcode), `attach` (📎 + paste + drag-and-drop), `eph` (⚡ ephemeral mode), `tunnel` (⧉ VS Code tunnel in Settings), `sujets` (▤ resume a thread). ⚠️ **The 🛡 shield is deliberately NOT in this list**: it is a guard, not a component — the only way to consent to a sensitive action. A guard you can switch off with an environment variable is a trap. Default = the historical set. |
+| `GW_TOOLS` | *(empty)* | **Agent** capabilities, comma-separated — the **third axis**. The first two describe what the user sees; this one says what the agent has **in its hands**, with no interface at all. `git` is the textbook case: publishing code is not a screen, and not every body is entitled to it. Naming a tool here activates its plugin — its contract goes to the SDK, its `setup` wires up whatever needs wiring. **Empty by default, deliberately**: a capability nobody asked for does not switch itself on at upgrade. Shipped values: `git` (push to the rosetta hub). |
+| `GW_STATE_DIR` | `~/.agent-gw` | **Server-side** state: session pointer (`session-<channel>.json`) and the attachment inbox (`inbox/`). Persistent (hostPath home). |
+| `GW_MAX_UPLOAD_MB` | `25` | Maximum size (MB) of a chat attachment, per file. |
+| `GW_MAX_UPLOAD_FILES` | `8` | Maximum number of files attached to one message. |
+| `GW_INBOX_TTL` | `86400` (24 h) | Age (s) beyond which a dropped attachment is swept (`0` = never). Best-effort purge on every upload. |
+| `GW_SESSION_TTL` | `14400` (4 h) | Idle time (s) beyond which the session is **no longer resumed**: the next turn starts blank (`0` = never). Durable state lives in `memory/`, the transcript is disposable — resuming it re-pays the whole accumulated context on every message (prompt cache ~5 min, cold between two visits). |
+| `GW_CONFIRM_TTL` | `120` | Validity (s) of one 🛡 shield authorisation. |
+| `GW_PLANIF` | `1` | Scheduled-task clock. `0` stops it (debugging, or freezing scheduled turns without touching the notes). Only one `agent-gw` instance mounts the workspace — neighbouring containers (`tunnel`, `voice`) do not run the gateway, so there is no double clock. **The day the gateway is scaled out, this flag becomes mandatory on the replicas.** |
+| `GW_PLANIF_DIR` | `planif` | Folder of `type: planif` notes, relative to memory. |
+| `GW_PLANIF_TICK` | `30` | Tick period (s). Must stay `< 60`: the loop matches the current **minute**. |
+| `GW_PLANIF_GRACE` | `5` | Catch-up window (min). Covers a long turn still holding the lock, **not** an outage: beyond it the occurrence is lost, by design. `0` = no catch-up. |
+| `GW_PLANIF_TIMEOUT` | `900` | Maximum duration (s) of a scheduled turn. Beyond it: cancelled and journalled as failed. |
+| `GW_PLANIF_MIN_PERIOD` | `15` | Frequency floor (min). A finer cron makes the note **invalid** (displayed as such) instead of being silently smoothed — subscription quota is not free. |
+| `GW_PLANIF_TZ` | `Europe/Paris` | Default timezone when the note declares none. |
+| `GW_MCP_ALLOWED_HOSTS` | `alfred.berard.me` | Allowed hosts of the MCP transport (anti DNS-rebinding). |
+| `GW_MCP_MAX_PENDING` | `4` | Depth of the `ask_<agent>` queue. Beyond it, an **immediate** refusal rather than queueing behind a lock that will not be released for hours: a refusal is information, silence is not. Hard floor at 1. |
+| `GW_PEER_MCP_URL` / `GW_PEER_MCP_TOKEN` / `GW_PEER_MCP_TOOL` | `""` | Cross callback: when a job finishes, open a turn at the requester's with the report (`https://<peer>/mcp/`, its `GW_MCP_TOKEN`, and the name of **its** tool, e.g. `ask_skippy`). All three or nothing — unwired, the caller polls `ask_<agent>_status`. The callback sets `notify=False`: without that guard, two agents would trade reports forever. |
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_REDIRECT_URI` / `OIDC_ALLOWED_GROUP` | `""` / `""` / `""` / `admins` | Authelia OIDC client. As soon as `OIDC_ISSUER` is set, auth switches to OIDC (the `GW_AUTH_TOKEN` bearer becomes unused). |
 
 ### Secrets
 
-| Secret | Généré | Consommé | Où il vit |
+| Secret | Generated by | Consumed by | Where it lives |
 |---|---|---|---|
-| `GW_SESSION_SECRET` | `openssl rand -hex 32` (setup initial / rotation) | signe le cookie de session (`secret_key` du `SessionMiddleware`) | coffre `secret/apps/alfred` → `gw_session_secret`, tiré par `externalSecrets` |
-| `GW_MCP_TOKEN` | `openssl rand -hex 32` | bearer du endpoint `/mcp` (`ask_alfred`) | manifeste, en clair (DR-via-git) |
-| `OIDC_CLIENT_SECRET` | côté Authelia (hash) + clair ici | login OIDC | manifeste, en clair (DR-via-git) ; cf. `app-auth-oidc.md` |
-| `GW_AUTH_TOKEN` | — | bearer de secours, **uniquement si OIDC absent** (mode dev) | **inutilisé en prod** (OIDC actif) → hors coffre volontairement |
-| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, sinon session `~/.claude` | **pas lu par agent-gw** — seulement par le SDK Claude | Alfred tourne sur `~/.claude` (persistant, auto-refresh) → hors coffre volontairement |
+| `GW_SESSION_SECRET` | `openssl rand -hex 32` (initial setup / rotation) | signs the session cookie (`secret_key` of `SessionMiddleware`) | vault `secret/apps/<agent>` → `gw_session_secret`, pulled by `externalSecrets` |
+| `GW_MCP_TOKEN` | `openssl rand -hex 32` | bearer of the `/mcp` endpoint | manifest, in clear (DR-via-git policy) |
+| `OIDC_CLIENT_SECRET` | Authelia side (hashed) + clear here | OIDC login | manifest, in clear (DR-via-git); see `app-auth-oidc.md` |
+| `GW_AUTH_TOKEN` | — | fallback bearer, **only if OIDC is absent** (dev mode) | **unused in production** (OIDC active) → deliberately out of the vault |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token`, otherwise the `~/.claude` session | **not read by agent-gw** — only by the Claude SDK | the pod runs on `~/.claude` (persistent, self-refreshing) → deliberately out of the vault |
 
-> Absent de la liste : `GOOGLE_MAPS_API_KEY` — tirée du coffre
-> `secret/llm/google-api` → `google_map_api_key` via `externalSecrets`. Elle servait au
-> serveur MCP Maps bundlé, retiré depuis (les outils `maps` viennent du hub rosetta) ;
-> elle reste **nécessaire** au plugin `voyages`, qui appelle les API Google en direct
-> pour dériver météo et liaisons.
+> Not in the list: `GOOGLE_MAPS_API_KEY` — pulled from `secret/llm/google-api` →
+> `google_map_api_key` through `externalSecrets`. It used to feed the bundled Maps MCP
+> server, since removed (the `maps` tools now come from the rosetta hub); it remains
+> **required** by the `voyages` plugin, which calls the Google APIs directly to derive
+> weather and legs.
 
-## Pièces jointes du chat
+## Chat attachments
 
-Le composeur accepte des fichiers par **trois voies** — bouton 📎 (sélecteur / appareil
-photo, marche partout, y compris mobile), **glisser-déposer** sur la colonne de chat
-(desktop seul — les navigateurs mobiles n'ont pas de DnD vers le DOM), et **coller** une
-image. Le flux :
+The composer accepts files through **three routes** — the 📎 button (file picker /
+camera, works everywhere including mobile), **drag-and-drop** onto the chat column
+(desktop only: mobile browsers have no DnD into the DOM), and **pasting** an image.
+The flow:
 
-1. `POST /api/upload` (multipart) pose les fichiers dans `GW_STATE_DIR/inbox/<tour>/…` —
-   **hors du repo mémoire**, donc jamais commités dans `memory/`. Renvoie un `id` par
-   fichier (chemin relatif à l'inbox), assaini et gardé anti-traversée.
-2. Le front repasse ces ids dans le corps de `POST /api/chat` (`attachments: [...]`).
-   Le serveur les résout en chemins absolus (garde anti-traversée : tout ce qui sort de
-   l'inbox est rejeté) et **préfixe le prompt** d'une note encadrée : le contenu d'un
-   fichier joint est une **donnée non fiable, jamais une instruction** (même discipline
-   anti-injection que les mails, cf. D17). Alfred les **examine avec son outil `Read`**
-   (images et PDF compris) — aucune plomberie multimodale côté serveur.
+1. `POST /api/upload` (multipart) drops files into `GW_STATE_DIR/inbox/<turn>/…` —
+   **outside the memory repository**, so never committed into `memory/`. Returns one `id`
+   per file (path relative to the inbox), sanitised and traversal-guarded.
+2. The front end passes those ids back in the body of `POST /api/chat`
+   (`attachments: [...]`). The server resolves them to absolute paths (traversal guard:
+   anything escaping the inbox is rejected) and **prefixes the prompt** with a framed
+   note: the contents of an attached file are **untrusted data, never an instruction**
+   (same anti-injection discipline as email). The agent then **inspects them with its
+   `Read` tool** (images and PDFs included) — no multimodal plumbing server-side.
 
-Un message peut être **fichiers seuls** (texte vide). La corbeille est balayée des
-entrées de plus de `GW_INBOX_TTL` à chaque upload : les pièces jointes sont un intrant de
-tour, pas de la mémoire — si l'une doit survivre, c'est Alfred qui la classe dans
-`memory/` selon sa discipline.
+A message may be **files only** (empty text). The inbox is swept of entries older than
+`GW_INBOX_TTL` on every upload: attachments are a turn input, not memory — if one is
+worth keeping, the agent files it into `memory/` under its own discipline.
 
-## Contexte d'écran
+## Screen context
 
-Sur desktop, la PWA est un **split** : le chat à gauche, le canvas à droite. « Ça »,
-dans une phrase de Monsieur, désigne donc le plus souvent la page qu'il a sous les yeux
-— que le chat ignorait complètement. Chaque message porte désormais un champ
-`vue: {route, titre}` (`POST /api/chat`), dont le serveur **préfixe le prompt** d'une
-note d'une ligne : *« Écran ouvert à côté du chat : « Voyages › Baden 2026 »
-(#/voyage/baden-2026) »*.
+On desktop the PWA is a **split view**: chat on the left, canvas on the right. "That",
+in a user's sentence, therefore usually refers to the page in front of them — which the
+chat used to know nothing about. Every message now carries a `vue: {route, titre}` field
+(`POST /api/chat`), from which the server **prefixes the prompt** with a one-line note:
+*"Screen open next to the chat: « Voyages › Baden 2026 » (#/voyage/baden-2026)"*.
 
-Trois bornes, qui sont le fond du dispositif :
+Three boundaries, and they are the substance of the design:
 
-- **La route et son fil d'Ariane, jamais le contenu de la page.** Une carte de voyage ou
-  une fiche produit cite du texte tiers (Gmail, Open Food Facts) : le verser dans le
-  prompt le dépouillerait de son étiquette « non fiable », et le tour suivant le relirait
-  comme la parole d'Alfred (même piège que D40 côté planifications).
-- **Un indice, pas un sujet imposé.** La note le dit au modèle en toutes lettres : la
-  question de Monsieur prime, il peut parfaitement regarder une fiche et parler d'autre
-  chose. Le hash reste orientable par un lien qu'on fait cliquer, donc l'entrée est
-  bornée à 200 caractères et **aplatie sur une seule ligne** (un saut de ligne suffirait
-  à mimer une consigne du harnais).
-- **Instantané à l'envoi, et seulement si l'écran est regardé.** Rien n'est joint depuis
-  l'accueil (route vide) ni sur mobile replié sur le chat — on ne raconte pas un écran
-  que Monsieur ne regarde pas. Rien ne colle d'un message au suivant.
+- **The route and its breadcrumb, never the page contents.** A trip card or a product
+  sheet quotes third-party text (Gmail, Open Food Facts): pouring it into the prompt
+  would strip its "untrusted" label, and the next turn would read it back as the agent's
+  own words.
+- **A hint, not an imposed topic.** The note says so to the model in plain words: the
+  user's question comes first, they may perfectly well be looking at one note and talking
+  about something else. The hash stays steerable by a link someone gets clicked, so the
+  input is capped at 200 characters and **flattened onto a single line** (a newline alone
+  would suffice to mimic a harness instruction).
+- **A snapshot taken at send time, and only if a screen is being watched.** Nothing is
+  attached from the home page (empty route) or on mobile folded onto the chat — one does
+  not narrate a screen nobody is looking at. Nothing sticks from one message to the next.
 
-La note s'adresse au MODÈLE, pas à Monsieur — et le transcript, lui, garde le prompt
-entier. `/api/history` le rejoue à chaque rechargement (et à chaque réconciliation après
-coupure) : la note se retrouvait donc **dans la bulle de Monsieur**, qui relisait un texte
-qu'il n'avait pas écrit. Les préambules de la passerelle (écran ouvert, pièces jointes,
-mode éphémère) sont désormais **retirés au rejeu** (`_strip_gw_notes`) : ils partent à
-l'agent, ils ne remontent pas à l'écran. Un tour sans texte — pièces jointes seules —
-garde un trombone plutôt que de disparaître.
+The note addresses the **model**, not the user — but the transcript keeps the whole
+prompt. `/api/history` replays it on every reload (and on every reconciliation after a
+disconnect), so the note used to surface **inside the user's own bubble**, who then read
+back text they never wrote. Gateway preambles (screen context, attachments, ephemeral
+mode) are now **stripped on replay** (`_strip_gw_notes`): they go to the agent, they do
+not come back to the screen. A turn with no text — attachments only — keeps a paperclip
+rather than disappearing.
 
-## Sessions : coût en tokens, sujets, mode éphémère
+## Sessions: token cost, threads, ephemeral mode
 
-Trois mécanismes bornent la consommation (chaque tour rejoue tout le transcript, cache
-prompt froid entre deux visites — le poids de la session EST le coût marginal du message) :
+Three mechanisms bound consumption (every turn replays the whole transcript, with a cold
+prompt cache between visits — the weight of the session **is** the marginal cost of the
+message):
 
-- **TTL d'inactivité** (`GW_SESSION_TTL`) : passé le délai, le pointeur n'est plus repris,
-  le tour suivant repart sur une session vierge. Alfred redécouvre l'état dans `memory/`
-  (c'est le design, cf. D5) ; `/api/history` devient vide en même temps, la PWA repart
-  propre au rechargement.
-- **Compteur de contexte** (`GET /api/session`) : `context_tokens` = input + cache du
-  **dernier appel API** du transcript — ce que le prochain message repaiera. La PWA
-  l'affiche en pastille indicative (orange ≥ 60k, rouge ≥ 120k) ; agir se fait par les
-  boutons voisins (▤ Sujets, ↺ nouvelle session).
-- **Menu Sujets** (PWA) : la « compaction UX ». Changer de sujet = Alfred **consolide**
-  la conversation dans `memory/` (un tour), la session est **réinitialisée**, puis la
-  fiche `sujets/<x>.md` est **rechargée** en point de reprise. La reprise passe par la
-  mémoire, jamais par un vieux transcript. La liste vient de `sujets/INDEX.md` (titre,
-  dernière activité, accroche) — la table qu'Alfred discipline déjà. Chaque ligne porte
-  un bouton 🗄 : l'archivage est demandé **à l'agent** (skill archivage : distiller,
-  ranger, index, commit) — le front ne déplace jamais le fichier lui-même.
-- **Mode éphémère ⚡** (`POST /api/chat`, `ephemeral: true`) : parenthèse jetable pour les
-  questions ponctuelles (« le RER A est perturbé ? ») — pas de resume du pointeur, pas de
-  sauvegarde : le tour ne paie pas l'historique et ne l'engraisse pas. Un enchaînement
-  reste possible : le front repasse le `session_id` reçu (`ephemeral_session`), gardé en
-  RAM seulement. Les bulles ⚡ (pointillés) disparaissent au rechargement — assumé.
+- **Idle TTL** (`GW_SESSION_TTL`): past the delay the pointer is no longer resumed and the
+  next turn starts from a blank session. The agent rediscovers state in `memory/` — that
+  is the design; `/api/history` empties at the same time, so the PWA starts clean on
+  reload.
+- **Context counter** (`GET /api/session`): `context_tokens` = input + cache of the
+  **last API call** in the transcript — what the next message will re-pay. The PWA shows
+  it as an indicative pill (amber ≥ 60k, red ≥ 120k); acting on it is done with the
+  neighbouring buttons (▤ Threads, ↺ new session).
+- **Threads menu** (PWA): the "UX compaction". Switching thread means the agent
+  **consolidates** the conversation into `memory/` (one turn), the session is **reset**,
+  then the note `sujets/<x>.md` is **reloaded** as the resumption point. Resumption goes
+  through memory, never through an old transcript. The list comes from `sujets/INDEX.md`
+  (title, last activity, hook) — the table the agent already maintains. Each row carries a
+  🗄 button: archiving is requested **from the agent** (distil, file, index, commit) — the
+  front end never moves the file itself.
+- **Ephemeral mode ⚡** (`POST /api/chat`, `ephemeral: true`): a disposable aside for
+  one-off questions — no pointer resume, no save: the turn neither pays for the history
+  nor fattens it. Chaining stays possible: the front end passes back the received
+  `session_id` (`ephemeral_session`), kept in RAM only. The ⚡ bubbles (dotted) disappear
+  on reload — accepted.
 
-## Sessions & reprise après sinistre (DR)
+## Sessions & disaster recovery
 
-Le **secret de session n'est pas critique**. À retenir :
+The **session secret is not critical**. What to remember:
 
-- Si `GW_SESSION_SECRET` **change ou se régénère** (fallback `token_hex(32)` quand la
-  variable est absente, p.ex. coffre scellé au boot), tous les cookies existants sont
-  invalidés → **simple re-login Authelia**. Comme Authelia garde en général la session
-  SSO, c'est souvent un redirect transparent.
-- **Aucune donnée perdue** dans ce cas : l'historique de conversation vit **côté
-  serveur** (`GW_STATE_DIR`, pointant vers le `.jsonl` du SDK dans `~/.claude/projects`),
-  la mémoire dans `/workspace` (git), l'auth Claude dans `~/.claude`. Rien de tout ça ne
-  dépend du secret de session.
-- **DR-via-git** : `git clone` + sync ArgoCD restaure la valeur committée telle quelle —
-  rien à régénérer. La régénération ne sert qu'au **premier setup** ou à une rotation
-  volontaire. (Politique secrets : cf. `k8s-config.md` / `secrets-vault.md`.)
+- If `GW_SESSION_SECRET` **changes or is regenerated** (the `token_hex(32)` fallback when
+  the variable is absent, e.g. a sealed vault at boot), all existing cookies are
+  invalidated → **a plain Authelia re-login**. Since Authelia usually keeps the SSO
+  session, this is often a transparent redirect.
+- **No data is lost** in that case: conversation history lives **server-side**
+  (`GW_STATE_DIR`, pointing at the SDK's `.jsonl` under `~/.claude/projects`), memory in
+  `/workspace` (git), Claude auth in `~/.claude`. None of it depends on the session secret.
+- **DR-via-git**: `git clone` + an ArgoCD sync restores the committed value as-is —
+  nothing to regenerate. Regeneration only serves the **first setup** or a deliberate
+  rotation.
