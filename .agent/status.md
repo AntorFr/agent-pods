@@ -18,19 +18,23 @@ Deux chantiers livrés coup sur coup :
   code refuse franchement. Les manifestes déclarent ces valeurs — dans cet ordre, jamais
   l'inverse. `bin_test` tient la garde pour que la faute ne revienne pas.
 
-**Dettes de transition — toutes bloquées sur le MÊME verrou** (2026-08-20). Les
-manifestes sont passés en `HUB_URL` / `HUB_TOKEN_URL`, et le clone d'Alfred lance bien
-`mcp-bridge`. Ne restent que des replis, et ils tombent **ensemble**, en une seule
-livraison, le jour où le clone déployé du **cockpit** aura rattrapé :
+**Dettes de transition — plus AUCUN consommateur, les replis sont morts** (2026-08-20).
+Mesuré sur les trois pods, pas supposé : les manifestes posent `HUB_URL` /
+`HUB_TOKEN_URL` et **aucun** ne porte plus une variable `ROSETTA_*` ; les `.mcp.json`
+déployés d'Alfred et du cockpit lancent `mcp-bridge` et interpolent `${HUB_USER_TOKEN}` ;
+Nestor n'a pas de `.mcp.json`. Ce qui reste est donc du **code mort**, pas une béquille :
 
 - l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ;
-- l'injection du jeton de session sous les deux noms (`_run_alfred`) — le `.mcp.json`
-  d'`origin` est passé à `${HUB_USER_TOKEN}`, le repli tombe quand le clone déployé
-  l'aura pris ;
+- l'injection du jeton de session sous les deux noms (`_run_alfred`) ;
 - la lecture des `ROSETTA_*` dans `mcp-bridge`, `trace-geom` et `git-credential-hub` ;
-- le repli `ALFRED_VOICE_*` dans agent-voice — celui-là est déjà mort (plus personne ne
-  pose ces variables), il attend juste de partir avec les autres plutôt que de coûter
-  un cycle de déploiement pour lui seul.
+- le repli `ALFRED_VOICE_*` et la valeur de backend `"alfred"` dans agent-voice.
+
+**Pourquoi on ne les retire pas tout de suite, et ce n'est pas de la timidité** : le
+clone déployé du cockpit porte **44 commits non publiés**, dont un (`b645238`) réécrit
+`.mcp.json` avec les anciens noms. Le jour où Skippy-pod rebase et publie, ce commit
+repasse — et c'est exactement ce que les replis absorbent. Les supprimer avant sa
+publication, c'est transformer un conflit de texte en panne d'outils. Ils partiront en
+une seule livraison **après** son prochain push.
 
 ⚠️ **Le verrou n'est pas technique, il est chez Skippy-pod** : son clone du cockpit porte
 **44 commits non publiés**, qui attendent un bouclier (il le sait, c'est écrit dans son
