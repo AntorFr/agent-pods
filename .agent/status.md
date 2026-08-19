@@ -25,7 +25,8 @@ livraison, le jour où le clone déployé du **cockpit** aura rattrapé :
 
 - l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ;
 - l'injection du jeton de session sous les deux noms (`_run_alfred`) — le `.mcp.json`
-  déployé du cockpit interpole encore `${ROSETTA_USER_TOKEN}` dans ses en-têtes ;
+  d'`origin` est passé à `${HUB_USER_TOKEN}`, le repli tombe quand le clone déployé
+  l'aura pris ;
 - la lecture des `ROSETTA_*` dans `mcp-bridge`, `trace-geom` et `git-credential-hub` ;
 - le repli `ALFRED_VOICE_*` dans agent-voice — celui-là est déjà mort (plus personne ne
   pose ces variables), il attend juste de partir avec les autres plutôt que de coûter
@@ -38,12 +39,23 @@ volontairement** — 13 conflits sur 43 commits, dans du travail dont je n'ai pa
 contexte. Ce n'est pas à faire de l'extérieur : c'est une session avec Monsieur, bouclier
 armé. Le pod est resté intact.
 
-Quand il publiera, un conflit trivial l'attend sur `.mcp.json` (j'ai poussé le passage à
-`mcp-bridge` sur `origin`). La résolution est déjà arbitrée, sur mesure et non sur
-mémoire : garder SON bloc `unifi` (`unifi-agent.mcp.berard.me` en Basic — vérifié le
-2026-08-20, l'hôte résout et un `initialize` MCP répond **200**, contrairement à ce
-qu'affirmait une note d'`origin` datée du 11/08), garder le `ha` d'`origin`, et adopter
-`mcp-bridge`.
+Quand il publiera, un conflit l'attend sur `.mcp.json` — et il est désormais **sans
+enjeu** : le `.mcp.json` de son clone a été aligné sur `origin` (fichier seul, ses 44
+commits intacts), donc c'est la version d'`origin` qui fait foi des deux côtés.
+
+> **Le chemin `unifi-agent` n'existe plus** (2026-08-20). Il contournait l'OAuth parce
+> qu'un pod headless ne savait pas s'authentifier — un manque comblé DÈS LE LENDEMAIN de
+> sa création par le fork `antor.2` du proxy (mode trusted-token). Il restait donc une
+> voie plus faible vers l'admin de l'UDM, sans nécessité, trois jours de plus. Vérifié
+> avant de démonter, par le code même de l'agent : le jeton de Skippy porte l'audience
+> `unifi.mcp.berard.me` et un `initialize` MCP en Bearer répond **200**. Consommateur
+> migré d'abord, chemin retiré ensuite — aucune fenêtre sans réseau.
+>
+> ⚠️ Piège rencontré, et il resservira : les applications ArgoCD sont en `automated: {}`
+> **sans `prune`**. Supprimer un manifeste ne supprime pas ses objets, et une synchro
+> déclenchée sur une révision encore en cache les **recrée** — c'est arrivé, 20 s après
+> la suppression. Le geste correct : pousser, ATTENDRE que l'application affiche la
+> bonne révision, puis supprimer à la main.
 
 **Prochaines étapes :**
 - [ ] **Un job de test dans la CI, avant le build.** Aujourd'hui `docker-publish.yml`
