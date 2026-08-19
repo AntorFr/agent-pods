@@ -1,14 +1,30 @@
 # Status — agent-pods
-> MàJ : 2026-08-19
+> MàJ : 2026-08-20
 
-**État :** Trois images en production (`agent-gw`, `claude-pod`, `agent-voice`), trois
-corps servis par la même `agent-gw` — Alfred, Skippy, Nestor — l'identité venant du
-`/workspace` monté, jamais de l'image. **`agent-gw` 0.76.0 déployée sur les trois**
-(2026-08-19). Dernier chantier livré : **l'arbre des plugins**. Un plugin porte désormais
-tout ce qu'il apporte (contrat, API, exécutables, câblage) et déclare sa **sorte** —
-`socle` (toujours), `app` (`GW_APPS`), `outil` (`GW_TOOLS`) ; le corps n'en connaît plus
-aucun par son nom. `git` est le premier `outil` : publier n'est pas un écran, et tous les
-corps n'y ont pas droit.
+**État :** Trois images en production, **déployées** — `agent-gw` 0.77.0 sur les trois
+corps (Alfred, Skippy, Nestor), `claude-pod` 0.6.0, `agent-voice` 0.2.0. L'identité vient
+du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
+
+Deux chantiers livrés coup sur coup :
+
+- **L'arbre des plugins.** Un plugin porte tout ce qu'il apporte (contrat, API,
+  exécutables, câblage) et déclare sa **sorte** — `socle` (toujours), `app` (`GW_APPS`),
+  `outil` (`GW_TOOLS`) ; le corps n'en connaît plus aucun par son nom. `git` est le
+  premier `outil` : publier n'est pas un écran, et tous les corps n'y ont pas droit.
+- **Le dé-marquage.** Plus aucun déploiement privé en dur dans une image publique :
+  `alfred-voice` → `agent-voice`, `rosetta-bridge` → `mcp-bridge`,
+  `git-credential-rosetta` → `git-credential-hub`, `ROSETTA_*` → `HUB_*`. Surtout, les
+  **défauts** qui pointaient `berard.me` / `intra.sberard.fr` ont disparu : absents, le
+  code refuse franchement. Les manifestes déclarent ces valeurs — dans cet ordre, jamais
+  l'inverse. `bin_test` tient la garde pour que la faute ne revienne pas.
+
+**Dettes de transition à solder** (pas urgentes, mais elles s'oublient) :
+- l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ; les `.mcp.json`
+  d'Alfred et du cockpit sont passés au nouveau nom, l'alias tombe quand les clones
+  déployés l'auront pris ;
+- les replis `ROSETTA_*` dans le code, et `ALFRED_VOICE_*` dans agent-voice ;
+- les manifestes disent encore `ROSETTA_URL` / `ROSETTA_TOKEN_URL` : les renommer en
+  `HUB_*` permettra de retirer les replis ci-dessus.
 
 **Prochaines étapes :**
 - [ ] **Un job de test dans la CI, avant le build.** Aujourd'hui `docker-publish.yml`
