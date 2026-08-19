@@ -182,8 +182,8 @@ MCP_DESCRIPTION = os.environ.get("GW_MCP_DESCRIPTION", "").strip() or (
     "record a note, or ask what the user noted about something."
 )
 # Garde anti-rebinding DNS de FastMCP : les hôtes sous lesquels ce corps accepte
-# d'être appelé. AUCUN DÉFAUT — le défaut était `<agent>.berard.me`, c'est-à-dire
-# mon domaine dans une image publique. Vide, seuls les hôtes locaux ajoutés plus
+# d'être appelé. AUCUN DÉFAUT — il valait `<agent>.<mon domaine>`, c'est-à-dire
+# mon déploiement dans une image publique. Vide, seuls les hôtes locaux ajoutés plus
 # bas passent : un pod qui expose son /mcp doit déclarer son nom, et c'est très
 # bien ainsi — cette liste EST la garde, la deviner n'a jamais eu de sens.
 MCP_ALLOWED_HOSTS = [

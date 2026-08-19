@@ -23,13 +23,13 @@ dépôt — appartient à ton workspace.
 Le `setup` de ce plugin pose le helper à **chaque démarrage** du corps :
 
 ```
-git config --global credential.https://rosetta.mcp.berard.me.helper rosetta
+git config --global "credential.$HUB_URL.helper" hub
 ```
 
 Il ne reste qu'à faire pointer le dépôt vers le hub, une fois par clone :
 
 ```
-git remote set-url origin https://rosetta.mcp.berard.me/git/<owner>/<repo>
+git remote set-url origin "$HUB_URL/git/<owner>/<repo>"
 ```
 
 ⚠️ **Ne cherche pas un outil MCP `git_*` : il n'y en a pas.** La surface de cet addon

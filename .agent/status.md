@@ -1,6 +1,27 @@
 # Status — agent-pods
 > MàJ : 2026-08-20
 
+🗑️ **`memory-sync` est RETIRÉ du corps — À TAGUER (2026-08-20).** La mémoire d'Alfred a
+quitté git le jour même : détrackée, posée en `.gitignore` et **expulsée de tout
+l'historique** (`git filter-repo`, force-push — 749 commits → 126, `.git` de 108 Mo →
+496 Ko). C'est l'exécution de D49 chez Alfred, elle-même issue du § 3 de son dossier de
+refonte, tranché le 2026-08-02 : *« un dépôt → deux magasins »*, le cerveau reste
+versionné, la mémoire vit sur le système de fichiers avec des snapshots ZFS pour filet.
+
+L'outil encapsulait la boucle pull-rebase / commit / push d'une mémoire **multi-auteur**.
+Ses deux raisons d'être sont tombées l'une après l'autre : la co-édition d'abord (la
+machine de dev n'écrit plus dans la mémoire), puis git lui-même. Retiré plutôt que gardé
+en no-op — un outil qui ne fait rien mais qu'on peut encore appeler est pire qu'absent.
+Touchés : `bin/memory-sync` (supprimé), `Dockerfile`, `test/bin_test.py` (le banc vérifie
+désormais son **absence**), `plugins/README.md`, `plugins/git/setup` (la leçon sur le
+helper scopé reste, la référence à l'outil est datée). `python test/bin_test.py` → **BIN OK**.
+
+> ⚠️ **Le déploiement ne peut PAS revenir en arrière sans casse.** Le CLAUDE.md d'Alfred ne
+> mentionne plus l'outil et son `memory/` est ignoré : une image antérieure le rechercherait
+> en vain. Et surtout, la ligne `memory/` du `.gitignore` d'Alfred ne se retire jamais —
+> dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
+> l'historique réécrit **supprimerait la mémoire vivante du NAS**.
+
 **État :** Trois images en production, **déployées** — `agent-gw` 0.77.0 sur les trois
 corps (Alfred, Skippy, Nestor), `claude-pod` 0.6.0, `agent-voice` 0.2.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
@@ -14,7 +35,7 @@ Deux chantiers livrés coup sur coup :
 - **Le dé-marquage.** Plus aucun déploiement privé en dur dans une image publique :
   `alfred-voice` → `agent-voice`, `rosetta-bridge` → `mcp-bridge`,
   `git-credential-rosetta` → `git-credential-hub`, `ROSETTA_*` → `HUB_*`. Surtout, les
-  **défauts** qui pointaient `berard.me` / `intra.sberard.fr` ont disparu : absents, le
+  **défauts** qui pointaient mon propre domaine ont disparu : absents, le
   code refuse franchement. Les manifestes déclarent ces valeurs — dans cet ordre, jamais
   l'inverse. `bin_test` tient la garde pour que la faute ne revienne pas.
 
@@ -52,7 +73,7 @@ commits intacts), donc c'est la version d'`origin` qui fait foi des deux côtés
 > sa création par le fork `antor.2` du proxy (mode trusted-token). Il restait donc une
 > voie plus faible vers l'admin de l'UDM, sans nécessité, trois jours de plus. Vérifié
 > avant de démonter, par le code même de l'agent : le jeton de Skippy porte l'audience
-> `unifi.mcp.berard.me` et un `initialize` MCP en Bearer répond **200**. Consommateur
+> de l'hôte OAuth d'UniFi, et un `initialize` MCP en Bearer répond **200**. Consommateur
 > migré d'abord, chemin retiré ensuite — aucune fenêtre sans réseau.
 >
 > ⚠️ Piège rencontré, et il resservira : les applications ArgoCD sont en `automated: {}`

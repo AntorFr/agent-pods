@@ -82,7 +82,7 @@ publié = un bouclier. Deux ou trois armements par session, pas vingt.
 quitte jamais le hub — l'invariant de la l. 26 est intact, son coût a disparu.
 
 ```
-git remote set-url origin https://rosetta.mcp.berard.me/git/AntorFr/<repo>
+git remote set-url origin "$HUB_URL/git/<owner>/<repo>"
 ```
 
 > **La procédure complète a déménagé — et c'est le fond, pas la forme.** Elle vit

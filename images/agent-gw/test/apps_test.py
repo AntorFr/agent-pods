@@ -355,7 +355,7 @@ for var in ("GW_AGENT", "GW_MCP_DESCRIPTION", "GW_MCP_ALLOWED_HOSTS"):
 m = importlib.reload(main)
 check("défaut -> alfred (le majordome ne bouge pas)", m.AGENT == "alfred")
 check("outils ask_alfred + son statut", sorted(tools_of(m)) == ["ask_alfred", "ask_alfred_status"])
-# L'hôte n'est PLUS dérivé de l'agent : le défaut valait `<agent>.berard.me`,
+# L'hôte n'est PLUS dérivé de l'agent : le défaut valait `<agent>.<domaine>`,
 # c'est-à-dire un domaine privé dans une image publique. Vide par défaut — seuls
 # les hôtes locaux, ajoutés par le code, restent acceptés. Un corps qui expose son
 # /mcp au-dehors DOIT déclarer son nom, et c'est très bien : cette liste EST la
