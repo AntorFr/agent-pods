@@ -1,0 +1,25 @@
+#!/bin/sh
+# setup du plugin `git` — câble le credential helper sur le hub rosetta.
+#
+# Lancé par le corps à CHAQUE démarrage, et seulement si `git` est dans GW_TOOLS :
+# c'est là toute la modularité. Un corps qui n'a pas le droit de publier n'a pas le
+# helper, donc `git push` ne trouve aucun credential et échoue — ce qui est le
+# comportement voulu, pas un accident.
+#
+# Pourquoi ici et pas dans un manifeste k8s ni dans une commande tapée à la main :
+# les deux commandes de câblage vivaient dans un document de conception, à retaper
+# après chaque recréation de pod. Personne ne s'en apercevait avant le premier push
+# raté, des jours plus tard. Un setup idempotent versionné avec le binaire qu'il
+# câble ne peut pas être oublié.
+#
+# ⚠️ Le helper est scopé SUR L'HÔTE DU HUB, jamais global. Un helper global
+# répondrait aussi pour github.com et prendrait la place du credential légitime.
+set -eu
+
+HUB="${ROSETTA_URL:-https://rosetta.mcp.berard.me}"
+
+# Le nom compte : `credential.<hub>.helper rosetta` fait chercher un exécutable
+# nommé git-credential-rosetta sur le PATH (posé par le bin/ de ce plugin).
+git config --global "credential.${HUB}.helper" rosetta
+
+echo "helper de credential câblé sur ${HUB}"

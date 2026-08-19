@@ -1,0 +1,5 @@
+{
+  "name": "git",
+  "description": "Publier du code depuis un pod qui ne detient aucun credential GitHub : le push part vers le hub rosetta, qui relaie. Livre par l'image avec le credential helper qui decide si le push part.",
+  "version": "1.0.0"
+}

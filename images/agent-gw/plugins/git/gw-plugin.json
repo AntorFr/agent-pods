@@ -1,0 +1,5 @@
+{
+  "id": "git",
+  "kind": "outil",
+  "description": "Publier du code : le pod pousse vers le hub rosetta, qui relaie vers GitHub. Outil et non app — publier n'est pas un ecran, et tous les corps n'y ont pas droit."
+}
