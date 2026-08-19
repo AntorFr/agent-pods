@@ -1,7 +1,13 @@
 # agent-gw — notes de refonte (design system + plateforme)
 
-> Direction arrêtée en session de design (mockups à l'appui, pas encore implémentée).
-> Sert de cahier des charges quand on attaque le vrai code. À faire évoluer.
+> **Statut : LIVRÉ — ce document est une archive de conception.** La direction décrite ici
+> tourne en production depuis 0.36/0.37 : design system, coque du lanceur, skins par agent
+> (`GW_THEME`), thèmes clair/sombre. Ce qui fait foi est désormais le code
+> (`frontend/src/design-system.css`, `frontend/src/launcher/`) ; on garde ce texte pour le
+> POURQUOI des choix, pas pour l'état du produit.
+>
+> Deux points du palier 2 restent non faits, et c'est assumé : réglettes graduées et
+> équerres d'angle — pur décor, demandant du markup neuf.
 
 ## Architecture — contenu vs présentation vs comportement
 

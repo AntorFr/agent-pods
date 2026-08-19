@@ -82,9 +82,16 @@ publié = un bouclier. Deux ou trois armements par session, pas vingt.
 quitte jamais le hub — l'invariant de la l. 26 est intact, son coût a disparu.
 
 ```
-git config credential.https://rosetta.mcp.berard.me.helper rosetta
 git remote set-url origin https://rosetta.mcp.berard.me/git/AntorFr/<repo>
 ```
+
+> **La procédure complète a déménagé — et c'est le fond, pas la forme.** Elle vit
+> désormais dans le **plugin `git`** de l'image (`plugins/git/skills/git-push/`), donc
+> elle descend avec le binaire qui l'applique et ne peut plus en dériver. Elle n'est
+> chargée que par un corps qui a `git` dans `GW_TOOLS` : publier n'est pas donné à tous.
+> Le `git config` du helper n'est plus à taper — le `setup` du plugin le pose à chaque
+> démarrage, ce qu'une commande manuelle ne survivait pas à la recréation d'un pod.
+> Ce qui suit reste vrai, mais c'est la skill qui fait foi.
 
 ⚠️ **Ne cherche pas un outil MCP : il n'y en a pas.** La surface de cet addon est du **HTTP
 nu** (`info/refs`, `git-receive-pack`, `git-upload-pack`), donc invisible dans une liste
@@ -231,28 +238,27 @@ Maquette de référence (5 écrans, hors repo) : artefact « Skippy — charte g
       `GITHUB_TOKEN` d'Actions. La chaîne `tag → CI → image → bump → ArgoCD` tient,
       et `actions_run` disparaît de la surface. Confirmation empirique gratuite au
       premier `repo_commit` réel — inutile de monter une App juste pour l'éprouver.
-- [ ] **Créer la GitHub App** (geste navigateur) : permissions `contents: write`,
-      `metadata: read`, `actions: read`, **`workflows: write`** ; jetons utilisateur
-      expirants activés (refresh token) ; installée sur tous les repos.
-- [ ] Addon `github` dans `rosetta-mcp` (le gros morceau)
-- [ ] `github_guard.py` + son `settings.json`
-- [x] `GW_APPS` dans agent-gw — **fait, non tagué.** Les modules du lanceur sont
-      sélectionnables par env, publiés sur `/api/version`, lus au boot ; tuile **et**
-      route masquées ensemble. La mémoire reste hors module. Défaut = jeu historique
-      (Alfred ne bouge pas). C'est la brique commune aux deux corps.
-- [ ] Vue `repos` : tableau des `.agent/status.md` de la flotte, lus depuis origin —
-      maquette validée (activité 30 j en sparkline, 10 derniers builds, « attendent un geste »
-      comme seule métrique en ambre, dépôts sans fiche estompés et non comptés en dette)
+- [x] **GitHub App créée**, addon `github` dans `rosetta-mcp`, `github_guard.py` et son
+      `settings.json` dans le cockpit — la chaîne complète tourne. Puis **l'addon `git`**
+      (rosetta 0.14.0/0.15.0) qui rend `repo_commit` accessoire pour publier : voir la
+      section « Publier son propre travail » plus haut.
+- [x] `GW_APPS` dans agent-gw. Les modules du lanceur sont sélectionnables par env,
+      publiés sur `/api/version`, lus au boot ; tuile **et** route masquées ensemble.
+      Rejoint depuis par `GW_FEATURES` (ce que le chat sait faire) et **`GW_TOOLS`** (ce
+      que l'agent a dans les mains — c'est là que vit `git`).
+- [x] Vue `repos` : le tableau des `.agent/status.md` de la flotte. Devenue un plugin
+      à part entière (`plugins/repos/`), API comprise.
 - [x] **Thème par agent — DÉPLOYÉ** (`GW_THEME`, agent-gw 0.36.0/0.37.0) : surcharge de
       jetons scopée par `data-agent`, plus la trace d'outils (`GW_TRACE`), le noyau en
       indicateur de travail et le calque fantôme. Reste du palier 2 non fait, et assumé :
       **réglettes graduées et équerres d'angle** — pur décor, demandant du markup neuf.
-- [ ] Renommer `.alfred-doc` → `.agent-doc` (le thème le couvre par surcharge, mais un pod
-      Skippy porte toujours le nom du majordome dans son DOM)
-- [ ] Repo « cockpit » = `/workspace` du pod (CLAUDE.md de Skippy + manifeste de la
-      flotte). Le modèle mono-repo d'Alfred ne tient pas : Skippy opère sur ~23 repos.
-- [ ] `skippy-helm.yml` dans k8s-home-lab (copie d'`alfred-helm.yml` : fullname, hôte,
-      client Authelia, `TUNNEL_NAME`, hostPath)
+- [x] `.alfred-doc` → `.agent-doc` : plus une seule occurrence du nom du majordome dans
+      le DOM d'un pod de code.
+- [x] Repo « cockpit » (`skippy-cockpit`) = `/workspace` du pod, avec son `repos.yml`.
+- [x] `skippy-helm.yml` dans k8s-home-lab.
+- [ ] **Le dernier chemin non éprouvé** : un push sur `main` depuis le pod (et non sur
+      une branche neuve). Et la branche `pod/git-0.15.0`, fusionnée, traîne sur `origin` —
+      le proxy refuse les suppressions de ref, donc c'est un geste du Mac.
 
 ## Notes
 

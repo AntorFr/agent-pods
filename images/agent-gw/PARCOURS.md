@@ -1,5 +1,10 @@
 # Parcours — spec v1 (balades et randonnées)
 
+> **Statut : LIVRÉ — ce document est une archive de conception.** Le code vit dans le
+> plugin `parcours` (`plugins/parcours/`), avec `trace-geom` dans son `bin/`. Sorte
+> **`socle`** et non `app` : un parcours est de la mémoire adressable, comme une fiche —
+> il n'a ni tuile ni route propre, donc rien à éteindre.
+>
 > Le fichier de parcours et le GPX qu'on en dérive. Frère de `VOYAGES.md`, même
 > patron : la donnée est en git, le rendu est calculé.
 

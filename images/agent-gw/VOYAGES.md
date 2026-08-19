@@ -1,9 +1,12 @@
 # Voyages — spec v1 (planificateur de vacances)
 
-> Spec figée le 2026-07-18 (session de cadrage, décisions utilisateur incluses). Le cap vient
-> de D25 côté cerveau : croiser les mails de résa (Gmail), l'agenda (Calendar) et `maps`
-> (trajets + météo) — « celui-là sera une skill ». Ici : le contrat de données et l'app-module
-> côté corps. Mockup à venir dans l'artifact « Alfred — App » avant toute ligne de code.
+> **Statut : LIVRÉ — ce document est une archive de conception.** Spec figée le 2026-07-18,
+> implémentée depuis. Ce qui fait foi aujourd'hui : le CONTRAT DE FORMAT dans la skill
+> `voyages:voyage-json` (livrée par l'image avec le module qui la lit), et le code dans le
+> plugin `voyages` (`plugins/voyages/`). On garde ce texte pour le POURQUOI des décisions.
+>
+> Le cap venait de D25 côté cerveau : croiser les mails de résa (Gmail), l'agenda (Calendar)
+> et `maps` (trajets + météo) — « celui-là sera une skill ». C'est fait.
 
 ## Décisions structurantes
 
@@ -262,6 +265,7 @@ de la timeline ; carte géographique des étapes (candidate v2 naturelle : les i
 
 1. ✅ **Mockup** timeline + tray dans l'artifact « Alfred — App » — gestes validés.
 2. ✅ **`voyage.json` figé** (le geste a révélé `desc`/`web`/`docs` et l'overlay d'état).
-3. ✅ **Corps** (2026-07-18) : `app/voyages.py` (list, état/gestes, météo, routes), module
-   launcher (`renderVoyagesHub`/`renderVoyage`), type `voyage` dans AUTHORING.md.
+3. ✅ **Corps** (2026-07-18) : le routeur (list, état/gestes, météo, routes) — devenu depuis
+   `plugins/voyages/api.py` —, module launcher (`renderVoyagesHub`/`renderVoyage`), type
+   `voyage` dans AUTHORING.md.
 4. **Cerveau** : skill `voyages` + entrée DECISIONS.md.
