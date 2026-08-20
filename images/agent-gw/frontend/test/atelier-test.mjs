@@ -1,8 +1,8 @@
 // Banc du socle 3.0 : conversion (toutes les écritures 2.0) + règles. Sans DOM, sans
 // fichiers externes — les fixtures encodent ici les variantes réelles des trois livres.
 import assert from 'node:assert/strict';
-import { normalise } from '../src/atelier/convert.js';
-import { valide, lamPoints, lamLignes, ligneBande, bandGuide, poseRect, chantEdges, issuesPlaque, epOf, prepsDe, valideJonctions, axeDe } from '../src/atelier/regles.js';
+import { normalise } from '../../plugins/atelier/web/convert.js';
+import { valide, lamPoints, lamLignes, ligneBande, bandGuide, poseRect, chantEdges, issuesPlaque, epOf, prepsDe, valideJonctions, axeDe } from '../../plugins/atelier/web/regles.js';
 
 let n = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); n++; };

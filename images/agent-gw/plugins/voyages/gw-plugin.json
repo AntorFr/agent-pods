@@ -5,6 +5,8 @@
   "vue": {
     "label": "Voyages",
     "ico": "🌴",
-    "color": "voyage"
+    "color": "voyage",
+    "href": "#/dom/voyages",
+    "sous_titre": ""
   }
 }

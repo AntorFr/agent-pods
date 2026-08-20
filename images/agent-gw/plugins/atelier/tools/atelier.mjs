@@ -1,7 +1,7 @@
-// src/atelier/cli.js
+// ../plugins/atelier/web/cli.js
 import { readFileSync, writeFileSync } from "node:fs";
 
-// src/atelier/convert.js
+// ../plugins/atelier/web/convert.js
 var CHANT_RENOM = { avant: "rive-avant", arriere: "rive-arriere", gauche: "about-gauche", droite: "about-droit", abouts: "abouts" };
 var SUR_RENOM = { face: "face", "contre-face": "contre-face", "rive-avant": "rive-avant", "rive-arriere": "rive-arriere" };
 function normalise(wb2) {
@@ -114,7 +114,7 @@ function sceneMinimale(a, wb2) {
   };
 }
 
-// src/atelier/regles.js
+// ../plugins/atelier/web/regles.js
 var SURFACES = ["face", "contre-face", "rive-avant", "rive-arriere", "about-gauche", "about-droit"];
 var CHANTS = ["rive-avant", "rive-arriere", "about-gauche", "about-droit", "abouts"];
 var APPUIS = ["face", "contre-face"];
@@ -448,7 +448,7 @@ function valideJonctions(wb2) {
   return E;
 }
 
-// src/atelier/cli.js
+// ../plugins/atelier/web/cli.js
 var [cmd, path, ...opts] = process.argv.slice(2);
 if (!cmd || !path) {
   console.error("usage: atelier.mjs valide <workbook.json> | migre <workbook.json> [--ecrit]");

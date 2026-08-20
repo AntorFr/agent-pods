@@ -5,6 +5,8 @@
   "vue": {
     "label": "La flotte",
     "ico": "🛰️",
-    "color": "proj"
+    "color": "proj",
+    "href": "#/repos",
+    "sous_titre": "Statut de chaque dépôt"
   }
 }

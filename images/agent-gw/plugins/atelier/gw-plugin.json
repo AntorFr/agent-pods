@@ -1,5 +1,17 @@
 {
   "id": "atelier",
   "kind": "app",
-  "description": "App Atelier : le format de workbook.json, et le CLI qui le valide/migre avec exactement le code que l'etabli execute."
+  "description": "App Atelier : le format de workbook.json, et le CLI qui le valide/migre avec exactement le code que l'etabli execute.",
+  "vue": {
+    "href": "#/dom/diy",
+    "sous_titre": "Machines · savoir-faire · outils",
+    "absorbe": [
+      "atelier",
+      "diy"
+    ],
+    "compte": "domaines/diy/",
+    "label": "L’Atelier",
+    "ico": "ic:shop",
+    "color": "shop"
+  }
 }
