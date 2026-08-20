@@ -130,9 +130,22 @@ RUN useradd --create-home --uid 1000 agent \
 # dans chaque manifeste.
 ENV HOME=/home/agent
 
+# L'entrypoint du CONTENEUR, à la racine — pas dans `bin/`, qui est réservé aux
+# outils du corps posés sur le PATH. Même convention que `claude-pod`, et c'est ce
+# que `test/bin_test.py` vérifie : là où un fichier est rangé doit dire ce qu'il est.
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
+
 USER agent
 
 EXPOSE 8000
 
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# L'entrypoint ne fait qu'UNE chose : poser `umask 002`, puis `exec "$@"`. Le
+# pourquoi (le cercle de mémoire PARTAGÉ, deux corps sous des UID différents, et
+# l'umask que NFS applique côté client — donc qu'aucune ACL serveur ne peut
+# corriger) est écrit en tête d'`entrypoint.sh`, pas ici.
+#
+# ⚠️ Le CMD reste DÉCLARATIF et n'est recopié nulle part. C'est le point : cet umask
+# a d'abord vécu en `args` dans les manifestes k8s, ce qui y dupliquait la commande
+# de démarrage — et aurait épinglé l'ancienne, en silence, le jour où elle changerait.
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

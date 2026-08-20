@@ -74,6 +74,34 @@ if _ISYNC.is_file():
     check("instruction-sync stage par chemin explicite, jamais tout l'arbre",
           'add -- "$@"' in _src)
 
+print("\n--- l'entrypoint pose l'umask, et le CMD n'est recopié nulle part ---")
+
+# Cette garde existe parce que la panne qu'elle empêche est INVISIBLE. Sans
+# `umask 002`, les fichiers naissent en 0644 dans le cercle de mémoire PARTAGÉ : les
+# deux corps qui l'écrivent (sous des UID différents, réunis par un seul groupe
+# secondaire) peuvent chacun CRÉER, mais aucun ne peut MODIFIER le fichier de
+# l'autre. Rien n'échoue au montage ni au démarrage — ça ne se voit qu'au premier
+# `Edit` refusé, longtemps après. Et ça ne peut pas se rattraper côté serveur : en
+# NFS l'umask est applique côté client (mesuré le 2026-08-20).
+_ENTRY = AGENT_GW / "entrypoint.sh"
+_DOCKER = (AGENT_GW / "Dockerfile").read_text(encoding="utf-8")
+
+check("agent-gw a un entrypoint à la RACINE (pas dans bin/, qui est le PATH)",
+      _ENTRY.is_file() and not (AGENT_GW / "bin/entrypoint.sh").exists())
+if _ENTRY.is_file():
+    _e = _ENTRY.read_text(encoding="utf-8")
+    check("il pose umask 002 — le bit sans lequel la co-édition du cercle partagé casse",
+          "umask 002" in _e)
+    check("il passe la main par exec \"$@\" au lieu de recopier la commande",
+          'exec "$@"' in _e)
+check("le Dockerfile le branche sur tini", '"/entrypoint.sh"' in _DOCKER)
+# Le CMD doit rester déclaratif DANS l'image : c'est ce qui permet aux manifestes de
+# ne plus le dupliquer. Cet umask a vécu en `args` côté k8s jusqu'au 2026-08-20, ce
+# qui y recopiait la commande de démarrage — et l'aurait épinglée le jour où elle
+# changerait, sans un mot.
+check("le CMD uvicorn reste déclaré dans l'image",
+      'CMD ["uvicorn"' in _DOCKER)
+
 print("\n--- la copie partagée : mcp-bridge, octet pour octet ---")
 
 COPIES = [IMAGES / "agent-gw/bin/mcp-bridge",
