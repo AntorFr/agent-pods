@@ -67,10 +67,14 @@ and `setup` only runs when the plugin is active.
 
 ## What stays in the body, and why
 
-Two executables live in **`bin/` at the image root** rather than in a plugin:
-`rosetta-bridge` (every agent talks to the hub — it is how *all* its MCP tools arrive)
-and `memory-sync` (every agent writes its memory). They are not optional — a body
-without them is not a reduced body, it is a dead one.
+One executable lives in **`bin/` at the image root** rather than in a plugin:
+`mcp-bridge` (every agent talks to the hub — it is how *all* its MCP tools arrive). It is
+not optional — a body without it is not a reduced body, it is a dead one.
+
+`memory-sync` sat beside it until 2026-08-20, on the premise that *every agent commits its
+memory*. That premise is gone: memory left git and now lives on the filesystem, with ZFS
+snapshots as its net. Writing a fact is writing a file — there is nothing left to
+synchronise, so the tool was **removed** rather than kept around as a no-op.
 
 That gives the symmetry worth remembering: **`bin/` at the image root = what every body
 owns; `plugins/<id>/bin/` = what a plugin adds.** Where a binary sits tells you whether

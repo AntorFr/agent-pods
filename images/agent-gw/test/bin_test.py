@@ -37,7 +37,10 @@ print("\n--- rangement : bin/ à la racine d'une image ---")
 # racine » : la version heuristique attrapait `.dockerignore`, et `entrypoint.sh`
 # de claude-pod est légitimement à la racine (c'est l'entrypoint du conteneur,
 # pas un outil du PATH). Une règle qui crie au loup finit désactivée.
-OUTILS = {"agent-gw": ("mcp-bridge", "memory-sync"),
+#
+# `memory-sync` figurait ici jusqu'au 2026-08-20 : retiré avec l'outil, la mémoire
+# ayant quitté git (elle vit sur le système de fichiers, filet ZFS).
+OUTILS = {"agent-gw": ("mcp-bridge",),
           "claude-pod": ("mcp-bridge",)}
 for image, outils in OUTILS.items():
     root = IMAGES / image
@@ -47,9 +50,10 @@ for image, outils in OUTILS.items():
     check("%s : tout est sous bin/" % image,
           all((root / "bin" / n).is_file() for n in outils))
 
-check("agent-gw/bin/ porte les deux exécutables du corps",
-      (AGENT_GW / "bin/mcp-bridge").is_file()
-      and (AGENT_GW / "bin/memory-sync").is_file())
+check("agent-gw/bin/ porte l'exécutable du corps",
+      (AGENT_GW / "bin/mcp-bridge").is_file())
+check("memory-sync a bien disparu du corps (mémoire hors git depuis le 2026-08-20)",
+      not (AGENT_GW / "bin/memory-sync").exists())
 
 print("\n--- la copie partagée : mcp-bridge, octet pour octet ---")
 

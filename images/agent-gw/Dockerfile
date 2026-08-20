@@ -95,8 +95,13 @@ RUN set -eu; \
 #                   ⚠️ Copie octet pour octet dans claude-pod, vérifiée par
 #                   `test/bin_test.py` : les deux conteneurs doivent lancer le même
 #                   relais, et un commentaire ne garantissait rien.
-#   memory-sync     écriture mémoire MULTI-AUTEUR (pull-rebase / commit / push-retry,
-#                   conflit remonté jamais deviné). Helper git scopé sur github.com.
+#
+# ⚠️ `memory-sync` vivait ici jusqu'au 2026-08-20 — RETIRÉ, à ne pas réintroduire.
+# Il encapsulait la boucle pull-rebase / commit / push d'une mémoire versionnée et
+# co-éditée. Ses deux raisons d'être sont tombées l'une après l'autre : la
+# co-édition d'abord (la machine de dev n'écrit plus dans la mémoire), puis git
+# lui-même (la mémoire vit sur le système de fichiers, filet ZFS par snapshots).
+# Un agent qui écrit un fait écrit un fichier — il n'y a plus rien à synchroniser.
 COPY --chmod=755 bin/ /usr/local/bin/
 # Alias de compatibilité, et il n'est pas cosmétique. Le nom du pont est écrit dans
 # le `.mcp.json` de chaque workspace, qui vit sur un volume persistant et se met à

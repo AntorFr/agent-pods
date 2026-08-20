@@ -13,8 +13,10 @@
 # câble ne peut pas être oublié.
 #
 # ⚠️ Le helper est scopé SUR L'HÔTE DU HUB, jamais global. Un helper global
-# répondrait aussi pour github.com et prendrait la place du credential légitime —
-# c'est exactement le défaut qu'avait `memory-sync`, corrigé le 2026-08-19.
+# répondrait aussi pour github.com et prendrait la place du credential légitime.
+# Ce n'est pas théorique : `memory-sync` avait exactement ce défaut, corrigé le
+# 2026-08-19 par un préfixe d'hôte. (L'outil lui-même a disparu le 2026-08-20 avec
+# la sortie de la mémoire hors de git — la leçon, elle, reste.)
 set -eu
 
 # Aucun défaut : une URL de hub codée en dur dans une image publique, c'est le
