@@ -318,23 +318,54 @@ from xml.etree import ElementTree  # noqa: E402
 # Balayage de TOUS les skins livrés, et pas d'un nom en dur : le contrôle a été
 # écrit pour `skippy` seul, si bien que le skin `nestor` aurait pu partir sans
 # icône ni manifeste sans qu'une seule assertion ne bronche. Ajouter un corps ne
-# doit rien réclamer ici — c'est le dossier servi qui fait foi.
-_SKINS = sorted(p.name for p in (main.STATIC_DIR / "skins").iterdir() if p.is_dir())
-check("au moins un skin livré par l'image", bool(_SKINS))
+# doit rien réclamer ici.
+#
+# ⚠️ La SOURCE fait foi, plus le dossier servi : depuis que les skins vivent dans
+# `skins/<id>/`, leurs actifs sont installés vers `static/skins/` PAR LE
+# DOCKERFILE. Ils n'existent donc pas dans le dépôt, et un banc qui lisait le
+# dossier servi ne testait plus rien ici — il échouait, ce qui vaut mieux, mais
+# il aurait pu silencieusement ne trouver aucun skin et se déclarer content si
+# l'assertion « au moins un » n'était pas là.
+_SKINS_DIR = Path(__file__).resolve().parents[1] / "skins"
+_SKINS = sorted(d.name for d in _SKINS_DIR.iterdir()
+                if d.is_dir() and (d / "assets").is_dir())
+check("au moins un skin livre ses actifs", bool(_SKINS))
+check("chaque skin declare son manifeste",
+      all((_SKINS_DIR / s / "gw-skin.json").is_file()
+          for s in (d.name for d in _SKINS_DIR.iterdir() if d.is_dir())))
+# Le CONTENU des actifs, à la source. Comparé au fichier du skin et jamais à des
+# valeurs recopiées : un manifeste modifié sans que le banc suive serait un banc
+# qui se ment à lui-même.
 for _skin in _SKINS:
-    os.environ["GW_THEME"] = _skin
-    m = importlib.reload(main)
-    icon = m._skin_asset("icon.svg")
-    check("%s sert SON icône" % _skin,
-          bool(icon) and icon.parts[-3:] == ("skins", _skin, "icon.svg"))
-    # Comparé au FICHIER du skin, pas à des valeurs recopiées : un manifeste
-    # modifié sans que le test suive serait un test qui se ment à lui-même.
-    voulu = _json.loads((m.STATIC_DIR / "skins" / _skin / "manifest.json").read_text(encoding="utf-8"))
-    rendu = _json.loads(bytes(asyncio.run(m.manifest()).body).decode())
-    check("%s : le manifeste écrase bien le socle, champ par champ" % _skin,
-          all(rendu.get(k) == v for k, v in voulu.items()))
-    check("%s : icône du manifeste = la route thémée" % _skin,
-          rendu["icons"][0]["src"] == "/icon.svg")
+    _man = _json.loads((_SKINS_DIR / _skin / "assets" / "manifest.json").read_text(encoding="utf-8"))
+    check("%s : son manifeste nomme le corps" % _skin, bool(_man.get("name")))
+    check("%s : il livre aussi son icône" % _skin,
+          (_SKINS_DIR / _skin / "assets" / "icon.svg").is_file())
+
+# Le SERVICE des actifs, sur une arborescence fabriquée. C'est le Dockerfile qui
+# installe `skins/<id>/assets/` vers `static/skins/<id>/` : le dépôt ne porte donc
+# PAS le dossier servi, et tester `_skin_asset` contre le disque du dépôt ne
+# prouverait rien. On lui fabrique le monde qu'il verra dans l'image.
+_faux = Path(tempfile.mkdtemp())
+(_faux / "skins" / "zeta").mkdir(parents=True)
+(_faux / "icon.svg").write_text("<svg/>", encoding="utf-8")
+(_faux / "skins" / "zeta" / "icon.svg").write_text("<svg/>", encoding="utf-8")
+_avant = main.STATIC_DIR
+main.STATIC_DIR = _faux
+os.environ["GW_THEME"] = "zeta"
+m = importlib.reload(main)
+m.STATIC_DIR = _faux
+check("un skin sert SON actif quand il en a un",
+      m._skin_asset("icon.svg").parts[-3:] == ("skins", "zeta", "icon.svg"))
+check("il retombe sur le socle pour ce qu'il ne fournit pas",
+      m._skin_asset("manifest.json") is None
+      and m._skin_asset("icon.svg") is not None)
+os.environ["GW_THEME"] = "inconnu"
+m = importlib.reload(main)
+m.STATIC_DIR = _faux
+check("un thème sans dossier retombe sur le socle, jamais sur rien",
+      m._skin_asset("icon.svg") == _faux / "icon.svg")
+main.STATIC_DIR = _avant
 
 os.environ["GW_THEME"] = "alfred"
 m = importlib.reload(main)
@@ -357,7 +388,7 @@ check("/icon.svg est publique, comme le /static/ d'où elle vient",
       "/icon.svg" in m._PUBLIC_PATHS)
 check("le manifeste l'est aussi", "/manifest.webmanifest" in m._PUBLIC_PATHS)
 
-for svg in [m.STATIC_DIR / "icon.svg"] + [m.STATIC_DIR / "skins" / s / "icon.svg" for s in _SKINS]:
+for svg in [m.STATIC_DIR / "icon.svg"] + [_SKINS_DIR / s / "assets" / "icon.svg" for s in _SKINS]:
     try:
         ElementTree.parse(svg)
         ok = True

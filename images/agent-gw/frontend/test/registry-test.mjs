@@ -90,6 +90,35 @@ const DS = readFileSync(resolve('src/design-system.css'), 'utf8');
 check('la feuille du socle ne connaît plus les styles du plugin',
   !DS.includes('.parcours'));
 
+/* ── Les SKINS : arbre frère, même principe ───────────────────────────── */
+
+// Un skin range son JS à sa racine (pas sous `web/`) et porte `gw-skin.json` :
+// il n'a qu'une facette, lui inventer un sous-dossier serait une cérémonie vide.
+const rSkins = mkdtempSync(join(tmpdir(), 'skins-'));
+for (const id of ['alfred', 'zeta']) {
+  mkdirSync(join(rSkins, id), { recursive: true });
+  writeFileSync(join(rSkins, id, 'skin.js'), 'export default () => ({});');
+  writeFileSync(join(rSkins, id, 'gw-skin.json'), JSON.stringify({ id }));
+}
+writeFileSync(join(rSkins, 'zeta', 'skin.css'), ':root{}');
+
+const skins = scanner(rSkins, 'skin.js', { sous: '', manifeste: 'gw-skin.json' })
+  .map((v) => v.id);
+check('les skins se découvrent à la racine de leur dossier',
+  skins.join(',') === 'alfred,zeta');
+check('une feuille est OPTIONNELLE (Alfred n’en a pas : sa palette est le socle)',
+  scanner(rSkins, 'skin.css', { sous: '', manifeste: 'gw-skin.json' })
+    .map((v) => v.id).join(',') === 'zeta');
+
+const codeSkins = rendre(scanner(rSkins, 'skin.js', { sous: '', manifeste: 'gw-skin.json' }),
+  { fichier: 'skin.js', profondeur: 4, dossier: 'skins' });
+check('un skin s’importe depuis skins/<id>/, sans `web/`',
+  codeSkins.includes("from '../../../../skins/zeta/skin.js'"));
+
+const IDX = readFileSync(resolve('src/launcher/skins/index.js'), 'utf8');
+check('le registre des skins ne nomme plus aucun thème',
+  !/import create\w+ from/.test(IDX) && IDX.includes('registry.generated.js'));
+
 /* ── La propriété à ne pas casser ─────────────────────────────────────── */
 
 const INDEX = readFileSync(resolve('src/launcher/apps/index.js'), 'utf8');

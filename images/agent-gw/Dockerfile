@@ -18,6 +18,7 @@ WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY plugins /build/plugins
+COPY skins /build/skins
 COPY frontend/ ./
 RUN npm run build
 # -> /build/frontend/dist/engine.js
@@ -81,6 +82,19 @@ COPY app ./app
 # ⚠️ `app/plugins.py` les cherche en `<parent de app>/plugins` — cette copie n'est
 # PAS optionnelle, sans elle aucun contrat ne part et personne ne s'en plaint.
 COPY plugins ./plugins
+# Les SKINS — l'habillage d'un corps, arbre frère de `plugins/`. Leur JS et leur
+# CSS partent dans le bundle (étage frontend ci-dessus) ; leurs ACTIFS, eux, sont
+# servis depuis le disque : le navigateur réclame le favicon et le manifeste
+# AVANT que la moindre ligne du bundle ne tourne, ils ne peuvent donc pas venir
+# du registre côté client. `app/main.py` les cherche en `static/skins/<id>/`.
+COPY skins ./skins
+RUN set -eu; \
+    for d in ./skins/*/assets; do \
+        [ -d "$d" ] || continue; \
+        id="$(basename "$(dirname "$d")")"; \
+        mkdir -p "./app/static/skins/$id"; \
+        cp -a "$d"/. "./app/static/skins/$id/"; \
+    done
 # Les exécutables des plugins vont sur le PATH, sans qu'aucun nom n'apparaisse ici :
 # un plugin déposé depuis un autre dépôt est servi par la même ligne. Sans condition,
 # et ce n'est pas un trou dans le gating — le Dockerfile ne connaît pas l'env du pod,

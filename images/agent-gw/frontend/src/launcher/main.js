@@ -6,7 +6,7 @@ import './launcher.css';
 // APRÈS launcher.css : les feuilles des skins, inertes tant que `data-agent`
 // n'est pas posé sur <html>. L'ordre source tranche les égalités de spécificité
 // avec les règles `:root[data-theme]` du socle.
-import './skins/themes.css';
+import './skins/themes.generated.js';
 import { resolveSkin } from './skins/index.js';
 // Les app-modules qui ont déjà quitté ce fichier. Chaque app importe SA feuille,
 // donc leur CSS arrive après `launcher.css` : une app s'appuie sur les

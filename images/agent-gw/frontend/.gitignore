@@ -6,3 +6,5 @@ src/launcher/apps/registry.generated.js
 src/blocks.generated.js
 src/blocks.styles.generated.js
 src/launcher/chrome.generated.js
+src/launcher/skins/registry.generated.js
+src/launcher/skins/themes.generated.js

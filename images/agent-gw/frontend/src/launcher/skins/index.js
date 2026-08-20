@@ -11,8 +11,18 @@
         d'autre. Le contrat CSS complet (la liste des jetons, et pourquoi une
         feuille de thème n'a pas le droit d'écrire une règle) est en tête de
         `launcher.css` ; `test/theme-lint.mjs` le fait respecter au build ;
-     3. une ligne ici (`FACTORIES`) et une dans `skins/themes.css`.
-   Puis `GW_THEME=<id>` sur le pod. Rien d'autre à toucher.
+   ⚠️ CE FICHIER NE NOMME PLUS AUCUN SKIN. Ils vivent dans `skins/<id>/`, un arbre
+   FRÈRE de `plugins/` — même principe de découverte, objet différent : un plugin
+   AJOUTE une capacité et plusieurs sont actifs ; un skin HABILLE, et il n'y en a
+   qu'un. Les confondre aurait demandé une sorte de plugin dont l'axe n'est pas
+   une liste mais une valeur, c'est-à-dire une exception qui vide la règle.
+
+   AJOUTER UN THÈME, en trois fichiers et zéro ligne à modifier ailleurs :
+     skins/<id>/gw-skin.json  { id, description }
+     skins/<id>/skin.js       la fabrique `(api) => skin` (contrat ci-dessous)
+     skins/<id>/skin.css      ses jetons, scopés `:root[data-agent="<id>"]`
+     skins/<id>/assets/…      icon.svg et manifest.json, servis AVANT le JS
+   Puis `GW_THEME=<id>` sur le pod.
 
    POURQUOI UNE FABRIQUE ET PAS UN IMPORT CROISÉ : le skin a besoin des primitives
    du lanceur (`page`, `crumbs`, `esc`…) qui vivent dans `main.js`, lequel importe
@@ -47,17 +57,14 @@
    fournisse — c'est le seul écran dont la forme EST l'identité du corps.
 */
 
-import createSkippy from './skippy.js';
-import createNestor from './nestor.js';
+import { FABRIQUES } from './registry.generated.js';
 
-const FACTORIES = {
-  skippy: createSkippy,
-  nestor: createNestor,
-};
-
-/** Le skin neutre : aucun champ, donc tout retombe sur le comportement d'Alfred.
-    Alfred n'est pas « un skin parmi d'autres » par accident — c'est le socle, et
-    le garder implicite garantit qu'un pod existant ne bouge pas d'un pixel. */
+/** Le repli, quand `GW_THEME` désigne un thème que l'image ne porte pas.
+    Vide À DESSEIN : tout retombe alors sur ce que dit `app.html` et sur le
+    comportement du socle, c'est-à-dire une PWA parfaitement utilisable. Alfred,
+    lui, n'est plus ce repli — il est un skin comme les deux autres, déclaré dans
+    `skins/alfred/`. Il l'était par ABSENCE, ce qui rendait un des trois corps
+    illisible : on pouvait ouvrir un fichier pour Skippy et Nestor, pas pour lui. */
 const NEUTRAL = { id: 'alfred' };
 
 /* Le contrat, en liste BLANCHE — pas en prose seulement.
@@ -73,7 +80,7 @@ const FIELDS = [
 ];
 
 export function resolveSkin(id, api) {
-  const make = FACTORIES[id];
+  const make = FABRIQUES[id];
   if (!make) return NEUTRAL;
   try {
     const declared = make(api) || {};
@@ -98,5 +105,5 @@ export function resolveSkin(id, api) {
 }
 
 export function knownSkins() {
-  return Object.keys(FACTORIES);
+  return Object.keys(FABRIQUES);
 }

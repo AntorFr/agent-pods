@@ -29,6 +29,14 @@ import { fileURLToPath } from 'node:url';
 const ICI = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = resolve(ICI, '..');
 const PLUGINS = resolve(FRONTEND, '..', 'plugins');
+// Les SKINS sont un second arbre, frère de `plugins/` — même principe de
+// découverte, objet différent. Un plugin AJOUTE une capacité et plusieurs sont
+// actifs à la fois ; un skin HABILLE, et il n'y en a qu'un (`GW_THEME`).
+// Les confondre aurait demandé une sorte de plugin dont l'axe n'est pas une
+// liste mais une valeur — le genre d'exception qui vide une règle de son sens.
+const SKINS = resolve(FRONTEND, '..', 'skins');
+const MANIFESTE_PLUGIN = 'gw-plugin.json';
+const MANIFESTE_SKIN = 'gw-skin.json';
 const SORTIE_VUES = join(FRONTEND, 'src', 'launcher', 'apps', 'registry.generated.js');
 // ⚠️ DEUX registres, et ce n'est pas de la symétrie gratuite : les vues entrent
 // dans le bundle du LANCEUR, les blocs dans celui du MOTEUR. Un seul fichier
@@ -42,10 +50,15 @@ const SORTIE_STYLES = join(FRONTEND, 'src', 'blocks.styles.generated.js');
 // Le CHROME — ce qu'un plugin ajoute à la coque : un contrôle du composeur, une
 // entrée des Réglages, la modale qui va avec. Bundle du LANCEUR, comme les vues.
 const SORTIE_CHROME = join(FRONTEND, 'src', 'launcher', 'chrome.generated.js');
+const SORTIE_SKINS = join(FRONTEND, 'src', 'launcher', 'skins', 'registry.generated.js');
+// Les feuilles des skins, en un fichier d'imports — l'équivalent de l'ancien
+// `themes.css` tenu à la main, où il fallait penser à ajouter une ligne.
+const SORTIE_THEMES = join(FRONTEND, 'src', 'launcher', 'skins', 'themes.generated.js');
 
 /** Les plugins qui apportent `web/<fichier>`, triés — ordre stable = diff lisible.
     `app.js` donne une vue du lanceur, `blocks.js` des blocs du moteur. */
-export function scanner(racine = PLUGINS, fichier = 'app.js') {
+export function scanner(racine = PLUGINS, fichier = 'app.js',
+                        { sous = 'web', manifeste = MANIFESTE_PLUGIN } = {}) {
   const vues = [];
   let dossiers;
   try {
@@ -57,26 +70,29 @@ export function scanner(racine = PLUGINS, fichier = 'app.js') {
     const base = join(racine, id);
     try {
       if (!statSync(base).isDirectory()) continue;
-      statSync(join(base, 'web', fichier));
+      statSync(sous ? join(base, sous, fichier) : join(base, fichier));
     } catch {
       continue; // ni dossier, ni vue
     }
-    let manifeste = {};
+    let manif = {};
     try {
-      manifeste = JSON.parse(readFileSync(join(base, 'gw-plugin.json'), 'utf8'));
+      manif = JSON.parse(readFileSync(join(base, manifeste), 'utf8'));
     } catch {
       // Un manifeste illisible n'est pas une raison de perdre la vue : le banc
       // Python le signale déjà, et le corps l'ignorera de son côté.
     }
-    vues.push({ id, tuile: manifeste.vue || null });
+    vues.push({ id, tuile: manif.vue || null });
   }
   return vues;
 }
 
-export function rendre(vues, { fichier = 'app.js', profondeur = 4 } = {}) {
+export function rendre(vues, { fichier = 'app.js', profondeur = 4, dossier = 'plugins' } = {}) {
   const remonte = '../'.repeat(profondeur);
+  // Un plugin range son front sous `web/`, un skin à sa racine : le second n'a
+  // qu'une facette, lui inventer un sous-dossier serait une cérémonie vide.
+  const sous = dossier === 'plugins' ? 'web/' : '';
   const imports = vues
-    .map((v, i) => `import vue${i} from '${remonte}plugins/${v.id}/web/${fichier}';`)
+    .map((v, i) => `import vue${i} from '${remonte}${dossier}/${v.id}/${sous}${fichier}';`)
     .join('\n');
   const fabriques = vues.map((v, i) => `  ${JSON.stringify(v.id)}: vue${i},`).join('\n');
   const tuiles = vues
@@ -118,6 +134,19 @@ export function generer() {
   mkdirSync(dirname(SORTIE_CHROME), { recursive: true });
   writeFileSync(SORTIE_CHROME, rendre(chrome, { fichier: 'chrome.js', profondeur: 3 }), 'utf8');
 
+  // ── Les skins ────────────────────────────────────────────────────────────
+  const skins = scanner(SKINS, 'skin.js', { sous: '', manifeste: MANIFESTE_SKIN });
+  mkdirSync(dirname(SORTIE_SKINS), { recursive: true });
+  writeFileSync(SORTIE_SKINS, rendre(skins, { fichier: 'skin.js', profondeur: 4, dossier: 'skins' }), 'utf8');
+
+  const livrees = scanner(SKINS, 'skin.css', { sous: '', manifeste: MANIFESTE_SKIN });
+  writeFileSync(SORTIE_THEMES,
+    '/* GÉNÉRÉ par build/registry.mjs — les feuilles des skins.\n'
+    + "   Chacune scope TOUT sous :root[data-agent=\"<id>\"] : sans l'attribut, un\n"
+    + '   thème est inerte, donc en ajouter un ne peut pas abîmer les autres. */\n'
+    + livrees.map((s) => `import '../../../../skins/${s.id}/skin.css';`).join('\n')
+    + '\n', 'utf8');
+
   const feuilles = scanner(PLUGINS, 'blocks.css');
   writeFileSync(SORTIE_STYLES,
     '/* GÉNÉRÉ par build/registry.mjs — les feuilles des blocs de plugin.\n'
@@ -125,13 +154,14 @@ export function generer() {
     + feuilles.map((f) => `import '../../plugins/${f.id}/web/blocks.css';`).join('\n')
     + '\n', 'utf8');
 
-  return { vues, blocs, chrome, feuilles };
+  return { vues, blocs, chrome, skins, livrees, feuilles };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { vues, blocs, chrome } = generer();
+  const { vues, blocs, chrome, skins } = generer();
   const dire = (quoi, l) => `${quoi} : ${l.length} plugin(s) — ${l.map((v) => v.id).join(', ') || 'aucun'}`;
   console.log(dire('registre des vues ', vues));
   console.log(dire('registre des blocs', blocs));
   console.log(dire('registre du chrome', chrome));
+  console.log(dire('registre des skins', skins));
 }
