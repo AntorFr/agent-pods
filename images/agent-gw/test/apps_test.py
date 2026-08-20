@@ -248,6 +248,17 @@ for d in _DIRS:
     gw = _pj.loads((d / "gw-plugin.json").read_text(encoding="utf-8"))
     check("%s : id = nom du dossier, kind connu" % d.name,
           gw.get("id") == d.name and gw.get("kind") in ("socle", "app", "outil"))
+    # La VUE — le quatrième apport possible d'un plugin, à côté des skills, de
+    # l'API et des exécutables. Deux moitiés qui doivent aller ensemble : la clé
+    # `vue` pose une tuile dans le lanceur, `web/app.js` fournit l'écran qu'elle
+    # ouvre. Une tuile sans écran est un cul-de-sac cliquable ; l'inverse (un
+    # écran sans tuile) est LÉGITIME — c'est une vue de détail, atteinte par sa
+    # route depuis une autre page.
+    if "vue" in gw:
+        check("%s : la tuile déclarée a bien son écran (web/app.js)" % d.name,
+              (d / "web" / "app.js").is_file())
+        check("%s : la tuile porte un libellé et une couleur" % d.name,
+              bool(gw["vue"].get("label")) and bool(gw["vue"].get("color")))
     manifest = d / ".claude-plugin" / "plugin.json"
     if manifest.is_file():
         check("%s : manifeste Claude valide" % d.name,

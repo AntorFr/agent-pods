@@ -11,7 +11,7 @@ import { resolveSkin } from './skins/index.js';
 // Les app-modules qui ont déjà quitté ce fichier. Chaque app importe SA feuille,
 // donc leur CSS arrive après `launcher.css` : une app s'appuie sur les
 // primitives de la coque, jamais l'inverse.
-import { resolveApps } from './apps/index.js';
+import { resolveApps, appTiles } from './apps/index.js';
 import { FORMATS, createBasket, scanFrame, dropCode, composeMessage } from '../scan/codes.js';
 // Le socle atelier 3.0 : conversion des vieux livres au chargement, géométrie et règles
 // partagées avec le CLI valide/migre — UNE source (cf. plugins/atelier/ATELIER-3.md).
@@ -891,8 +891,11 @@ const APP_META = {
   sujets:   { label: 'Sujets',     ico: '❯', color: 'agenda' },
   voyages:  { label: 'Voyages',    ico: '🌴', color: 'voyage', module: true },
   planif:   { label: 'Planifications', ico: '⏱', color: 'agenda', module: true },
-  repos:    { label: 'La flotte',  ico: '🛰️', color: 'proj', module: true },
 };
+// Les tuiles des vues de plugin, ramassées au build depuis leur `gw-plugin.json`.
+// Elles ÉCRASENT le socle ci-dessus : un plugin qui reprend un id historique gagne,
+// ce qui est le sens de la manœuvre — le plugin fait foi sur ce qu'il apporte.
+Object.assign(APP_META, appTiles());
 const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
 
 /* ── Habillage DÉCLARATIF d'un domaine ────────────────────────────────

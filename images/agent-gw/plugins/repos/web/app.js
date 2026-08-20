@@ -9,7 +9,7 @@
    `repos` était déjà un module déclarable. Poser `GW_APPS=repos` sur un pod en
    livrée neutre donnait une route morte. Contrat et injection : `apps/index.js`. */
 
-import './repos.css';
+import './app.css';
 
 const SPARK_W = 118, SPARK_H = 30;
 

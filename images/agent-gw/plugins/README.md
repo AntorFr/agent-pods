@@ -14,6 +14,8 @@ plugins/<id>/
   .claude-plugin/plugin.json
   skills/<name>/SKILL.md    the contract the agent must follow
   api.py                    a FastAPI `router`, mounted at startup
+  web/app.js                a launcher view, bundled at BUILD time
+  web/app.css               its styles, imported from app.js
   setup                     an idempotent executable, run at startup
   bin/*                     executables, installed on PATH at BUILD time
   tools/*                   the Claude Code plugin's own tooling
@@ -105,10 +107,23 @@ Design archives sit next to the plugin they describe (`plugins/voyages/VOYAGES.m
 `plugins/parcours/PARCOURS.md`, `plugins/atelier/ATELIER-3.md`): the reasoning travels
 with the code, so a plugin folder is self-contained down to its *why*.
 
-One frontier is still uncrossed: the front end keeps its own registry
-(`frontend/src/launcher/apps/index.js`), so an app wanting a **screen** must still put
-its factory there. A third-party plugin can today ship a contract, an API, an executable
-and its procedure — but not yet a view.
+**`web/app.js`** — a launcher view. It exports a factory `(api) => ({ routes })`, and
+`build/registry.mjs` collects it at **build time**: the front end is one esbuild bundle,
+so a view has to be present when the image is built. That is the same rule as the rest —
+a plugin travels in the same image tag as the engine that renders it, so the two cannot
+drift. Declare the tile under `vue` in the manifest (`{label, ico, color}`); a view with
+no tile is legitimate, it is a detail screen reached from another page.
+
+⚠️ A view ships **JavaScript into the page**, so it can do anything the launcher can —
+DOM, `fetch` with the user's session, and therefore `/api/chat`. There is no sandbox and
+an `api` object would not be one: once code runs in the page, no API design bounds it.
+The boundary here is review and the CI, not isolation. Keep that in mind before
+vendoring a view you have not read.
+
+One frontier is still uncrossed: **chrome**. A plugin cannot yet add a control to the
+composer or an entry to the settings panel — those live in `app/static/app.html`, which
+the core owns and `applyFeatures()` merely *subtracts* from. Turning that into slots a
+plugin fills is the next step.
 
 > **A note on language.** This file is in English because it addresses people outside
 > this repository. The agent-facing contracts (`skills/*/SKILL.md`) are in French, like

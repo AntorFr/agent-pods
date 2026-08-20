@@ -8,12 +8,19 @@
 
 # --- Frontend build stage: bundle the Markdoc content engine (browser IIFE) ---
 FROM node:22-bookworm-slim AS frontend
-WORKDIR /fe
+# ⚠️ WORKDIR sous /build, et PAS /fe : les vues de plugin vivent en
+# `plugins/<id>/web/app.js`, que `build/registry.mjs` ramasse et importe en
+# `../../../../plugins/…` depuis `src/launcher/apps/`. Ce chemin relatif n'a de sens
+# que si les deux dossiers sont VOISINS, comme dans le dépôt. Sans `plugins/` à cet
+# étage, le build ne casse pas — il produit un registre VIDE, donc une PWA sans
+# aucune vue de plugin, et rien ne le dit. D'où le smoke en CI.
+WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
+COPY plugins /build/plugins
 COPY frontend/ ./
 RUN npm run build
-# -> /fe/dist/engine.js
+# -> /build/frontend/dist/engine.js
 
 # --- Runtime ---
 FROM python:3.12-slim
@@ -110,10 +117,10 @@ RUN set -eu; \
 # (filet ZFS) : écrire un fait, c'est écrire un fichier, il n'y a rien à
 # synchroniser. Les instructions, elles, ont deux auteurs et un `origin`.
 COPY --chmod=755 bin/ /usr/local/bin/
-COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css /fe/dist/scan.js ./app/static/
+COPY --from=frontend /build/frontend/dist/engine.js /build/frontend/dist/engine.css /build/frontend/dist/launcher.js /build/frontend/dist/launcher.css /build/frontend/dist/scan.js ./app/static/
 # Le CLI atelier (valide/migre + les règles 3.0) descend dans le plugin : Alfred valide
 # et migre avec EXACTEMENT le code que l'établi exécute (cf. ATELIER-3.md D4).
-COPY --from=frontend /fe/dist/atelier.mjs ./plugins/atelier/tools/atelier.mjs
+COPY --from=frontend /build/frontend/dist/atelier.mjs ./plugins/atelier/tools/atelier.mjs
 
 RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /workspace \

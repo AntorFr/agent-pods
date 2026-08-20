@@ -7,12 +7,17 @@
    donc invisible sous tout autre thème alors que son API répondait partout. Le
    contrat de skin a perdu `routes` ; c'est ici qu'elles vivent.
 
-   AJOUTER UNE APP, en quatre gestes :
-     1. `apps/<id>.js`   → une fabrique `(api) => { routes: {…} }` ;
-     2. `apps/<id>.css`  → ses règles, si elle en a, importée depuis `<id>.js` ;
-     3. une ligne ici (`FACTORIES`) ;
-     4. une entrée dans `APP_META` (main.js) pour la tuile.
-   Puis `<id>` dans `GW_APPS` sur le pod. Rien d'autre à toucher.
+   ⚠️ CE FICHIER NE NOMME PLUS AUCUNE APP. Les vues sont DÉCOUVERTES sous
+   `plugins/<id>/web/app.js` et ramassées au build par `build/registry.mjs`.
+   C'est la même propriété que côté corps (`app/plugins.py`) : ni le lanceur ni la
+   gateway ne connaissent un plugin par son nom, ce qui est la seule façon d'en
+   déposer un venu d'un autre dépôt.
+
+   AJOUTER UNE VUE, en deux gestes :
+     1. `plugins/<id>/web/app.js`  → une fabrique `(api) => ({ routes: {…} })` ;
+        `plugins/<id>/web/app.css` → ses règles, importées depuis `app.js` ;
+     2. la clé `vue` de son `gw-plugin.json` → `{ label, ico, color }` pour la tuile.
+   Puis `<id>` dans `GW_APPS` sur le pod. Rien à enregistrer nulle part.
 
    LE CONTRAT :
      routes  { [préfixe]: (reste) => void }
@@ -26,22 +31,18 @@
    vivent dans `main.js`, lequel importe ce registre. On injecte donc un `api`
    explicite : dépendance visible, testable, unidirectionnelle.
 
-   ⚠️ Les quatre autres modules (`todo`, `projets`, `atelier`, `planif`,
-   `voyages`) vivent encore dans `main.js`. Ce registre naît avec `repos` et les
-   accueillera au fil de l'eau — on ne déplace pas deux mille lignes pour la
-   symétrie, on les déplace quand on y touche de toute façon. */
+   ⚠️ Les cinq modules historiques (`todo`, `projets`, `atelier`, `planif`,
+   `voyages`) vivent encore dans `main.js`. On les déplace quand on y touche de
+   toute façon, pas pour la symétrie — décision tenue depuis l'extraction de
+   `repos`. */
 
-import createRepos from './repos.js';
+import { FABRIQUES, TUILES } from './registry.generated.js';
 
-const FACTORIES = {
-  repos: createRepos,
-};
-
-/** Instancie toutes les apps connues. Une fabrique qui jette n'emporte pas les
-    autres : le lanceur perd une vue, pas la page. */
+/** Instancie toutes les vues découvertes. Une fabrique qui jette n'emporte pas
+    les autres : le lanceur perd une vue, pas la page. */
 export function resolveApps(api) {
   const out = {};
-  for (const [id, make] of Object.entries(FACTORIES)) {
+  for (const [id, make] of Object.entries(FABRIQUES)) {
     try {
       out[id] = make(api);
     } catch (e) {
@@ -51,6 +52,9 @@ export function resolveApps(api) {
   return out;
 }
 
-export function knownApps() {
-  return Object.keys(FACTORIES);
+/** Les tuiles déclarées par les plugins, fusionnées dans `APP_META` par le
+    lanceur. Une vue sans clé `vue` n'a pas de tuile — elle reste atteignable par
+    sa route, ce qui est le cas d'une vue de détail. */
+export function appTiles() {
+  return TUILES;
 }

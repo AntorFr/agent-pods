@@ -1,5 +1,10 @@
 {
   "id": "repos",
   "kind": "app",
-  "description": "App La flotte : le tableau des .agent/status.md des clones locaux. Lit le DISQUE, jamais l'API GitHub — ce qui s'affiche est ce que le pod a fetche."
+  "description": "App La flotte : le tableau des .agent/status.md des clones locaux. Lit le DISQUE, jamais l'API GitHub — ce qui s'affiche est ce que le pod a fetche.",
+  "vue": {
+    "label": "La flotte",
+    "ico": "🛰️",
+    "color": "proj"
+  }
 }

@@ -1,2 +1,5 @@
 node_modules/
 dist/
+
+# Registre des vues de plugin, regenere a chaque build et a chaque banc.
+src/launcher/apps/registry.generated.js
