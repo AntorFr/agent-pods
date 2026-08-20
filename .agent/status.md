@@ -121,17 +121,13 @@ Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github
 > bonne révision, puis supprimer à la main.
 
 **Prochaines étapes :**
-- [ ] **Un job de test dans la CI, avant le build.** Aujourd'hui `docker-publish.yml`
-      CONSTRUIT les images sans jamais rien exécuter — pas un test, pas même un import.
-      Ce n'est pas théorique : le 2026-08-19, retirer `workspace-mcp` a libéré la
-      contrainte transitive qui plafonnait `mcp` en 1.x, `mcp>=1.2` a résolu en 2.0.0 —
-      qui supprime `mcp.server.fastmcp` — et la gateway ne démarrait plus **du tout**.
-      Rattrapé à la main en construisant l'image pour vérifier autre chose ; rien dans la
-      chaîne ne l'aurait arrêté. Deux gardes suffiraient, et elles sont bon marché :
-      `python test/*.py` + `npm test` en `needs:` du job build (le patron commenté est
-      déjà dans le workflow), et surtout **un `python -c "import app.main"` dans l'image
-      construite** — c'est lui qui aurait vu celle-ci, les bancs tournant sur un venv
-      dont la résolution est figée depuis longtemps.
+- [x] **Un job de test dans la CI — FAIT le 2026-08-20.** Le workflow construisait et
+      publiait sans jamais rien exécuter. Deux gardes désormais, et elles ne se
+      recouvrent pas : un job `test` en amont (12 suites Python + 7 front, `build` en
+      dépend), et surtout un **smoke DANS l'image fraîchement construite**, chargée en
+      local avant publication. C'est le second qui compte : les bancs tournent sur un
+      venv à la résolution figée, seule une image neuve voit une dérive de dépendance.
+      Vérifié qu'il MORD — en forçant `mcp==2.0.0`, l'import échoue et la CI tombe.
 - [ ] Un push sur `main` **depuis le pod** — le dernier chemin du proxy git non éprouvé
       (les branches neuves, elles, passent depuis le 2026-08-10).
 - [ ] **La frontière non franchie** : un plugin tiers peut livrer un contrat, une API et
