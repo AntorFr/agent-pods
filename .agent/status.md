@@ -22,8 +22,8 @@ helper scopé reste, la référence à l'outil est datée). `python test/bin_tes
 > dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
 > l'historique réécrit **supprimerait la mémoire vivante du NAS**.
 
-**État :** Trois images en production, **déployées** — `agent-gw` 0.77.0 sur les trois
-corps (Alfred, Skippy, Nestor), `claude-pod` 0.6.0, `agent-voice` 0.2.0. L'identité vient
+**État :** Trois images en production, **déployées** — `agent-gw` 0.78.0 sur les trois
+corps (Alfred, Skippy, Nestor), `claude-pod` 0.7.0, `agent-voice` 0.3.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
 
 Deux chantiers livrés coup sur coup :
@@ -39,34 +39,20 @@ Deux chantiers livrés coup sur coup :
   code refuse franchement. Les manifestes déclarent ces valeurs — dans cet ordre, jamais
   l'inverse. `bin_test` tient la garde pour que la faute ne revienne pas.
 
-**Dettes de transition — plus AUCUN consommateur, les replis sont morts** (2026-08-20).
-Mesuré sur les trois pods, pas supposé : les manifestes posent `HUB_URL` /
-`HUB_TOKEN_URL` et **aucun** ne porte plus une variable `ROSETTA_*` ; les `.mcp.json`
-déployés d'Alfred et du cockpit lancent `mcp-bridge` et interpolent `${HUB_USER_TOKEN}` ;
-Nestor n'a pas de `.mcp.json`. Ce qui reste est donc du **code mort**, pas une béquille :
+**Le dé-marquage est SOLDÉ** (2026-08-20). Les replis qui avaient permis la transition
+ont été retirés d'un bloc, sur décision de Monsieur — « on fait propre, au pire on
+corrigera ». Ils n'avaient plus aucun consommateur, vérifié sur les trois pods avant de
+couper : plus d'alias `rosetta-bridge`, plus de lecture des `ROSETTA_*`, plus de double
+injection du jeton, plus de repli `ALFRED_VOICE_*` ni de backend `"alfred"`.
 
-- l'alias `rosetta-bridge` → `mcp-bridge` sur le PATH des deux images ;
-- l'injection du jeton de session sous les deux noms (`_run_alfred`) ;
-- la lecture des `ROSETTA_*` dans `mcp-bridge`, `trace-geom` et `git-credential-hub` ;
-- le repli `ALFRED_VOICE_*` et la valeur de backend `"alfred"` dans agent-voice.
+`agent-pods` ET `rosetta-mcp` — les deux dépôts **publics** — ne contiennent plus une
+seule occurrence de mon domaine. Côté hub (`rosetta-mcp` 0.20.0), c'était 12 défauts
+FONCTIONNELS et non de la prose, dont un qui comptait double : `POSTIER_ALLOWED` valait
+`*@<mon domaine>`, ce qui publiait le domaine **et** ouvrait tout un domaine aux envois
+de mail sans que le déploiement l'ait demandé. Il est maintenant **fail-closed**.
 
-**Pourquoi on ne les retire pas tout de suite, et ce n'est pas de la timidité** : le
-clone déployé du cockpit porte **44 commits non publiés**, dont un (`b645238`) réécrit
-`.mcp.json` avec les anciens noms. Le jour où Skippy-pod rebase et publie, ce commit
-repasse — et c'est exactement ce que les replis absorbent. Les supprimer avant sa
-publication, c'est transformer un conflit de texte en panne d'outils. Ils partiront en
-une seule livraison **après** son prochain push.
-
-⚠️ **Le verrou n'est pas technique, il est chez Skippy-pod** : son clone du cockpit porte
-**44 commits non publiés**, qui attendent un bouclier (il le sait, c'est écrit dans son
-propre status). Un `memory-sync pull` tenté depuis le Mac le 2026-08-20 a été **abandonné
-volontairement** — 13 conflits sur 43 commits, dans du travail dont je n'ai pas le
-contexte. Ce n'est pas à faire de l'extérieur : c'est une session avec Monsieur, bouclier
-armé. Le pod est resté intact.
-
-Quand il publiera, un conflit l'attend sur `.mcp.json` — et il est désormais **sans
-enjeu** : le `.mcp.json` de son clone a été aligné sur `origin` (fichier seul, ses 44
-commits intacts), donc c'est la version d'`origin` qui fait foi des deux côtés.
+Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github` et
+`meteo` du hub en HTTP 200, et le pont refuse proprement sans `HUB_URL`.
 
 > **Le chemin `unifi-agent` n'existe plus** (2026-08-20). Il contournait l'OAuth parce
 > qu'un pod headless ne savait pas s'authentifier — un manque comblé DÈS LE LENDEMAIN de
