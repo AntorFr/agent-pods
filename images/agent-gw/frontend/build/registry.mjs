@@ -39,6 +39,9 @@ const SORTIE_BLOCS = join(FRONTEND, 'src', 'blocks.generated.js');
 // les bancs importent le moteur dans node, qui n'a pas de chargeur CSS. Ce
 // fichier-ci n'est importé que par `src/main.js`, l'entrée d'esbuild.
 const SORTIE_STYLES = join(FRONTEND, 'src', 'blocks.styles.generated.js');
+// Le CHROME — ce qu'un plugin ajoute à la coque : un contrôle du composeur, une
+// entrée des Réglages, la modale qui va avec. Bundle du LANCEUR, comme les vues.
+const SORTIE_CHROME = join(FRONTEND, 'src', 'launcher', 'chrome.generated.js');
 
 /** Les plugins qui apportent `web/<fichier>`, triés — ordre stable = diff lisible.
     `app.js` donne une vue du lanceur, `blocks.js` des blocs du moteur. */
@@ -111,6 +114,10 @@ export function generer() {
   mkdirSync(dirname(SORTIE_BLOCS), { recursive: true });
   writeFileSync(SORTIE_BLOCS, rendre(blocs, { fichier: 'blocks.js', profondeur: 2 }), 'utf8');
 
+  const chrome = scanner(PLUGINS, 'chrome.js');
+  mkdirSync(dirname(SORTIE_CHROME), { recursive: true });
+  writeFileSync(SORTIE_CHROME, rendre(chrome, { fichier: 'chrome.js', profondeur: 3 }), 'utf8');
+
   const feuilles = scanner(PLUGINS, 'blocks.css');
   writeFileSync(SORTIE_STYLES,
     '/* GÉNÉRÉ par build/registry.mjs — les feuilles des blocs de plugin.\n'
@@ -118,12 +125,13 @@ export function generer() {
     + feuilles.map((f) => `import '../../plugins/${f.id}/web/blocks.css';`).join('\n')
     + '\n', 'utf8');
 
-  return { vues, blocs, feuilles };
+  return { vues, blocs, chrome, feuilles };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { vues, blocs } = generer();
+  const { vues, blocs, chrome } = generer();
   const dire = (quoi, l) => `${quoi} : ${l.length} plugin(s) — ${l.map((v) => v.id).join(', ') || 'aucun'}`;
   console.log(dire('registre des vues ', vues));
   console.log(dire('registre des blocs', blocs));
+  console.log(dire('registre du chrome', chrome));
 }

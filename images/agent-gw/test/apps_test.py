@@ -134,10 +134,21 @@ _js_features = re.findall(r"'([^']+)'", _fallback.group(1)) if _fallback else []
 check("le repli JS liste les mêmes capacités que le défaut serveur",
       _js_features == m.FEATURES)
 
+# Une capacité est câblée de DEUX façons désormais, et l'invariant est qu'elle le
+# soit par l'une ou par l'autre — jamais par aucune :
+#   - la coque la porte et `applyFeatures` la RETIRE quand elle est éteinte ;
+#   - un plugin de sorte `capacite` l'AJOUTE (dossier plugins/<id>/web/chrome.js),
+#     et `applyChrome` la pose dans l'emplacement du composeur ou des Réglages.
+# Une capacité listée mais câblée nulle part serait ingérable en silence : la
+# variable la promet, aucun bouton n'apparaît, et rien ne le dit.
 _apply = re.search(r"function applyFeatures\(\)\s*\{(.*?)\n\}", _JS, re.S)
 _wired = set(re.findall(r"featureOn\('([^']+)'\)", _apply.group(1))) if _apply else set()
-check("chaque capacité est réellement câblée dans applyFeatures",
-      _wired == set(m.FEATURES))
+_par_plugin = {d.name for d in (Path(__file__).resolve().parents[1] / "plugins").iterdir()
+               if (d / "web" / "chrome.js").is_file()}
+check("chaque capacité est câblée — par la coque OU par un plugin",
+      set(m.FEATURES) <= (_wired | _par_plugin))
+check("le scanner est bien passé du côté plugin (il n'est plus dans la coque)",
+      "scan" in _par_plugin and "scan" not in _wired)
 
 print("\n--- l'état de l'instance, dit à l'agent (system_prompt.append) ---")
 
@@ -247,7 +258,7 @@ check("tout dossier de plugins/ porte un manifeste (sinon il n'est pas découver
 for d in _DIRS:
     gw = _pj.loads((d / "gw-plugin.json").read_text(encoding="utf-8"))
     check("%s : id = nom du dossier, kind connu" % d.name,
-          gw.get("id") == d.name and gw.get("kind") in ("socle", "app", "outil"))
+          gw.get("id") == d.name and gw.get("kind") in ("socle", "app", "outil", "capacite"))
     # La VUE — le quatrième apport possible d'un plugin, à côté des skills, de
     # l'API et des exécutables. Deux moitiés qui doivent aller ensemble : la clé
     # `vue` pose une tuile dans le lanceur, `web/app.js` fournit l'écran qu'elle

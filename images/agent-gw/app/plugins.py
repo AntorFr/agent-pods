@@ -5,7 +5,7 @@ Le corps ne connaît **aucun** plugin par son nom : il lit les dossiers de
 cette ignorance qui rend un plugin déposable depuis un autre dépôt ; tout ce qui
 la percerait (un `import` en dur, une liste de noms) casse la propriété.
 
-Le contrat complet — l'arborescence, les trois sortes, ce qui reste dans le corps
+Le contrat complet — l'arborescence, les quatre sortes, ce qui reste dans le corps
 et pourquoi — vit dans `plugins/README.md`. Ici : ce qui l'exécute.
 
 Le principe de conception, unique : **la présence du fichier au bon nom suffit.**
@@ -27,11 +27,16 @@ from pathlib import Path
 PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
 MANIFEST = "gw-plugin.json"
 
-# Les trois sortes, et l'axe qui décide de l'activité de chacune.
-KIND_ALWAYS = "socle"   # toujours actif
-KIND_APP = "app"        # actif si l'id est dans GW_APPS
-KIND_TOOL = "outil"     # actif si l'id est dans GW_TOOLS
-KINDS = (KIND_ALWAYS, KIND_APP, KIND_TOOL)
+# Les quatre sortes, et l'axe qui décide de l'activité de chacune.
+KIND_ALWAYS = "socle"       # toujours actif
+KIND_APP = "app"            # actif si l'id est dans GW_APPS
+KIND_TOOL = "outil"         # actif si l'id est dans GW_TOOLS
+# Une capacité de la COQUE — un contrôle du composeur, une entrée des Réglages.
+# Gardée par `GW_FEATURES`, l'axe qui existait déjà pour ça : un plugin de cette
+# sorte se déclare donc EXACTEMENT là où sa fonctionnalité se déclarait avant,
+# et aucun manifeste de pod ne bouge le jour où elle devient un plugin.
+KIND_FEATURE = "capacite"   # actif si l'id est dans GW_FEATURES
+KINDS = (KIND_ALWAYS, KIND_APP, KIND_TOOL, KIND_FEATURE)
 
 SETUP_TIMEOUT = 30.0
 
@@ -119,7 +124,8 @@ def discover(root: Path | None = None) -> list[Plugin]:
     return found
 
 
-def is_active(plugin: Plugin, apps: list[str], tools: list[str]) -> bool:
+def is_active(plugin: Plugin, apps: list[str], tools: list[str],
+              features: list[str] | None = None) -> bool:
     """Un plugin est actif si l'axe de sa sorte le nomme."""
     if plugin.kind == KIND_ALWAYS:
         return True
@@ -127,11 +133,14 @@ def is_active(plugin: Plugin, apps: list[str], tools: list[str]) -> bool:
         return plugin.id in apps
     if plugin.kind == KIND_TOOL:
         return plugin.id in tools
+    if plugin.kind == KIND_FEATURE:
+        return plugin.id in (features or [])
     return False
 
 
-def active(plugins: list[Plugin], apps: list[str], tools: list[str]) -> list[Plugin]:
-    return [p for p in plugins if is_active(p, apps, tools)]
+def active(plugins: list[Plugin], apps: list[str], tools: list[str],
+           features: list[str] | None = None) -> list[Plugin]:
+    return [p for p in plugins if is_active(p, apps, tools, features)]
 
 
 def claude_plugins(plugins: list[Plugin]) -> list[dict]:

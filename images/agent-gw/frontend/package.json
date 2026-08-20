@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Alfred PWA frontend — Markdoc content engine + design system, bundled with esbuild.",
   "scripts": {
-    "build": "node build/registry.mjs && esbuild src/main.js --bundle --format=iife --global-name=Alfred --minify --outfile=dist/engine.js && esbuild src/launcher/main.js --bundle --format=iife --minify --outfile=dist/launcher.js && esbuild src/scan/main.js --bundle --format=iife --minify --outfile=dist/scan.js && esbuild src/atelier/cli.js --bundle --format=esm --platform=node --outfile=dist/atelier.mjs && (cp dist/atelier.mjs ../plugins/atelier/tools/atelier.mjs 2>/dev/null || true)",
+    "build": "node build/registry.mjs && esbuild src/main.js --bundle --format=iife --global-name=Alfred --minify --outfile=dist/engine.js && esbuild src/launcher/main.js --bundle --format=iife --minify --outfile=dist/launcher.js && NODE_PATH=./node_modules esbuild ../plugins/scan/web/decodeur.js --bundle --format=iife --minify --outfile=dist/scan.js && esbuild src/atelier/cli.js --bundle --format=esm --platform=node --outfile=dist/atelier.mjs && (cp dist/atelier.mjs ../plugins/atelier/tools/atelier.mjs 2>/dev/null || true)",
     "test": "node build/registry.mjs && node test/registry-test.mjs && node test/atelier-test.mjs && node test/render-test.mjs && node test/parcours-test.mjs && node test/chart-test.mjs && node test/scan-test.mjs && node test/scan-decode-test.mjs && node test/theme-lint.mjs"
   },
   "dependencies": {

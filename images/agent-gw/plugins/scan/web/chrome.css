@@ -1,0 +1,35 @@
+/* Les styles du viseur — sortis de `launcher.css` avec le reste du scanner.
+   Importés depuis `chrome.js`, donc présents si et seulement si le plugin est
+   livré. Une feuille de la coque qui habille un plugin est la même faute que la
+   coque qui contenait son markup. */
+
+/* Lecteur de code-barres : plein écran, au-dessus des modales (la caméra n'est
+   pas une boîte de dialogue — on vise avec le téléphone). `env(safe-area-*)`
+   parce que la barre d'actions tomberait sinon sous l'indicateur d'accueil d'un
+   iPhone ; viewport-fit=cover est déjà posé dans app.html. */
+/* theme-lint-ignore: le viseur n'est pas une surface thémable — c'est un flux
+   caméra plein écran. Le fond DOIT être noir (aucun corps n'y peut rien) et les
+   voiles/textes qui le surmontent sont calibrés sur l'image, pas sur la palette. */
+#scanwrap{ position:fixed; inset:0; z-index:60; background:#000; }
+#scanwrap[hidden]{ display:none; }
+#scanvideo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+/* Viseur purement indicatif : les décodeurs lisent tout ce qui est À L'ÉCRAN, pas
+   seulement ce cadre (cf. visibleFrame() dans launcher/main.js). Large et bas, à
+   la forme d'un code-barres, pour induire le bon cadrage.
+   theme-lint-ignore: voile posé sur l'image, cf. #scanwrap. */
+.scanframe{ position:absolute; left:8%; right:8%; top:50%; transform:translateY(-50%); height:26vh; border:2px solid var(--accent); border-radius:var(--r); box-shadow:0 0 0 100vmax rgba(0,0,0,.42); pointer-events:none; }
+/* theme-lint-ignore: dégradé de lisibilité sur l'image, cf. #scanwrap. */
+.scanbar{ position:absolute; left:0; right:0; bottom:0; padding:14px 16px calc(14px + env(safe-area-inset-bottom)); background:linear-gradient(to top,rgba(0,0,0,.86),rgba(0,0,0,0)); display:flex; flex-direction:column; gap:10px; }
+/* theme-lint-ignore: texte sur l'image, cf. #scanwrap. */
+.scanhint{ color:#fff; font:12.5px var(--f-body); opacity:.82; text-align:center; }
+#scanlist{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; max-height:22vh; overflow-y:auto; }
+.scode{ display:inline-flex; align-items:center; gap:5px; font:600 12px var(--f-mono); letter-spacing:.06em; padding:5px 5px 5px 9px; border-radius:var(--r-sm); background:var(--accent); color:var(--on-accent); }
+/* La croix : elle retire un code lu à tort. Assez grande pour un pouce (24px de
+   cible), assez discrète pour ne pas se cliquer par accident. */
+.scode .x{ width:24px; height:24px; margin:-6px 0; display:grid; place-items:center; font-size:11px; line-height:1; opacity:.7; border-radius:var(--r-xs); }
+.scode .x:hover,.scode .x:active{ opacity:1; background:var(--scrim-soft); }
+.scanactions{ display:flex; gap:8px; }
+/* theme-lint-ignore: boutons posés sur l'image, cf. #scanwrap. */
+.scanactions button{ flex:1; padding:11px; border-radius:var(--r-sm); border:1px solid rgba(255,255,255,.28); background:rgba(255,255,255,.12); color:#fff; font:600 14px var(--f-body); }
+.scanactions button.primary{ background:var(--accent); color:var(--on-accent); border-color:transparent; }
+.scanactions button:disabled{ opacity:.4; }

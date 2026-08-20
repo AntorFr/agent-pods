@@ -1,0 +1,5 @@
+{
+  "id": "scan",
+  "kind": "capacite",
+  "description": "Lecture de codes-barres : un bouton du composeur ouvre la camera, accumule un panier de codes et les depose dans le champ de saisie. Ne decide rien — c'est un clavier, la conversation commande."
+}

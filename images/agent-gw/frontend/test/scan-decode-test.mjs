@@ -18,7 +18,13 @@ const check = (name, pass) => checks.push([name, pass]);
 
 /* ── Le décodeur, tel qu'il est livré ─────────────────────────────────── */
 const built = await esbuild.build({
-  entryPoints: [new URL('../src/scan/main.js', import.meta.url).pathname],
+  entryPoints: [new URL('../../plugins/scan/web/decodeur.js', import.meta.url).pathname],
+  // ⚠️ Le décodeur vit chez le PLUGIN, donc hors de l'arbre npm de `frontend/` :
+  // la résolution de `@zxing/library` remonte depuis `plugins/scan/web/` et ne
+  // trouve jamais `frontend/node_modules`. On la lui montre. C'est le prix — assumé
+  // et unique — d'un plugin qui dépend d'un paquet npm ; le build fait pareil, par
+  // NODE_PATH.
+  nodePaths: [new URL('../node_modules', import.meta.url).pathname],
   bundle: true, format: 'iife', platform: 'browser', write: false,
 });
 globalThis.window = globalThis;

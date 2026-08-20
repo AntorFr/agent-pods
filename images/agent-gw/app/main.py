@@ -121,7 +121,7 @@ TOOLS = [t.strip() for t in os.environ.get("GW_TOOLS", "").split(",") if t.strip
 # Les plugins livrés par l'image, et ceux que CE corps allume. Calculés une fois à
 # l'import : les trois axes viennent de l'environnement, ils ne bougent pas à chaud.
 PLUGINS = plugin_host.discover()
-PLUGINS_ACTIVE = plugin_host.active(PLUGINS, APPS, TOOLS)
+PLUGINS_ACTIVE = plugin_host.active(PLUGINS, APPS, TOOLS, FEATURES)
 # Identité visuelle du pod. Le front pose `data-agent=<theme>` sur <html> au boot,
 # ce qui arme les surcharges de jetons de `theme-<theme>.css` (bundlées avec le
 # reste, inertes tant que l'attribut est absent). `alfred` = pas d'attribut, donc

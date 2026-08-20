@@ -6,7 +6,7 @@
 // Run: node test/scan-test.mjs
 import {
   FORMATS, CONFIRM, validCode, createBasket, scanFrame, dropCode, composeMessage,
-} from '../src/scan/codes.js';
+} from '../../plugins/scan/web/codes.js';
 
 /** Montre `code` au panier autant de fois qu'il faut pour qu'il soit corroboré.
     Retourne true si le panier a changé au moins une fois. */

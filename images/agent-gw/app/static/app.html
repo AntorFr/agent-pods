@@ -36,7 +36,6 @@
           <button class="shield" id="shield" type="button" title="Autoriser la prochaine action sensible (agenda…)">🛡</button>
           <button class="shield" id="eph" type="button" title="Mode éphémère — question ponctuelle, hors conversation, rien n’est retenu">⚡</button>
           <button class="shield" id="attach" type="button" title="Joindre un fichier">📎</button>
-          <button class="shield" id="scan" type="button" title="Scanner un code-barres">▥</button>
         </div>
         <!-- .field n'est qu'une ancre de position pour le curseur-bloc : elle reprend le
              flex du textarea et ne peint rien. Le caret reste invisible tant que le thème
@@ -122,21 +121,6 @@
     </div>
   </div>
 
-  <!-- Lecteur de code-barres. `playsinline` n'est pas décoratif : sans lui, iOS
-       bascule la vidéo dans son lecteur natif plein écran et l'overlay passe
-       dessous. `muted` est ce qui autorise la lecture automatique. -->
-  <div id="scanwrap" hidden>
-    <video id="scanvideo" playsinline muted autoplay></video>
-    <div class="scanframe"></div>
-    <div class="scanbar">
-      <div class="scanhint">Visez un code-barres — ils s’accumulent, rien n’est envoyé. ✕ retire un code lu à tort.</div>
-      <div id="scanlist"></div>
-      <div class="scanactions">
-        <button id="scan-close" type="button">Annuler</button>
-        <button id="scan-done" type="button" class="primary" disabled>Ajouter</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Poignées de bord (mobile seul) : affordance + repli du swipe deux-écrans chat ⇆ apps. -->
   <div class="edge right" id="toapps" title="Applications" aria-label="Ouvrir les applications"></div>

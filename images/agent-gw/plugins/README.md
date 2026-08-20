@@ -18,6 +18,8 @@ plugins/<id>/
   web/app.css               its styles, imported from app.js
   web/blocks.js             Markdoc tags for the content engine
   web/blocks.css            their styles, collected separately (see below)
+  web/chrome.js             composer controls, settings entries, modals
+  web/chrome.css            their styles, imported from chrome.js
   setup                     an idempotent executable, run at startup
   bin/*                     executables, installed on PATH at BUILD time
   tools/*                   the Claude Code plugin's own tooling
@@ -40,6 +42,7 @@ plugin is active**:
 |---|---|---|
 | `socle` | **always** | What every agent must have: the contract for writing memory (`fiches`), or a body capability with no tile of its own (`parcours`). |
 | `app` | its `id` is in **`GW_APPS`** | A launcher module: a tile, a route, a data format. |
+| `capacite` | its `id` is in **`GW_FEATURES`** | A shell capability: a control in the composer, an entry in the settings panel. `scan` (the barcode reader) is the case in point — gated by the axis that already existed for it, so no pod manifest changes the day a feature becomes a plugin. |
 | `outil` | its `id` is in **`GW_TOOLS`** | An agent capability — an executable, a procedure — with **nothing in the interface**. `git` is the textbook case: publishing is not a screen, and not every body is entitled to it. |
 
 An unknown `kind` does not fall back to a default: the plugin is **ignored**, loudly. A
@@ -139,10 +142,23 @@ bundle, blocks in the **engine** bundle. Merging them would drag a 1000-line map
 styles into the launcher, which has no use for either — and a CSS import is a side effect
 that tree-shaking does not remove.
 
-One frontier is still uncrossed: **chrome**. A plugin cannot yet add a control to the
-composer or an entry to the settings panel — those live in `app/static/app.html`, which
-the core owns and `applyFeatures()` merely *subtracts* from. Turning that into slots a
-plugin fills is the next step.
+**`web/chrome.js`** — what a plugin adds to the shell. Exports
+`(api) => ({ composer?, settings?, markup?, mount? })`: buttons for the composer tray,
+entries for the settings list, an HTML string for its modals, and `mount()` to wire
+listeners **after** injection — the nodes do not exist before.
+
+This inverted a model that was purely **subtractive**: the shell used to contain every
+control, and `applyFeatures()` only ever *removed* the ones a body did not want. Nothing
+could be added, which is exactly what kept a plugin from shipping anything but a screen.
+Both passes now run, in order — remove what the core owns, then add what plugins bring.
+
+⚠️ A plugin depending on an **npm package** needs the build to be shown where
+`node_modules` is: its files sit outside the frontend's npm tree, so resolution walks up
+and never finds it. `NODE_PATH` in the build script, `nodePaths` in the test — the
+scanner's `@zxing/library` is the live example.
+
+Nothing is left uncrossed on the front end: a plugin can ship a contract, an API, an
+executable, a view, content blocks and shell chrome.
 
 > **A note on language.** This file is in English because it addresses people outside
 > this repository. The agent-facing contracts (`skills/*/SKILL.md`) are in French, like
