@@ -1,0 +1,155 @@
+#!/bin/sh
+# instruction-sync — synchronise les INSTRUCTIONS d'un corps, pas sa mémoire.
+#
+# ── Pourquoi cet outil existe, alors qu'on vient d'en retirer un très semblable ──
+#
+# `memory-sync` a été supprimé le 2026-08-20 avec la sortie de la mémoire hors de
+# git. En le retirant on a découvert ce qu'il faisait vraiment : sa justification
+# n'a JAMAIS été la mémoire, c'était la CO-ÉDITION. Or la co-édition n'a pas
+# disparu — elle s'est déplacée. Le dépôt d'un corps porte deux choses :
+#
+#   la MÉMOIRE   hors git depuis le 2026-08-20, un seul écrivain (le pod),
+#                filet = snapshots ZFS. Rien à synchroniser, jamais.
+#   les INSTRUCTIONS  CLAUDE.md, DECISIONS.md, .claude/, planif/ — versionnées,
+#                écrites par le POD (skill `amelioration`) *et* depuis la machine
+#                de dev. Deux clones, un `origin` : exactement le problème que
+#                memory-sync résolvait.
+#
+# Ce qui est mort, c'est le mot « memory », pas le mot « sync ».
+#
+# ⚠️ CE N'EST PAS UN OUTIL DE CONFORT, C'EST UN CANAL D'EXÉCUTION. `planif/` est
+# versionné, et le corps d'une fiche `type: planif` est exécuté TEL QUEL comme
+# prompt (D30). Donc `pull` ne rapatrie pas que du texte : il rapatrie des
+# instructions qui tourneront ici. Tant que les seuls auteurs sont Monsieur et
+# l'agent lui-même, c'est sain — le jour où un tiers écrit dans ce dépôt, ça ne
+# l'est plus, et ce commentaire est l'endroit où on s'en souvient.
+#
+# ── Ce qu'il ne fait PAS ──
+#
+# Il ne touche pas à la mémoire. `memory/` est dans le `.gitignore` du dépôt, et
+# cette ligne est VITALE : dans le pod, `/workspace/memory` est un point de montage
+# NFS. Si elle sautait, un `pull` supprimerait la mémoire vivante du NAS. Cet outil
+# ne la remet jamais dans l'index — il refuse même de tourner si elle a disparu
+# (garde `refuse_si_memoire_suivie` plus bas).
+#
+# ── Usage ──
+#   instruction-sync pull                     # rafraîchir les instructions
+#   instruction-sync commit "<message>" [fichiers...]   # commit LOCAL, zéro réseau
+#   instruction-sync sync                     # pull-rebase + push
+#   instruction-sync resolve                  # reprendre après résolution manuelle
+#
+# Variables : REPO (défaut $PWD ou GW_WORKSPACE), BRANCH (défaut main),
+#             GITHUB_TOKEN, GIT_USER_NAME, GIT_USER_EMAIL.
+set -eu
+
+REPO="${REPO:-${GW_WORKSPACE:-$PWD}}"
+BRANCH="${BRANCH:-main}"
+cd "$REPO"
+
+git_q() { git -c core.pager=cat "$@"; }
+
+# ⚠️ SCOPÉ SUR github.com, jamais global — et ce n'est pas de la cosmétique.
+# `memory-sync` a porté ce défaut jusqu'au 2026-08-19 : posé en `credential.helper`
+# global, le helper rendait GITHUB_TOKEN à N'IMPORTE QUEL serveur, y compris le hub
+# quand un dépôt y pointe. Il aurait alors répondu AVANT `git-credential-hub`
+# (git s'arrête au premier helper qui donne un mot de passe), et le bouclier de la
+# PWA n'aurait jamais été consulté. Le jeton n'est jamais écrit sur disque : le
+# helper l'expose à la demande, expansé au moment où git l'appelle.
+ensure_auth() {
+    [ -n "${GITHUB_TOKEN:-}" ] || return 0
+    git config --global credential.https://github.com.helper \
+        '!f() { if [ "$1" = get ]; then printf "username=x-access-token\npassword=%s\n" "$GITHUB_TOKEN"; fi; }; f'
+}
+
+# Identité des commits. On ne pose que ce qui MANQUE : un `.gitconfig` déjà réglé
+# (machine de dev, ou home persistant d'un pod) fait foi et n'est pas écrasé.
+ensure_identity() {
+    if [ -n "${GIT_USER_NAME:-}" ] && ! git config --global user.name >/dev/null 2>&1; then
+        git config --global user.name "${GIT_USER_NAME}"
+    fi
+    if [ -n "${GIT_USER_EMAIL:-}" ] && ! git config --global user.email >/dev/null 2>&1; then
+        git config --global user.email "${GIT_USER_EMAIL}"
+    fi
+}
+
+# LA garde. Si `memory/` est redevenu suivi par git, on s'arrête AVANT tout geste
+# réseau : un pull écrirait alors dans le point de montage NFS. Mieux vaut un outil
+# qui refuse bruyamment qu'une mémoire effacée en silence.
+refuse_si_memoire_suivie() {
+    if [ -d memory ] && [ -n "$(git ls-files memory | head -1)" ]; then
+        echo "instruction-sync: REFUS — 'memory/' est suivi par git." >&2
+        echo "  La mémoire est hors git depuis le 2026-08-20 et /workspace/memory est" >&2
+        echo "  un point de montage NFS : un pull la supprimerait du NAS. Remets la" >&2
+        echo "  ligne 'memory/' dans .gitignore et 'git rm -r --cached memory'." >&2
+        exit 3
+    fi
+}
+
+# Rejoue nos commits locaux sur la pointe distante, puis pousse. Le cas disjoint se
+# fusionne seul ; on retente si une course nous a doublés entre le pull et le push.
+sync_push() {
+    ensure_auth
+    n=0
+    while [ "$n" -lt 5 ]; do
+        if git_q pull --rebase --autostash origin "$BRANCH"; then
+            if git_q push origin "$BRANCH"; then
+                echo "instruction-sync: poussé sur origin/$BRANCH."
+                return 0
+            fi
+            n=$((n + 1))
+            continue
+        fi
+        # Rebase interrompu = conflit réel. On REMONTE, on ne devine pas : deux
+        # auteurs ont touché la même instruction, et arbitrer à leur place, c'est
+        # perdre une des deux intentions.
+        echo "instruction-sync: CONFLIT — rebase interrompu." >&2
+        git_q status --short >&2
+        echo "  Résous à la main, 'git add' les fichiers, puis 'instruction-sync resolve'." >&2
+        exit 2
+    done
+    echo "instruction-sync: 5 tentatives de push, toutes doublées. Réessaie." >&2
+    exit 1
+}
+
+cmd="${1:-}"
+case "$cmd" in
+    pull)
+        refuse_si_memoire_suivie
+        ensure_auth
+        git_q pull --rebase --autostash origin "$BRANCH"
+        ;;
+    commit)
+        refuse_si_memoire_suivie
+        ensure_identity
+        msg="${2:?usage: instruction-sync commit \"<message>\" [fichiers...]}"
+        shift 2
+        if [ "$#" -gt 0 ]; then
+            git_q add -- "$@"
+        else
+            echo "instruction-sync: aucun fichier nommé — on ne fait JAMAIS de 'add -A'," >&2
+            echo "  qui emporterait le chantier de quelqu'un d'autre dans ce commit." >&2
+            exit 1
+        fi
+        git_q diff --cached --quiet && { echo "instruction-sync: rien à committer."; exit 0; }
+        git_q commit -q -m "$msg"
+        echo "instruction-sync: commit local posé (non poussé)."
+        ;;
+    sync)
+        refuse_si_memoire_suivie
+        ensure_identity
+        sync_push
+        ;;
+    resolve)
+        refuse_si_memoire_suivie
+        ensure_auth
+        git_q rebase --continue || {
+            echo "instruction-sync: le rebase ne repart pas — reste des fichiers non 'add'és ?" >&2
+            exit 2
+        }
+        git_q push origin "$BRANCH" && echo "instruction-sync: conflit résolu, poussé."
+        ;;
+    *)
+        sed -n '/^# ── Usage ──/,/^set -eu/p' "$0" | sed 's/^# \{0,1\}//;$d'
+        exit 1
+        ;;
+esac

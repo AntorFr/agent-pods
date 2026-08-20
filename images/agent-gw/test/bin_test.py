@@ -39,8 +39,9 @@ print("\n--- rangement : bin/ à la racine d'une image ---")
 # pas un outil du PATH). Une règle qui crie au loup finit désactivée.
 #
 # `memory-sync` figurait ici jusqu'au 2026-08-20 : retiré avec l'outil, la mémoire
-# ayant quitté git (elle vit sur le système de fichiers, filet ZFS).
-OUTILS = {"agent-gw": ("mcp-bridge",),
+# ayant quitté git. `instruction-sync` l'a remplacé le même jour sur le seul terrain
+# qui restait — les INSTRUCTIONS, elles co-éditées (pod + machine de dev).
+OUTILS = {"agent-gw": ("mcp-bridge", "instruction-sync"),
           "claude-pod": ("mcp-bridge",)}
 for image, outils in OUTILS.items():
     root = IMAGES / image
@@ -50,10 +51,28 @@ for image, outils in OUTILS.items():
     check("%s : tout est sous bin/" % image,
           all((root / "bin" / n).is_file() for n in outils))
 
-check("agent-gw/bin/ porte l'exécutable du corps",
-      (AGENT_GW / "bin/mcp-bridge").is_file())
+check("agent-gw/bin/ porte les deux exécutables du corps",
+      (AGENT_GW / "bin/mcp-bridge").is_file()
+      and (AGENT_GW / "bin/instruction-sync").is_file())
 check("memory-sync a bien disparu du corps (mémoire hors git depuis le 2026-08-20)",
       not (AGENT_GW / "bin/memory-sync").exists())
+
+# La garde d'instruction-sync est la seule chose qui se dresse entre un `pull` et
+# l'effacement de la mémoire vivante du NAS. Un banc qui vérifie sa PRÉSENCE dans le
+# source coûte trois lignes ; la retirer par inadvertance coûterait la mémoire.
+_ISYNC = (AGENT_GW / "bin/instruction-sync")
+if _ISYNC.is_file():
+    _src = _ISYNC.read_text(encoding="utf-8")
+    check("instruction-sync refuse de tourner si memory/ est suivi par git",
+          "refuse_si_memoire_suivie" in _src and "git ls-files memory" in _src)
+    check("instruction-sync scope son helper sur github.com, jamais global",
+          "credential.https://github.com.helper" in _src
+          and "credential.helper '" not in _src)
+    # On vérifie la forme POSITIVE plutôt que l'absence d'une chaîne : « add -A »
+    # apparaît légitimement dans le message qui explique pourquoi on ne le fait pas,
+    # et un banc qui échoue sur sa propre documentation finit désactivé.
+    check("instruction-sync stage par chemin explicite, jamais tout l'arbre",
+          'add -- "$@"' in _src)
 
 print("\n--- la copie partagée : mcp-bridge, octet pour octet ---")
 

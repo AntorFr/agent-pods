@@ -48,7 +48,27 @@ from fastapi import APIRouter
 
 WORKSPACE = os.environ.get("GW_WORKSPACE", "/workspace")
 MEMORY_DIR = os.environ.get("GW_MEMORY_DIR", "memory")
-PLANIF_DIR = os.environ.get("GW_PLANIF_DIR", "planif")
+# ⚠️ RELATIF AU WORKSPACE (ou absolu), et NON plus à la mémoire — sémantique
+# changée le 2026-08-20. Le défaut `memory/planif` reproduit exactement l'ancien
+# comportement, donc un déploiement qui ne déclare rien ne bouge pas d'un octet.
+#
+# POURQUOI CE DÉCOUPLAGE. Une fiche `type: planif` n'est PAS de la mémoire : son
+# corps est exécuté tel quel comme prompt (D30). C'est de l'INSTRUCTION, donc du
+# versionné — on veut pouvoir la relire, la differ et l'annuler. Or la mémoire, elle,
+# a quitté git le 2026-08-20 : la laisser sous `memory/` condamnait les planifs à
+# sortir de git avec elle, ou à y rentrer par une exception de `.gitignore`.
+#
+# Ce que le découplage achète, au-delà du rangement :
+#   - CHEZ ALFRED, `/workspace/memory` est un POINT DE MONTAGE NFS. Suivre en git
+#     quoi que ce soit sous ce chemin rouvre le risque qu'un `pull` écrive dans le
+#     montage. Hors de `memory/`, le garde-fou reste SANS EXCEPTION.
+#   - PLANIFIER CESSE D'EXIGER UN MAGASIN MÉMOIRE. Nestor n'a pas de `memory/` (sa
+#     mémoire est le cercle partagé `/shared/famille`) : jusqu'ici il ne POUVAIT
+#     structurellement pas avoir d'horloge. Deux choses sans rapport étaient soudées
+#     par un chemin.
+#   - LA GARDE CI-DESSOUS DEVIENT STRUCTURELLE. Une planif ne vivant plus dans aucun
+#     magasin, un cercle partagé ne peut plus en injecter une, même par accident.
+PLANIF_DIR = os.environ.get("GW_PLANIF_DIR", "memory/planif")
 STATE_NAME = "planif-state.json"
 DEFAULT_TZ = os.environ.get("GW_PLANIF_TZ", "Europe/Paris")
 # Période du tick. Doit rester < 60 s pour ne pas sauter de minute en régime normal.
@@ -74,20 +94,42 @@ def _memory_root() -> Path:
 
 
 def _planif_root() -> Path:
-    """Les planifications ne se lisent QUE dans le magasin principal.
+    """La racine des planifications — UN SEUL dossier, jamais une union.
 
     ⚠️ C'est une GARDE, pas une simplification. Le corps d'une fiche `type: planif`
     est exécuté tel quel comme prompt d'un tour d'agent (D30). Les composer sur
     l'union des magasins mémoire laisserait n'importe quel pair déposer du code qui
-    tournerait ici : il suffirait d'écrire un fichier dans le cercle partagé. Seul
-    le magasin que ce corps possède en écriture arme l'horloge — ce qu'on lit
-    ailleurs est du contenu, jamais une instruction.
+    tournerait ici : il suffirait d'écrire un fichier dans le cercle partagé. Ce
+    qu'on lit dans un magasin est du contenu, jamais une instruction.
+
+    Depuis le 2026-08-20 la garde n'est plus une propriété de ce code mais de
+    l'ARBORESCENCE : ce dossier ne vit dans AUCUN magasin (cf. `PLANIF_DIR`), donc
+    il n'y a plus d'union possible dont il faudrait se protéger.
     """
-    return _memory_root() / PLANIF_DIR
+    p = Path(PLANIF_DIR)
+    return (p if p.is_absolute() else Path(WORKSPACE) / p).resolve()
 
 
 def _state_path() -> Path:
     return _planif_root() / STATE_NAME
+
+
+def _ou_est_la_fiche(path: Path) -> dict:
+    """Où afficher la fiche, et le navigateur de mémoire sait-il l'ouvrir ?
+
+    La PWA fait de chaque carte un lien `#/mem/<path>`, qui ne résout QUE dans un
+    magasin de mémoire. Depuis que les planifs peuvent vivre hors de `memory/`
+    (cf. `PLANIF_DIR`), ce lien serait mort là où elles n'y sont plus — et un lien
+    mort dans une liste est pire qu'une carte sans lien : on clique, il ne se passe
+    rien, et on croit à une panne. On le DIT au front plutôt que de le lui laisser
+    deviner.
+
+    Le cas rétro-compatible (`memory/planif`) rend exactement l'ancienne valeur.
+    """
+    try:
+        return {"path": str(path.relative_to(_memory_root())), "dans_memoire": True}
+    except ValueError:
+        return {"path": str(path.relative_to(_planif_root())), "dans_memoire": False}
 
 
 # --- Cron ------------------------------------------------------------------
@@ -201,7 +243,7 @@ def _parse_fiche(path: Path) -> dict | None:
     actif = str(fm.get("actif", "true")).lower() not in ("false", "no", "0", "")
     item = {
         "id": path.stem,
-        "path": str(path.relative_to(_memory_root())),
+        **_ou_est_la_fiche(path),
         "titre": fm.get("titre") or path.stem.replace("-", " ").capitalize(),
         "quand": fm.get("quand", ""),
         "tz": fm.get("tz") or DEFAULT_TZ,

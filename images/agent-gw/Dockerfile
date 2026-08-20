@@ -96,12 +96,19 @@ RUN set -eu; \
 #                   `test/bin_test.py` : les deux conteneurs doivent lancer le même
 #                   relais, et un commentaire ne garantissait rien.
 #
+#   instruction-sync  boucle pull-rebase / commit / push des INSTRUCTIONS du corps
+#                   (CLAUDE.md, DECISIONS.md, .claude/, planif/) — versionnées et
+#                   co-éditées par le pod ET la machine de dev. Conflit REMONTÉ,
+#                   jamais deviné. Helper git scopé sur github.com.
+#                   ⚠️ Refuse de tourner si `memory/` est redevenu suivi par git :
+#                   c'est un point de montage NFS, un pull l'effacerait.
+#
 # ⚠️ `memory-sync` vivait ici jusqu'au 2026-08-20 — RETIRÉ, à ne pas réintroduire.
-# Il encapsulait la boucle pull-rebase / commit / push d'une mémoire versionnée et
-# co-éditée. Ses deux raisons d'être sont tombées l'une après l'autre : la
-# co-édition d'abord (la machine de dev n'écrit plus dans la mémoire), puis git
-# lui-même (la mémoire vit sur le système de fichiers, filet ZFS par snapshots).
-# Un agent qui écrit un fait écrit un fichier — il n'y a plus rien à synchroniser.
+# `instruction-sync` n'est PAS son retour déguisé : en le supprimant on a vu que sa
+# justification n'avait jamais été la mémoire mais la CO-ÉDITION, laquelle a
+# simplement changé d'objet. La mémoire, elle, a un seul écrivain et vit hors de git
+# (filet ZFS) : écrire un fait, c'est écrire un fichier, il n'y a rien à
+# synchroniser. Les instructions, elles, ont deux auteurs et un `origin`.
 COPY --chmod=755 bin/ /usr/local/bin/
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css /fe/dist/scan.js ./app/static/
 # Le CLI atelier (valide/migre + les règles 3.0) descend dans le plugin : Alfred valide

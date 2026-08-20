@@ -67,14 +67,22 @@ and `setup` only runs when the plugin is active.
 
 ## What stays in the body, and why
 
-One executable lives in **`bin/` at the image root** rather than in a plugin:
-`mcp-bridge` (every agent talks to the hub — it is how *all* its MCP tools arrive). It is
-not optional — a body without it is not a reduced body, it is a dead one.
+Two executables live in **`bin/` at the image root** rather than in a plugin:
+`mcp-bridge` (every agent talks to the hub — it is how *all* its MCP tools arrive) and
+`instruction-sync` (every agent's *instructions* are co-edited). They are not optional — a
+body without them is not a reduced body, it is a dead one.
 
-`memory-sync` sat beside it until 2026-08-20, on the premise that *every agent commits its
+`memory-sync` sat there until 2026-08-20, on the premise that *every agent commits its
 memory*. That premise is gone: memory left git and now lives on the filesystem, with ZFS
-snapshots as its net. Writing a fact is writing a file — there is nothing left to
-synchronise, so the tool was **removed** rather than kept around as a no-op.
+snapshots as its net. Writing a fact is writing a file — nothing to synchronise, so the
+tool was **removed** rather than kept as a no-op.
+
+`instruction-sync` is not that tool returning under a new name. Removing the old one is
+what revealed what it had really been for: not the memory, but the **co-editing**. That
+has not gone away, it moved. A body's repository holds `CLAUDE.md`, `DECISIONS.md`,
+`.claude/` and `planif/` — written both by the pod (its self-improvement skill) and from
+the dev machine. Two clones, one `origin`, conflicts **surfaced rather than guessed**. The
+memory has a single writer and no remote at all; the instructions have two authors.
 
 That gives the symmetry worth remembering: **`bin/` at the image root = what every body
 owns; `plugins/<id>/bin/` = what a plugin adds.** Where a binary sits tells you whether

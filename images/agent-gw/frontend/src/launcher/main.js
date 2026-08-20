@@ -1858,11 +1858,20 @@ async function renderPlanif() {
     const meta = p.erreur
       ? `<span class="chip late">${esc(p.erreur)}</span>`
       : `<span class="chip">⏱ ${esc(p.quand)}</span>` + (p.actif ? `<span class="chip due">→ ${esc(planifWhen(p.next))}</span>` : '');
-    return `<a class="lcard" href="#/mem/${esc(p.path)}" style="--lc:var(--${p.erreur ? 'crit' : p.actif ? 'agenda' : 'line'})">`
+    // Une planif ne vit plus forcément dans un magasin de mémoire : son dossier se
+    // déclare désormais à part (`GW_PLANIF_DIR`), parce que le corps d'une fiche
+    // `type: planif` est une INSTRUCTION exécutée — donc du versionné — alors que la
+    // mémoire, elle, a quitté git. Le serveur nous dit `dans_memoire` ; sans lui on
+    // fabriquerait un `#/mem/…` qui ne résout pas, et un lien mort dans une liste se
+    // lit comme une panne (on clique, rien ne se passe). Absent = ancien serveur, on
+    // retombe sur le lien, qui était alors toujours valide.
+    const lie = p.dans_memoire !== false;
+    const tag = lie ? 'a' : 'div';
+    return `<${tag} class="lcard"${lie ? ` href="#/mem/${esc(p.path)}"` : ''} style="--lc:var(--${p.erreur ? 'crit' : p.actif ? 'agenda' : 'line'})">`
       + `<button class="del" data-toggle="${esc(p.id)}" title="${p.actif ? 'Suspendre' : 'Réactiver'}">${p.actif ? '⏸' : '▶'}</button>`
       + `<span class="lico">⏱</span><div><div class="ln">${esc(p.titre)}</div><div class="ld">${esc(p.tz)}</div></div>`
       + `<div class="meta" style="display:flex;gap:6px;flex-wrap:wrap">${meta}</div>`
-      + `<div class="lfoot">${foot}${state}</div></a>`;
+      + `<div class="lfoot">${foot}${state}</div></${tag}>`;
   };
   const list = data.planifs || [];
   page.innerHTML = `<div class="wrap"><div class="chead"><div class="aico" style="--dc:var(--agenda)">⏱</div><div><h1>Planifications</h1>
