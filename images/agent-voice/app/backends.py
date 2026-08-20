@@ -2,9 +2,8 @@
 
 - "agent": the agent gateway's MCP endpoint (its `ask_<agent>` tool), in-pod on
   localhost. This is the slow, thinking backend — the caller handles the
-  ack/announce dance around it. Accepted as "alfred" too: that was its name
-  before this image served more than one agent, and the value is persisted in a
-  config file on a volume this code does not get to rewrite.
+  ack/announce dance around it. It answered to "alfred" for one release, while
+  the rename settled; that alias is gone.
 - "ha": Home Assistant's conversation API — the fast intent backend
   ("allume la lumière"), kept for wake words routed to the house brain.
 """
@@ -34,18 +33,18 @@ class Backends:
         self.gw_mcp_url = os.environ.get("GW_MCP_URL", "http://localhost:8000/mcp")
         self.gw_mcp_token = os.environ.get("GW_MCP_TOKEN", "")
         # Le nom de l'outil MCP suit l'agent servi : la gateway expose
-        # `ask_<GW_AGENT>`, pas un nom fixe. Il était écrit en dur ici — ce qui
-        # rendait cette image utilisable par UN SEUL corps, alors que rien
-        # d'autre ne l'y liait. Défaut inchangé : un déploiement existant ne
-        # bouge pas tant qu'il ne pose pas la variable.
-        self.gw_mcp_tool = os.environ.get("GW_MCP_TOOL", "ask_alfred")
+        # `ask_<GW_AGENT>`, pas un nom fixe. AUCUN DÉFAUT — il valait `ask_alfred`,
+        # c'est-à-dire le nom d'UN corps dans une image qui en sert plusieurs. Le
+        # pod le déclare (`GW_MCP_TOOL`), et un backend `agent` sans lui échoue en
+        # le disant, plutôt que d'appeler un outil qui n'existe pas.
+        self.gw_mcp_tool = os.environ.get("GW_MCP_TOOL", "")
         self.ha_url = os.environ.get(
             "HA_URL", "http://home-assistant.home.svc.cluster.local:8123")
         self.ha_token = os.environ.get("HA_TOKEN", "")
 
     async def ask(self, backend: str, text: str, *, language: str,
                   timeout: float) -> str:
-        if backend in ("agent", "alfred"):
+        if backend == "agent":
             return await self._ask_agent(text, timeout=timeout)
         if backend == "ha":
             return await self._ask_ha(text, language=language, timeout=timeout)

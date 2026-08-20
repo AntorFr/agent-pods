@@ -15,9 +15,9 @@ Environment:
   GW_MCP_URL, GW_MCP_TOKEN    agent gateway MCP endpoint (backend "agent")
   HA_URL, HA_TOKEN            Home Assistant API (backend "ha")
 
-The `ALFRED_VOICE_*` spellings still work: this image was named after one agent
-before it served several, and a deployment must not break on a rename it did not
-ask for. New deployments should use `AGENT_VOICE_*`.
+This image was named `alfred-voice` until 2026-08-19, and read `ALFRED_VOICE_*`
+alongside the new names for one release. Both are gone: the deployment migrated,
+and a fallback nobody reads is dead code that outlives the reason it existed.
 """
 
 from __future__ import annotations
@@ -43,15 +43,8 @@ CONFIG_WATCH_INTERVAL_S = 2.0
 
 
 def env(name: str, default: str = "") -> str:
-    """Read `AGENT_VOICE_<name>`, falling back to the historical `ALFRED_VOICE_*`.
-
-    The image was named after one agent before it served several. Renaming the
-    variables without a fallback would break any deployment that still sets the
-    old spelling — including ones this repository cannot see.
-    """
-    return os.environ.get("AGENT_VOICE_" + name) \
-        or os.environ.get("ALFRED_VOICE_" + name) \
-        or default
+    """Read `AGENT_VOICE_<name>`. The historical `ALFRED_VOICE_*` is gone."""
+    return os.environ.get("AGENT_VOICE_" + name) or default
 
 
 async def run() -> None:

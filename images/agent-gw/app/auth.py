@@ -11,7 +11,7 @@ Rebond rosetta : le login demande aussi `offline_access` ; le refresh token
 de CHAQUE utilisateur est rangé côté serveur (~/.agent-gw/oidc-tokens.json,
 jamais dans le cookie) et `user_access_token()` fournit un access token frais
 — injecté par le gateway dans l'env de chaque session Claude, où
-rosetta-bridge le présente aux addons à données utilisateur (/google).
+mcp-bridge le présente aux addons à données utilisateur (/google).
 """
 
 import json

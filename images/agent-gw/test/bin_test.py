@@ -1,7 +1,7 @@
 """Les exécutables du corps — rangement et copies partagées.
 
 Ce banc ne teste pas du comportement : il tient une INVARIANTE DE DÉPÔT que rien
-d'autre ne tient. Deux images embarquent `rosetta-bridge`, et leurs Dockerfiles
+d'autre ne tient. Deux images embarquent `mcp-bridge`, et leurs Dockerfiles
 affirmaient depuis toujours, en commentaire, qu'elles portaient « la même copie ».
 Un commentaire ne garantit rien : le jour où l'une est corrigée et pas l'autre, les
 deux corps lancent des relais MCP différents — donc des outils différents — et rien

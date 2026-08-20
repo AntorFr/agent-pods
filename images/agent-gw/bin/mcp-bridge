@@ -35,10 +35,8 @@ hostname is a public image that leaks a setup.
 """
 
 def env(name: str, default: str = "") -> str:
-    """Read `HUB_<name>`, falling back to the historical `ROSETTA_<name>`."""
-    return os.environ.get("HUB_" + name) \
-        or os.environ.get("ROSETTA_" + name) \
-        or default
+    """Read `HUB_<name>`. No fallback, and no default that names a deployment."""
+    return os.environ.get("HUB_" + name) or default
 
 import base64
 import json

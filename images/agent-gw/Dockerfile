@@ -103,20 +103,6 @@ RUN set -eu; \
 # lui-même (la mémoire vit sur le système de fichiers, filet ZFS par snapshots).
 # Un agent qui écrit un fait écrit un fichier — il n'y a plus rien à synchroniser.
 COPY --chmod=755 bin/ /usr/local/bin/
-# Alias de compatibilité, et il n'est pas cosmétique. Le nom du pont est écrit dans
-# le `.mcp.json` de chaque workspace, qui vit sur un volume persistant et se met à
-# jour INDÉPENDAMMENT de cette image : à l'instant du déploiement, le clone dit
-# encore `rosetta-bridge`. Sans cet alias, la montée de version ferait disparaître
-# TOUS les outils MCP de l'agent jusqu'au prochain pull.
-# Mesuré le 2026-08-19 sur les pods, pas supposé : 9 serveurs chez Alfred, 2 chez
-# Skippy, et 0 chez Nestor — qui n'a aucun `.mcp.json`. À retirer quand les clones
-# déployés diront tous `mcp-bridge`.
-RUN ln -s mcp-bridge /usr/local/bin/rosetta-bridge
-# Bundled content engine + launcher shell (built once, never at runtime).
-# scan.js is the barcode decoder FALLBACK, deliberately a bundle of its own: it
-# weighs 116 kB gzipped and is fetched only when the browser has no
-# BarcodeDetector (iOS Safari, Firefox). Folding it into launcher.js would bill
-# every single page load for a feature most sessions never open.
 COPY --from=frontend /fe/dist/engine.js /fe/dist/engine.css /fe/dist/launcher.js /fe/dist/launcher.css /fe/dist/scan.js ./app/static/
 # Le CLI atelier (valide/migre + les règles 3.0) descend dans le plugin : Alfred valide
 # et migre avec EXACTEMENT le code que l'établi exécute (cf. ATELIER-3.md D4).

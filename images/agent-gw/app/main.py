@@ -1558,7 +1558,7 @@ async def chat(request: Request):
 
     # Rebond rosetta : le tour porte l'identité de la personne connectée à la
     # PWA — un access token frais (audience rosetta), injecté dans l'env du
-    # spawn Claude où rosetta-bridge le présente aux addons user-data
+    # spawn Claude où mcp-bridge le présente aux addons user-data
     # (/google). Résolu AVANT la tâche de fond (la requête meurt avec le SSE).
     # Sans session SSO ni refresh token : pas d'injection, les addons
     # génériques vivent sur l'identité machine.
@@ -1567,12 +1567,10 @@ async def chat(request: Request):
     if session_user:
         user_token = await auth.user_access_token(session_user)
         if user_token:
-            # Les DEUX noms : `HUB_USER_TOKEN` est le nom courant, `ROSETTA_*`
-            # l'historique. Le pont et le credential helper lisent déjà les deux,
-            # mais un hook de workspace peut lire l'ancien — et les workspaces ne
-            # se déploient pas avec cette image.
+            # UN SEUL nom. L'historique `ROSETTA_USER_TOKEN` a été injecté en
+            # parallèle le temps que les `.mcp.json` déployés migrent — vérifié fait
+            # sur les trois corps le 2026-08-20, il est retiré.
             turn_env["HUB_USER_TOKEN"] = user_token
-            turn_env["ROSETTA_USER_TOKEN"] = user_token
 
     async def run_turn() -> None:
         async with _query_lock:

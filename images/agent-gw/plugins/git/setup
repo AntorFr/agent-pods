@@ -21,7 +21,7 @@ set -eu
 
 # Aucun défaut : une URL de hub codée en dur dans une image publique, c'est le
 # déploiement de quelqu'un d'autre. Elle se déclare dans le manifeste du pod.
-HUB="${HUB_URL:-${ROSETTA_URL:-}}"
+HUB="${HUB_URL:-}"
 if [ -z "$HUB" ]; then
     echo "HUB_URL absent : le plugin git ne câble rien (publier échouera)" >&2
     exit 1

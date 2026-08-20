@@ -48,7 +48,7 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
-# Bare python3 — the interpreter `rosetta-bridge` runs on (see below). No venv and
+# Bare python3 — the interpreter `mcp-bridge` runs on (see below). No venv and
 # no pip on purpose: every MCP server this pod talks to now lives behind the hub,
 # so nothing is installed here that could drift from what the hub actually serves.
 RUN apt-get update \
@@ -68,13 +68,6 @@ COPY --from=vscode-cli /usr/local/bin/code /usr/local/bin/code
 #                   `images/agent-gw/test/bin_test.py`: both containers must spawn
 #                   the same relay, and a comment guaranteed nothing.
 COPY --chmod=755 bin/ /usr/local/bin/
-# Compatibility alias — not cosmetic. The relay's name is written in each
-# workspace's `.mcp.json`, which lives on a persistent volume and updates
-# INDEPENDENTLY of this image: at deploy time the clone still says
-# `rosetta-bridge`. Without the alias, upgrading would make ALL of that agent's
-# MCP tools vanish until the next pull. Drop it once the deployed clones say
-# `mcp-bridge`.
-RUN ln -s mcp-bridge /usr/local/bin/rosetta-bridge
 
 # Rename the stock `node` user (uid 1000) — this pod hosts an agent, not a build
 RUN usermod -l agent -d /home/agent -m node \

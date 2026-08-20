@@ -34,7 +34,7 @@ Env (mêmes variables que mcp-bridge, même identité machine) :
   HUB_SCOPE          défaut mcp
   AGENT_CLIENT_ID / AGENT_CLIENT_SECRET
 
-Les anciens noms `ROSETTA_*` restent lus en repli. Aucun défaut ne pointe un
+Aucun repli sur les anciens noms, et aucun défaut ne pointe un
 domaine privé : une image publique qui devine un nom d'hôte est une image qui
 publie le déploiement de quelqu'un.
 
@@ -44,10 +44,8 @@ sur le python3 nu de l'image, sans dépendance à tenir à jour.
 
 
 def env(name: str, default: str = "") -> str:
-    """Lit `HUB_<name>`, avec repli sur l'historique `ROSETTA_<name>`."""
-    return os.environ.get("HUB_" + name) \
-        or os.environ.get("ROSETTA_" + name) \
-        or default
+    """Lit `HUB_<name>`. Aucun repli, aucun défaut qui nomme un déploiement."""
+    return os.environ.get("HUB_" + name) or default
 
 import base64
 import json
