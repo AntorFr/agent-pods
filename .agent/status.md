@@ -95,7 +95,7 @@ helper scopé reste, la référence à l'outil est datée). `python test/bin_tes
 > dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
 > l'historique réécrit **supprimerait la mémoire vivante du NAS**.
 
-**État :** Trois images en production, **déployées** — `agent-gw` 0.80.0 sur les trois
+**État :** Trois images en production, **déployées** — `agent-gw` 0.81.0 sur les trois
 corps (Alfred, Skippy, Nestor), `claude-pod` 0.7.0, `agent-voice` 0.3.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
 
@@ -151,11 +151,16 @@ Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github
       Vérifié qu'il MORD — en forçant `mcp==2.0.0`, l'import échoue et la CI tombe.
 - [ ] Un push sur `main` **depuis le pod** — le dernier chemin du proxy git non éprouvé
       (les branches neuves, elles, passent depuis le 2026-08-10).
-- [ ] **La frontière non franchie** : un plugin tiers peut livrer un contrat, une API et
-      un exécutable, mais pas encore une **vue** — le front garde son registre
-      (`frontend/src/launcher/apps/index.js`) et les modules historiques vivent toujours
-      dans `launcher/main.js`. Décision tenue : on les déplace quand on y touche de toute
-      façon, pas pour la symétrie.
+- [x] **La frontière est franchie (2026-08-20).** Un plugin peut livrer une INTERFACE,
+      pas seulement un contrat : une vue du lanceur (`web/app.js` + tuile au manifeste),
+      des blocs Markdoc pour le moteur (`web/blocks.js`), et du chrome — contrôle du
+      composeur, entrée des Réglages, modale (`web/chrome.js`). Quatrième sorte,
+      `capacite`, gardée par `GW_FEATURES`, l'axe qui existait déjà : aucun manifeste de
+      pod n'a bougé. Trois pilotes rentrés chez eux — `repos`, `parcours`, `scan`.
+      Le lot 3 était une INVERSION, pas un déplacement : la coque contenait tout et
+      `GW_FEATURES` ne faisait que retrancher, donc rien ne pouvait s'ajouter.
+      ⚠️ Reste à constater de visu : que la caméra du scanner s'ouvre. Le code est
+      déplacé et non réécrit, mais aucun banc ne peut le prouver.
 - [ ] Côté cerveau (Alfred, pas ici) : réécrire les 17 jonctions d'`imp3d` sous
       `jonctions[]` et déclarer les `appui`.
 
