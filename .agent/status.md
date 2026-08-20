@@ -1,6 +1,27 @@
 # Status — agent-pods
 > MàJ : 2026-08-20
 
+🧯 **L'umask 002 descend dans l'image — 0.80.0 (2026-08-20).** Il vivait en `args` dans
+deux manifestes k8s, ce qui y **recopiait le CMD** de l'image : la commande de démarrage
+aurait changé un jour, et ces déploiements auraient épinglé l'ancienne, en silence. Il est
+désormais dans un `entrypoint.sh` à la racine de l'image (même convention que `claude-pod`),
+qui ne fait qu'une chose — `umask 002` puis `exec "$@"` — donc le CMD reste déclaratif et
+n'est dupliqué nulle part. Les `args` ont disparu des trois manifestes.
+
+Sans ce bit, la co-édition du cercle `famille` est cassée à moitié : les deux corps y
+écrivent sous des **UID différents** (3000 et 1000), réunis par un seul groupe secondaire —
+chacun peut CRÉER, aucun ne peut MODIFIER le fichier de l'autre, et ça ne se voit qu'au
+premier `Edit` refusé. Aucune ACL serveur ne peut s'y substituer : en NFS l'umask est
+appliqué **côté client**.
+
+> ✅ **Prouvé de bout en bout, ce qui ne l'avait jamais été.** Un `kubectl exec` démarre un
+> processus neuf qui **court-circuite l'entrypoint** : il mesure l'umask de l'image, pas
+> celui de la gateway — mes tests précédents (avec les `args`) posaient `umask 002` à la main
+> dans le shell de test et ne prouvaient donc que la mécanique POSIX, jamais la chaîne réelle.
+> La vraie vérification est de faire écrire l'**agent** : fichier créé en **`660 3000:3002`**.
+> Complété par un build local (uvicorn démarre en `Umask 0002` via le CMD par défaut, contre
+> `0022` sans l'entrypoint) et cinq checks dans `bin_test`.
+
 ⏱ **Les planifs sont des INSTRUCTIONS, et `instruction-sync` reprend le flambeau —
 DÉPLOYÉ en 0.79.1 (2026-08-20).** Deux gestes d'une même décision de Monsieur : mettre fin
 à la divergence entre corps sur l'emplacement des planifications, et rendre aux
@@ -74,7 +95,7 @@ helper scopé reste, la référence à l'outil est datée). `python test/bin_tes
 > dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
 > l'historique réécrit **supprimerait la mémoire vivante du NAS**.
 
-**État :** Trois images en production, **déployées** — `agent-gw` 0.79.0 sur les trois
+**État :** Trois images en production, **déployées** — `agent-gw` 0.80.0 sur les trois
 corps (Alfred, Skippy, Nestor), `claude-pod` 0.7.0, `agent-voice` 0.3.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
 
