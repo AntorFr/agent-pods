@@ -22,7 +22,7 @@ helper scopé reste, la référence à l'outil est datée). `python test/bin_tes
 > dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
 > l'historique réécrit **supprimerait la mémoire vivante du NAS**.
 
-**État :** Trois images en production, **déployées** — `agent-gw` 0.78.0 sur les trois
+**État :** Trois images en production, **déployées** — `agent-gw` 0.79.0 sur les trois
 corps (Alfred, Skippy, Nestor), `claude-pod` 0.7.0, `agent-voice` 0.3.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
 
