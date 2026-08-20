@@ -1,7 +1,59 @@
 # Status — agent-pods
 > MàJ : 2026-08-20
 
-🗑️ **`memory-sync` est RETIRÉ du corps — À TAGUER (2026-08-20).** La mémoire d'Alfred a
+⏱ **Les planifs sont des INSTRUCTIONS, et `instruction-sync` reprend le flambeau —
+DÉPLOYÉ en 0.79.1 (2026-08-20).** Deux gestes d'une même décision de Monsieur : mettre fin
+à la divergence entre corps sur l'emplacement des planifications, et rendre aux
+instructions la synchro qu'on venait de retirer à la mémoire.
+
+**La divergence, que personne n'avait vue**, parce qu'elle ne se lisait sur aucun fichier :
+`_planif_root()` se construisait sur `GW_MEMORY_DIR`, donc chaque corps rangeait ses
+planifs là où il rangeait sa mémoire.
+
+| | `memory/` | planif |
+|---|---|---|
+| Alfred | PVC NFS monté **sur** `/workspace/memory` | **hors git** depuis D49 |
+| Skippy | hostPath du workspace | **dans git** |
+| Nestor | aucun (magasin = `/shared/famille`) | **impossible** |
+
+Le dernier cas dit tout : avoir une horloge supposait d'avoir un magasin mémoire — deux
+choses sans rapport, soudées par un chemin. **`GW_PLANIF_DIR` devient relatif au
+WORKSPACE** (défaut `memory/planif`, rétro-compatible octet pour octet) ; les trois
+manifestes déclarent `planif`, et les deux fiches ont été déplacées.
+
+Le fond : le corps d'une fiche `type: planif` est exécuté **tel quel** comme prompt (D30).
+C'est une instruction, donc du versionné — la seule chose qu'on ne peut pas se permettre de
+perdre sur du prompt exécutable, c'est le diff et le revert.
+
+> 🛡 **Deux gardes en sortent renforcées, pas levées.** ① Chez Alfred, `/workspace/memory`
+> est un point de montage NFS : `planif/` étant **à côté** et non dedans, la ligne `memory/`
+> du `.gitignore` reste **sans exception**. ② Chez Nestor, tenir l'horloge désarmée reposait
+> sur un effet de bord (`GW_MEMORY_DIR` laissé inexistant) parce que son unique magasin est
+> **partagé** avec Alfred ; c'est désormais structurel — `/workspace/planif` n'appartient à
+> aucun magasin, donc rien d'écrit dans `famille` ne peut armer une horloge. Et Nestor gagne
+> la capacité au passage.
+
+**`instruction-sync`** (`bin/`) n'est pas `memory-sync` déguisé. Le retirer a révélé ce
+qu'il faisait vraiment : sa justification n'a jamais été la mémoire mais la **co-édition**,
+qui n'a pas disparu — elle a changé d'objet. La mémoire a un seul écrivain et plus aucun
+remote ; les instructions (`CLAUDE.md`, `DECISIONS.md`, `.claude/`, `planif/`) ont deux
+auteurs — le pod et la machine de dev — et un `origin`. Même boucle, conflit **remonté** et
+non deviné, stage par chemin explicite, helper scopé sur github.com. Plus une garde neuve :
+**il refuse de tourner si `memory/` est redevenu suivi par git**, avant tout geste réseau.
+
+> ⚠️ **Ce n'est pas un outil de confort, c'est un canal d'exécution.** Avec `planif/` en
+> git, `pull` ne rapatrie plus seulement du texte : il rapatrie des instructions qui
+> tourneront ici. Sain tant que les seuls auteurs sont Monsieur et l'agent lui-même.
+
+> ☠️ **0.79.0 livrait le CONTRAIRE de son intention, et le banc ne l'a pas vu.**
+> `planif_list()` reconstruit sa réponse **clé par clé** ; le champ `dans_memoire` s'y
+> perdait. Le front lisait `undefined`, concluait « dans la mémoire » et fabriquait le lien
+> `#/mem/…` mort que la version prétendait justement supprimer — sans une seule erreur.
+> Trouvé en interrogeant les pods **après** déploiement, corrigé en 0.79.1. **La leçon :
+> tester la fonction ne teste pas la réponse.** `planif_root_test.py` couvre désormais les
+> deux, dans les deux configurations, et a été éprouvé à l'envers.
+
+🗑️ **`memory-sync` est RETIRÉ du corps — livré en 0.79.0 (2026-08-20).** La mémoire d'Alfred a
 quitté git le jour même : détrackée, posée en `.gitignore` et **expulsée de tout
 l'historique** (`git filter-repo`, force-push — 749 commits → 126, `.git` de 108 Mo →
 496 Ko). C'est l'exécution de D49 chez Alfred, elle-même issue du § 3 de son dossier de
