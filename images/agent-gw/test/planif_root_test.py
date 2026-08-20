@@ -93,6 +93,49 @@ m = charge(planif_dir="/opt/planif-hors-workspace")
 check("un chemin absolu est respecté tel quel",
       m._planif_root() == Path("/opt/planif-hors-workspace"))
 
+print("\n--- le champ survit jusqu'à la RÉPONSE de l'API ---")
+
+# Ce bloc existe à cause d'une panne réelle (2026-08-20) : `_ou_est_la_fiche` posait
+# bien `dans_memoire`, mais `planif_list()` reconstruit un dict clé par clé au lieu
+# de recopier l'item — le champ se perdait donc en silence entre les deux. Tester la
+# fonction sans tester la réponse n'attrape pas ça, et rien ne casse visiblement : le
+# front lit `undefined`, conclut « dans la mémoire », et rend un lien mort.
+import asyncio  # noqa: E402
+import tempfile  # noqa: E402
+
+FICHE = """---
+type: planif
+titre: Banc
+quand: "30 6 * * *"
+---
+Corps de la planification.
+"""
+
+with tempfile.TemporaryDirectory() as tmp:
+    racine = Path(tmp) / "planif"
+    racine.mkdir()
+    (racine / "banc.md").write_text(FICHE, encoding="utf-8")
+
+    # Cas HORS mémoire : le workspace est ailleurs, la racine est absolue.
+    m = charge(planif_dir=str(racine), workspace=tmp)
+    rep = asyncio.run(m.planif_list())
+    fiches = rep.get("planifs", [])
+    check("la fiche est chargée depuis la racine déclarée", len(fiches) == 1)
+    if fiches:
+        check("`dans_memoire` est PRÉSENT dans la réponse de l'API",
+              "dans_memoire" in fiches[0])
+        check("et il vaut False quand la fiche est hors mémoire",
+              fiches[0].get("dans_memoire") is False)
+
+    # Cas historique : la racine EST sous la mémoire → le lien doit rester émis.
+    mem = Path(tmp) / "memory" / "planif"
+    mem.mkdir(parents=True)
+    (mem / "banc.md").write_text(FICHE, encoding="utf-8")
+    m = charge(workspace=tmp)
+    fiches = asyncio.run(m.planif_list()).get("planifs", [])
+    check("dans la configuration historique, `dans_memoire` vaut True",
+          bool(fiches) and fiches[0].get("dans_memoire") is True)
+
 print()
 if FAILS:
     print("%d échec(s) : %s" % (len(FAILS), ", ".join(FAILS)))

@@ -434,6 +434,13 @@ async def planif_list():
             {
                 "id": item["id"],
                 "path": item["path"],
+                # ⚠️ NE PAS OUBLIER CE CHAMP en ajoutant des clés ici. Cette réponse
+                # reconstruit un dict au lieu de recopier l'item, donc tout ce qui
+                # n'est pas nommé se PERD EN SILENCE — c'est ce qui est arrivé à
+                # `dans_memoire` le 2026-08-20, attrapé en production et pas au banc.
+                # Son absence ne casse rien de visible : le front lit `undefined`,
+                # conclut « dans la mémoire », et fabrique un lien `#/mem/…` mort.
+                "dans_memoire": item.get("dans_memoire", True),
                 "titre": item["titre"],
                 "quand": item["quand"],
                 "tz": item["tz"],
