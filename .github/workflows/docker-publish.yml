@@ -25,7 +25,40 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  # Les bancs, AVANT le moindre build. Ils tournent sur agent-gw, seule image qui
+  # en porte — les deux autres n'ont pas de suite, et un job qui ne teste rien
+  # vaut mieux absent que vert.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'   # la version du runtime d'agent-gw
+      - name: Dépendances Python
+        working-directory: images/agent-gw
+        run: pip install -r requirements.txt
+
+      - name: Bancs Python
+        working-directory: images/agent-gw
+        # Un par un : le banc qui échoue est nommé dans le log, là où un `for`
+        # silencieux obligerait à relire toute la sortie.
+        run: |
+          set -e
+          for t in test/*.py; do echo "── $t"; python "$t"; done
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: images/agent-gw/frontend/package-lock.json
+      - name: Bancs front
+        working-directory: images/agent-gw/frontend
+        run: npm ci && npm test
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -81,6 +114,61 @@ jobs:
           else
             echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
           fi
+
+      # ── Le garde-fou qui manquait le 2026-08-19 ────────────────────────────
+      # Les bancs ci-dessus ne suffisent PAS, et l'incident le prouve : ils
+      # tournent sur un venv dont la résolution de dépendances est figée depuis
+      # des mois. Ce jour-là, retirer `workspace-mcp` a libéré la contrainte
+      # transitive qui plafonnait `mcp` en 1.x, `mcp>=1.2` a résolu en 2.0.0 —
+      # qui supprime `mcp.server.fastmcp` — et la gateway ne démarrait PLUS DU
+      # TOUT. Verte au banc, morte à l'exécution.
+      #
+      # Seule une image FRAÎCHEMENT construite le voit. On la charge donc en
+      # local (amd64) et on l'ouvre, AVANT de publier quoi que ce soit : un tag
+      # cassé sur GHCR est un piège qu'on retrouve des jours plus tard.
+      # Le cache est partagé avec le build de publication ci-dessous : le coût
+      # réel est un export d'image, pas une seconde construction.
+      - name: Construire pour le smoke (amd64, chargée localement)
+        if: steps.gate.outputs.run == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: images/${{ matrix.image }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: smoke-${{ matrix.image }}:${{ github.sha }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+      - name: Smoke — l'image démarre-t-elle vraiment ?
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -eu
+          IMG=smoke-${{ matrix.image }}:${{ github.sha }}
+          case "${{ matrix.image }}" in
+            agent-gw)
+              # L'import, c'est-à-dire tout ce qui se résout au démarrage.
+              docker run --rm -e GW_WORKSPACE=/tmp "$IMG" \
+                python -c "import app.main; print('gateway importable')"
+              # Et les exécutables : la boucle d'installation des bin/ de plugins
+              # ne dit rien quand elle ne copie rien.
+              docker run --rm --entrypoint sh "$IMG" -c \
+                'for b in mcp-bridge trace-geom git-credential-hub; do
+                   command -v "$b" >/dev/null || { echo "manquant: $b" >&2; exit 1; }
+                 done; echo "binaires en place"'
+              ;;
+            agent-voice)
+              docker run --rm "$IMG" python -c "import app.main; print('voice importable')"
+              ;;
+            claude-pod)
+              # Pas d'application Python ici : ce qu'on vérifie, c'est que le
+              # relais MCP est bien sur le PATH et qu'il refuse proprement.
+              docker run --rm --entrypoint sh "$IMG" -c \
+                'command -v mcp-bridge >/dev/null && echo "relais en place"'
+              ;;
+          esac
 
       - name: Build & push
         if: steps.gate.outputs.run == 'true'
