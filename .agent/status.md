@@ -159,8 +159,8 @@ Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github
       pod n'a bougé. Trois pilotes rentrés chez eux — `repos`, `parcours`, `scan`.
       Le lot 3 était une INVERSION, pas un déplacement : la coque contenait tout et
       `GW_FEATURES` ne faisait que retrancher, donc rien ne pouvait s'ajouter.
-      ⚠️ Reste à constater de visu : que la caméra du scanner s'ouvre. Le code est
-      déplacé et non réécrit, mais aucun banc ne peut le prouver.
+      ✅ Caméra du scanner **constatée par Monsieur le 2026-08-20**, sur appareil réel :
+      le seul point qu'aucun banc ne pouvait prouver, et le seul qui restait.
 - [ ] Côté cerveau (Alfred, pas ici) : réécrire les 17 jonctions d'`imp3d` sous
       `jonctions[]` et déclarer les `appui`.
 
