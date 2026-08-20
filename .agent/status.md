@@ -159,15 +159,10 @@ Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github
       pod n'a bougé. Trois pilotes rentrés chez eux — `repos`, `parcours`, `scan`.
       Le lot 3 était une INVERSION, pas un déplacement : la coque contenait tout et
       `GW_FEATURES` ne faisait que retrancher, donc rien ne pouvait s'ajouter.
-      ✅ Scanner constaté par Monsieur le 2026-08-20 — **sur le Mac**. Cela prouve la
-      chaîne de chrome (bouton posé dans le tiroir, modale injectée, `mount` câblé,
-      caméra ouverte) et UN des deux décodeurs. Vérifié en plus côté service : le
-      bundle de repli est servi (141 Ko) et expose `window.AlfredScan`, le nom exact
-      que le plugin cherche ; `scan-decode-test` décode de vraies trames EAN-13 depuis
-      l'entrée déplacée.
-      ⚠️ Reste non éprouvé **en situation** : iOS Safari, qui n'a pas `BarcodeDetector`
-      et passe donc par le repli chargé à la demande — or c'est le cas d'usage RÉEL
-      (Monsieur devant un rayon). Un scan sur le téléphone le clôt.
+      ✅ Scanner constaté par Monsieur le 2026-08-20, **sur le Mac ET sur iOS** — donc
+      les DEUX décodeurs : le natif `BarcodeDetector` et le repli `/static/scan.js`
+      chargé à la demande (iOS Safari n'a pas l'API), qui est le cas d'usage réel.
+      Le lot 3 est clos : rien n'y reste à constater.
 - [ ] Côté cerveau (Alfred, pas ici) : réécrire les 17 jonctions d'`imp3d` sous
       `jonctions[]` et déclarer les `appui`.
 
