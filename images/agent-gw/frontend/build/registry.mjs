@@ -29,10 +29,20 @@ import { fileURLToPath } from 'node:url';
 const ICI = dirname(fileURLToPath(import.meta.url));
 const FRONTEND = resolve(ICI, '..');
 const PLUGINS = resolve(FRONTEND, '..', 'plugins');
-const SORTIE = join(FRONTEND, 'src', 'launcher', 'apps', 'registry.generated.js');
+const SORTIE_VUES = join(FRONTEND, 'src', 'launcher', 'apps', 'registry.generated.js');
+// ⚠️ DEUX registres, et ce n'est pas de la symétrie gratuite : les vues entrent
+// dans le bundle du LANCEUR, les blocs dans celui du MOTEUR. Un seul fichier
+// ferait entrer `carte.js` (1094 lignes) et ses styles dans le lanceur, qui n'en
+// a que faire — un import CSS a un effet de bord, le tree-shaking ne l'enlève pas.
+const SORTIE_BLOCS = join(FRONTEND, 'src', 'blocks.generated.js');
+// Les feuilles des blocs, à part. Elles ne peuvent PAS voyager avec le module :
+// les bancs importent le moteur dans node, qui n'a pas de chargeur CSS. Ce
+// fichier-ci n'est importé que par `src/main.js`, l'entrée d'esbuild.
+const SORTIE_STYLES = join(FRONTEND, 'src', 'blocks.styles.generated.js');
 
-/** Les plugins qui apportent une vue, triés — ordre stable = diff lisible. */
-export function scanner(racine = PLUGINS) {
+/** Les plugins qui apportent `web/<fichier>`, triés — ordre stable = diff lisible.
+    `app.js` donne une vue du lanceur, `blocks.js` des blocs du moteur. */
+export function scanner(racine = PLUGINS, fichier = 'app.js') {
   const vues = [];
   let dossiers;
   try {
@@ -44,7 +54,7 @@ export function scanner(racine = PLUGINS) {
     const base = join(racine, id);
     try {
       if (!statSync(base).isDirectory()) continue;
-      statSync(join(base, 'web', 'app.js'));
+      statSync(join(base, 'web', fichier));
     } catch {
       continue; // ni dossier, ni vue
     }
@@ -60,9 +70,10 @@ export function scanner(racine = PLUGINS) {
   return vues;
 }
 
-export function rendre(vues) {
+export function rendre(vues, { fichier = 'app.js', profondeur = 4 } = {}) {
+  const remonte = '../'.repeat(profondeur);
   const imports = vues
-    .map((v, i) => `import vue${i} from '../../../../plugins/${v.id}/web/app.js';`)
+    .map((v, i) => `import vue${i} from '${remonte}plugins/${v.id}/web/${fichier}';`)
     .join('\n');
   const fabriques = vues.map((v, i) => `  ${JSON.stringify(v.id)}: vue${i},`).join('\n');
   const tuiles = vues
@@ -90,15 +101,29 @@ ${tuiles}
     le banc importe `scanner`/`rendre` pour les éprouver, et un import qui réécrit un
     fichier du dépôt au passage est un effet de bord qu'on finit par payer. */
 export function generer() {
-  const vues = scanner();
-  mkdirSync(dirname(SORTIE), { recursive: true });
-  writeFileSync(SORTIE, rendre(vues), 'utf8');
-  return vues;
+  const vues = scanner(PLUGINS, 'app.js');
+  mkdirSync(dirname(SORTIE_VUES), { recursive: true });
+  writeFileSync(SORTIE_VUES, rendre(vues, { fichier: 'app.js', profondeur: 4 }), 'utf8');
+
+  // `src/blocks.generated.js` est deux crans moins profond que
+  // `src/launcher/apps/…`, d'où la profondeur explicite.
+  const blocs = scanner(PLUGINS, 'blocks.js');
+  mkdirSync(dirname(SORTIE_BLOCS), { recursive: true });
+  writeFileSync(SORTIE_BLOCS, rendre(blocs, { fichier: 'blocks.js', profondeur: 2 }), 'utf8');
+
+  const feuilles = scanner(PLUGINS, 'blocks.css');
+  writeFileSync(SORTIE_STYLES,
+    '/* GÉNÉRÉ par build/registry.mjs — les feuilles des blocs de plugin.\n'
+    + "   Importé par src/main.js SEULEMENT : node n'a pas de chargeur CSS. */\n"
+    + feuilles.map((f) => `import '../../plugins/${f.id}/web/blocks.css';`).join('\n')
+    + '\n', 'utf8');
+
+  return { vues, blocs, feuilles };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const vues = generer();
-  console.log(
-    `registre des vues : ${vues.length} plugin(s) — ${vues.map((v) => v.id).join(', ') || 'aucun'}`,
-  );
+  const { vues, blocs } = generer();
+  const dire = (quoi, l) => `${quoi} : ${l.length} plugin(s) — ${l.map((v) => v.id).join(', ') || 'aucun'}`;
+  console.log(dire('registre des vues ', vues));
+  console.log(dire('registre des blocs', blocs));
 }

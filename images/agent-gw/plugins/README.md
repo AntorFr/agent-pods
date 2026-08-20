@@ -16,6 +16,8 @@ plugins/<id>/
   api.py                    a FastAPI `router`, mounted at startup
   web/app.js                a launcher view, bundled at BUILD time
   web/app.css               its styles, imported from app.js
+  web/blocks.js             Markdoc tags for the content engine
+  web/blocks.css            their styles, collected separately (see below)
   setup                     an idempotent executable, run at startup
   bin/*                     executables, installed on PATH at BUILD time
   tools/*                   the Claude Code plugin's own tooling
@@ -119,6 +121,23 @@ DOM, `fetch` with the user's session, and therefore `/api/chat`. There is no san
 an `api` object would not be one: once code runs in the page, no API design bounds it.
 The boundary here is review and the CI, not isolation. Keep that in mind before
 vendoring a view you have not read.
+
+**`web/blocks.js`** — Markdoc tags for the content engine, the vocabulary an agent
+writes in a note. Exports a factory `(api) => ({ tags, mount? })`, where `api` carries the
+engine's primitives (`Tag`, `asset`, `manque`) — injected rather than imported, because
+the engine imports *you*, and the reverse would be a cycle. `mount` runs after the
+rendered HTML is inserted: it is where a block fetches its data and paints, which
+`render()` cannot do since it returns a string.
+
+⚠️ **Do not import CSS from `blocks.js`.** The test suites import the engine in plain
+node, which has no CSS loader — one `import './blocks.css'` there breaks every test
+without teaching anyone anything. The generator collects `web/blocks.css` separately,
+onto a path only esbuild walks.
+
+Two registries, not one, and it is not gratuitous symmetry: views land in the **launcher**
+bundle, blocks in the **engine** bundle. Merging them would drag a 1000-line map and its
+styles into the launcher, which has no use for either — and a CSS import is a side effect
+that tree-shaking does not remove.
 
 One frontier is still uncrossed: **chrome**. A plugin cannot yet add a control to the
 composer or an entry to the settings panel — those live in `app/static/app.html`, which

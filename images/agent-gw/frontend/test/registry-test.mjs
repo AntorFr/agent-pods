@@ -61,6 +61,35 @@ check('seules les vues déclarant `vue` posent une tuile',
 check('une tuile de plugin est un MODULE du lanceur (pas un domaine de mémoire)',
   /"avec-tuile":\s*\{[^}]*"module":true/.test(code));
 
+/* ── Les BLOCS : même mécanisme, autre bundle ─────────────────────────── */
+
+// `blocks.js` sous web/ contribue au vocabulaire Markdoc du MOTEUR, quand
+// `app.js` contribue une vue du LANCEUR. Deux registres, parce qu'un seul ferait
+// entrer la carte (1094 lignes) et ses styles dans le bundle du lanceur.
+mkdirSync(join(racine, 'avec-bloc', 'web'), { recursive: true });
+writeFileSync(join(racine, 'avec-bloc', 'web', 'blocks.js'), 'export default () => ({ tags: {} });');
+writeFileSync(join(racine, 'avec-bloc', 'gw-plugin.json'), '{"id":"avec-bloc","kind":"socle"}');
+
+const blocs = scanner(racine, 'blocks.js').map((v) => v.id);
+check('les blocs se découvrent par web/blocks.js, indépendamment des vues',
+  blocs.includes('avec-bloc') && !blocs.includes('avec-tuile'));
+check('un plugin peut apporter les DEUX sans que l’un contamine l’autre',
+  !scanner(racine, 'app.js').map((v) => v.id).includes('avec-bloc'));
+
+const codeBlocs = rendre(scanner(racine, 'blocks.js'), { fichier: 'blocks.js', profondeur: 2 });
+check('le registre des blocs remonte de deux crans (src/), pas de quatre',
+  codeBlocs.includes("from '../../plugins/avec-bloc/web/blocks.js'"));
+
+const MOTEUR = readFileSync(resolve('src/blocks.js'), 'utf8');
+check('le moteur ne définit plus le bloc `parcours` (c’est le plugin qui l’apporte)',
+  !/^\s*parcours:\s*\{/m.test(MOTEUR) && MOTEUR.includes('TAGS_PLUGINS'));
+check('le moteur expose un montage générique, pas `mountParcours`',
+  MOTEUR.includes('export function mountBlocks'));
+
+const DS = readFileSync(resolve('src/design-system.css'), 'utf8');
+check('la feuille du socle ne connaît plus les styles du plugin',
+  !DS.includes('.parcours'));
+
 /* ── La propriété à ne pas casser ─────────────────────────────────────── */
 
 const INDEX = readFileSync(resolve('src/launcher/apps/index.js'), 'utf8');

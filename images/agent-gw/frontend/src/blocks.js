@@ -4,6 +4,7 @@
 // a line in Alfred's skill. Unknown tags/attributes are rejected by Markdoc.
 import Markdoc from '@markdoc/markdoc';
 import { chart, TINTS } from './chart.js';
+import { FABRIQUES as BLOCS_PLUGINS } from './blocks.generated.js';
 
 const { Tag } = Markdoc;
 
@@ -55,8 +56,7 @@ function youtubeId(url) {
   return m ? m[1] : null;
 }
 
-export const config = {
-  tags: {
+const TAGS_SOCLE = {
     // `type` reste FERMÉ — il porte l'intention (une astuce n'est pas une mise
     // en garde), et c'est ce qui rend une fiche lisible d'une fiche à l'autre.
     // Mais l'ALLURE, elle, s'ouvre : `icone` et `couleur` laissent l'agent qui
@@ -154,37 +154,6 @@ export const config = {
       transform: chart,
     },
 
-    // A walk: its track on a map, its elevation profile and its numbered
-    // landmarks, all read from the `*.parcours.json` beside the fiche.
-    //
-    // An anchor rather than a drawing, and the reason is not laziness: a 3 km
-    // town loop is 328 track points. Inlining them in the fiche would put the
-    // whole geometry back through the model on every edit — the exact cost the
-    // parcours file exists to avoid (see plugins/parcours/PARCOURS.md). So the block resolves
-    // the path and stops there; `parcours.js` fetches and paints at mount, the
-    // same contract `outil` already declares.
-    // DEUX VUES, et c'est ce qui évite un domaine « balades ». Un parcours n'a
-    // pas de maison : il s'accroche à la fiche qui a une raison d'en parler —
-    // un week-end, une forêt, un voyage — et il est adressable tout seul par
-    // `#/parcours/<chemin>`. `vue="lien"` pose une carte compacte qui y mène,
-    // pour qu'une fiche puisse en citer trois sans empiler trois cartes.
-    parcours: {
-      selfClosing: true,
-      attributes: {
-        source: { type: String, required: true },
-        vue: { type: String, default: 'carte', matches: ['carte', 'lien'] },
-      },
-      transform(node, cfg) {
-        const { source, vue } = node.transformAttributes(cfg);
-        if (!source) return manque('Parcours', 'source');
-        return new Tag('div', {
-          class: 'parcours',
-          'data-src': asset(source, cfg.variables?.baseDir),
-          ...(vue === 'lien' ? { 'data-vue': 'lien' } : {}),
-        }, [new Tag('div', { class: 'pc-vide' }, ['Parcours…'])]);
-      },
-    },
-
     // Embeds a coded app-module by reference; the front swaps in the real
     // component (workbench, task list…) at mount. Renders a placeholder anchor.
     outil: {
@@ -203,8 +172,47 @@ export const config = {
         }, []);
       },
     },
-  },
+};
 
+/* ── Ce que les PLUGINS ajoutent au vocabulaire ───────────────────────────
+   Le moteur ne connaît plus `parcours` : le plugin le lui donne. Les fabriques
+   sont ramassées au build (`build/registry.mjs`) sous `plugins/<id>/web/blocks.js`.
+
+   Un bloc de plugin reçoit les primitives du moteur plutôt que de les importer :
+   c'est CE fichier qui importe le registre, donc l'inverse ferait un cycle.
+
+   Une fabrique qui jette n'emporte pas les autres — on perd un bloc, pas le
+   moteur de rendu, et le message dit lequel. */
+const API_BLOCS = { Tag, asset, manque };
+const TAGS_PLUGINS = {};
+const MONTAGES = [];
+for (const [id, fabrique] of Object.entries(BLOCS_PLUGINS)) {
+  try {
+    const apport = fabrique(API_BLOCS) || {};
+    Object.assign(TAGS_PLUGINS, apport.tags || {});
+    if (typeof apport.mount === 'function') MONTAGES.push([id, apport.mount]);
+  } catch (e) {
+    console.error('blocs du plugin « ' + id + ' » ignorés :', e);
+  }
+}
+
+/** Peint les blocs différés, APRÈS insertion du HTML rendu. Le moteur ne sait pas
+    ce qu'ils font — il sait seulement qu'un bloc peut avoir besoin d'aller
+    chercher sa donnée, ce que `render()` (qui rend une CHAÎNE) ne peut pas faire. */
+export function mountBlocks(racine = document) {
+  for (const [id, monter] of MONTAGES) {
+    try {
+      monter(racine);
+    } catch (e) {
+      console.error('montage du plugin « ' + id + ' » :', e);
+    }
+  }
+}
+
+export const config = {
+  // Un tag de plugin ÉCRASE un tag du socle de même nom : le plugin fait foi sur
+  // ce qu'il apporte, exactement comme sa tuile écrase `APP_META`.
+  tags: { ...TAGS_SOCLE, ...TAGS_PLUGINS },
   nodes: {
     // Resolve link targets: external URLs open a new tab; relative paths resolve
     // against the fiche's directory — .md (or no extension) routes in-app via /mem/,

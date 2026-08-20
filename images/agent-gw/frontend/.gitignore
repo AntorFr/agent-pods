@@ -3,3 +3,5 @@ dist/
 
 # Registre des vues de plugin, regenere a chaque build et a chaque banc.
 src/launcher/apps/registry.generated.js
+src/blocks.generated.js
+src/blocks.styles.generated.js

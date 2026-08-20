@@ -1,9 +1,13 @@
 // Browser entry — exposes the content engine (bundled under window.Alfred).
 // DOMPurify is defense-in-depth over Markdoc's already-safe output.
 import './design-system.css'; // esbuild bundles this into engine.css
+// Les feuilles des blocs apportés par les plugins. Ramassées au build, importées
+// ICI et nulle part ailleurs : `blocks.js` est lu par les bancs dans node, qui
+// ne sait pas charger du CSS.
+import './blocks.styles.generated.js';
 import DOMPurify from 'dompurify';
 import { renderPage } from './render.js';
-import { mountParcours } from './parcours.js';
+import { mountBlocks } from './blocks.js';
 
 export function render(source, opts) {
   const { frontmatter, html, errors } = renderPage(source, opts);
@@ -16,4 +20,4 @@ export function render(source, opts) {
 // (aujourd'hui `parcours`) ne peuvent se peindre qu'une fois le document inséré.
 // L'appelant monte donc explicitement, après insertion — l'invariant tient :
 // rien du fichier ne s'exécute, seule sa donnée est lue (cf. parcours.js).
-export { renderPage, mountParcours };
+export { renderPage, mountBlocks };

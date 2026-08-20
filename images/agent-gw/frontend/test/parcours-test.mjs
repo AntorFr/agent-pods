@@ -6,7 +6,7 @@
 import Markdoc from '@markdoc/markdoc';
 import { renderPage } from '../src/render.js';
 import { config } from '../src/blocks.js';
-import { decode, tuilesDuCorridor } from '../src/parcours.js';
+import { decode, tuilesDuCorridor } from '../../plugins/parcours/web/carte.js';
 
 const checks = [];
 const check = (name, pass) => checks.push([name, pass]);

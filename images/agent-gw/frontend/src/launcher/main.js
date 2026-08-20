@@ -1537,7 +1537,7 @@ function renderParcours(path) {
   doc.appendChild(hote); wrap.appendChild(doc);
   page.innerHTML = ''; page.appendChild(wrap);
   // Après insertion : la largeur du conteneur décide du zoom de la carte.
-  queueMicrotask(() => window.Alfred?.mountParcours?.(doc));
+  queueMicrotask(() => window.Alfred?.mountBlocks?.(doc));
 }
 
 async function renderFiche(path) {
@@ -1630,7 +1630,7 @@ async function renderFiche(path) {
       // voisin : ils ne peuvent se peindre qu'une fois le document DANS le DOM
       // (la largeur du conteneur décide du zoom de la carte). D'où le montage
       // différé en fin de `showMem`, après `page.appendChild(wrap)`.
-      queueMicrotask(() => window.Alfred?.mountParcours?.(doc));
+      queueMicrotask(() => window.Alfred?.mountBlocks?.(doc));
       if (isSpace) {
         // Index d'abord, puis les pages triées par titre.
         const label = (p) => (memIndex?.get(p)?.titre) || prettify(p.split('/').pop());
