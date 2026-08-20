@@ -1,5 +1,10 @@
 {
   "id": "voyages",
   "kind": "app",
-  "description": "App Voyages : le format de voyage.json, et l'API qui sert la timeline, l'overlay des gestes et les derives (meteo, liaisons)."
+  "description": "App Voyages : le format de voyage.json, l'API qui sert la timeline, l'overlay des gestes et les derives (meteo, liaisons), et la vue qui les affiche.",
+  "vue": {
+    "label": "Voyages",
+    "ico": "🌴",
+    "color": "voyage"
+  }
 }
