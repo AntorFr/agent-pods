@@ -241,7 +241,10 @@ export default function createPlanningApp(api) {
       const j0 = today(), j7 = addDays(j0, 7);
       const els = (d.elements || []).filter((e) => { const j = String(e.start || '').slice(0, 10); return j >= j0 && j < j7; })
         .sort((a, b) => String(a.start).localeCompare(String(b.start)));
-      const pres = (d.periodes || []).filter((p) => p.start && p.end && p.start < j7 && p.end > j0).length;
+      // Même filtre de validité que la vue : la tuile ne compte pas ce que la
+      // grille ignorerait (suivi inconnu, bornes absentes ou inversées).
+      const pres = (d.periodes || []).filter((p) => p.start && p.end && p.start < p.end
+        && (d.suivis || []).some((s) => s.uid === p.suivi) && p.start < j7 && p.end > j0).length;
       if (!els.length && !pres) return null;
       const prochain = els[0];
       return {
