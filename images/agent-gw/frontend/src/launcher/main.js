@@ -1582,7 +1582,10 @@ async function todoModel() {
       };
     } else if (fm.type === 'liste') {
       CURATED.push({ id, path, stat: true, name: fm.titre || prettify(id), ico: fm.ico || '▤',
-        color: fm.color || '--todo', desc: fm.desc || '', refs: asList(fm.refs) });
+        // slugOf sur chaque ref : le format partagé avec Golem qualifie les
+        // références par leur chemin (`todo/poncer-porte`), le modèle d'ici
+        // indexe par slug nu — réduire à l'entrée accepte les deux dialectes.
+        color: fm.color || '--todo', desc: fm.desc || '', refs: asList(fm.refs).map(slugOf) });
     }
   }
   const isSub = (id) => Object.values(BASE).some((x) => x.sub.includes(id));

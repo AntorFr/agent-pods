@@ -36,11 +36,20 @@ Une fiche = un fichier `.md`.
 ---
 type: <voir table>
 domaine: <le dossier réel sous domaines/>
-titre: <titre lisible>
+title: <titre lisible>
 status: <selon le type>
 tags: [<mot>, <mot>]
 ---
 ```
+
+> **Convergence (2026-08-24) : le champ s'écrit désormais `title:`, plus
+> `titre:`.** La mémoire est en route vers un format partagé avec la nouvelle
+> coque (Golem), dont c'est le nom du champ. L'index sert les deux clés en
+> repli croisé, donc les fiches historiques en `titre:` restent lisibles —
+> mais toute fiche NOUVELLE ou RÉÉCRITE porte `title:`. Même geste pour les
+> `refs:` d'une liste : écris-les **qualifiés par leur chemin**
+> (`todo/poncer-porte`, pas `poncer-porte`) — les deux coques les résolvent,
+> mais seule la forme qualifiée est le format cible.
 
 **`type`** (fermé) : `fiche` · `projet` · `recette` · `contact` · `cadeau` · `achat` ·
 `savoir-faire` · `machine` · `outil` · `tache` · `liste` · `espace` · `planif`.
@@ -185,7 +194,7 @@ frontmatter de son `INDEX.md` :
 ---
 type: espace
 domaine: sante
-titre: Santé
+title: Santé
 ico: ❤️
 couleur: rouge
 ---
@@ -207,8 +216,9 @@ fermé est ce qui interdit d'injecter du CSS depuis un contenu d'origine douteus
 
 - **La base = les tâches.** Une fiche `type: tache` par tâche, avec ses attributs. Elle
   vit à **un seul endroit**.
-- **Une liste curée = une fiche `type: liste`** qui ne porte que `titre`, `ico` et
-  **`refs:[<ids>]`** — jamais le texte d'une tâche. L'ordre des `refs` est l'ordre affiché.
+- **Une liste curée = une fiche `type: liste`** qui ne porte que `title`, `ico` et
+  **`refs:[<ids qualifiés>]`** (`todo/<slug>`) — jamais le texte d'une tâche. L'ordre
+  des `refs` est l'ordre affiché.
   Une même tâche peut figurer dans plusieurs listes : plusieurs `refs`, **zéro copie**.
 - **Les listes dynamiques ne s'écrivent pas** (« En retard », « Rapides », « Bloquées ») :
   elles sont calculées par le front sur les attributs. Ne crée pas de fiche pour elles.

@@ -1024,6 +1024,15 @@ async def memory_index():
                 items.append({"path": str(rel), "fm": {}})
                 continue
             fm = _parse_frontmatter(text)
+            # Pont de convergence (2026-08-24) : la mémoire est en route vers le
+            # format partagé avec Golem, où le champ s'appelle `title`. L'index
+            # sert les DEUX clés en repli croisé — le front d'ici continue de
+            # lire `titre`, l'autre coque lit `title`, et une fiche écrite dans
+            # l'un ou l'autre des deux dialectes reste entière des deux côtés.
+            if fm.get("title") and not fm.get("titre"):
+                fm["titre"] = fm["title"]
+            elif fm.get("titre") and not fm.get("title"):
+                fm["title"] = fm["titre"]
             # Alfred écrit souvent le statut EN CLAIR dans le corps (`**Statut : …**`
             # / `**État : …**`), pas en frontmatter. On le récupère pour les pastilles
             # et les facettes, tronqué au 1er séparateur (—, (, ,).
