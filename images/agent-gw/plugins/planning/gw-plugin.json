@@ -1,0 +1,12 @@
+{
+  "id": "planning",
+  "kind": "app",
+  "description": "App Planning : le format de planning.json (suivis, periodes, elements — champs aux noms d'iCalendar), rendu en vue semaine (colonnes + bandes) et vue mois (grille + jour detaille).",
+  "vue": {
+    "label": "Planning",
+    "ico": "🗓️",
+    "color": "agenda",
+    "href": "#/planning",
+    "sous_titre": ""
+  }
+}

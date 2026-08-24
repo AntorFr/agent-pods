@@ -1,5 +1,17 @@
 # Status — agent-pods
-> MàJ : 2026-08-24
+> MàJ : 2026-08-25
+
+🗓️ **Le plugin `planning` — l'agenda transverse (0.84.0, 2026-08-25).** Nouvelle app
+du lanceur : vue **semaine** (7 colonnes, bandes de présence en travers, cartes dans
+les colonnes ; pile de jours + rails sur mobile) et vue **mois** (grille + jour
+détaillé au clic), reliées par un sélecteur. Données : `planning/planning.json` dans
+la mémoire — trois primitives (suivi, période, élément), champs aux noms d'iCalendar
+(`uid`/`title`/`start`/`end`…), **`end` exclusif partout**, couleurs en jetons de
+thème. Contrat agent : `plugins/planning/skills/planning-json/SKILL.md` (livré par
+l'image) ; contrat dev : `plugins/planning/PLANNING.md`. Pas d'API ni d'overlay : la
+vue lit, l'agent écrit. Maquettes validées par Monsieur (canvas « Planning d'Alfred »).
+**Reste à faire** : ajouter `planning` au `GW_APPS` du pod alfred (k8s-home-lab) au
+bump d'image 0.84.0.
 
 🧯 **Le scope `mail` entre dans la demande OIDC — 0.82.0 (2026-08-24).** Le login
 demandait `openid profile email groups offline_access` ; il demande `mail` en plus.

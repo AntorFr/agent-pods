@@ -1,0 +1,92 @@
+/* App `planning` — la semaine en colonnes, le mois en grille.
+   ═══════════════════════════════════════════════════════════════════════════
+   Importée par `app.js`, donc agrégée dans `launcher.css` au bundle. Soumise au
+   MÊME contrat que la coque (`theme-lint`, contrôle 1) : aucune couleur
+   littérale, aucun rayon en pixels — que des jetons.
+
+   Les surfaces EMPRUNTÉES — `.wrap`, `.chead`, `.aico`, `.lede`, `.grouplabel`,
+   `.pill`, `.empty` — restent dans `launcher.css` : primitives partagées.
+   Tout le reste est préfixé `pl` : une app ne squatte pas les classes d'une
+   autre (les `.vday`/`.vcard` de voyages lui appartiennent).
+
+   Les BANDES (`.pl-lane`) débordent de leur cellule de −1 cellule-padding −1px
+   de gouttière : deux segments voisins se rejoignent sans couture, et
+   `overflow:hidden` de la grille coupe net au bord de la fenêtre — c'est la
+   découpe du contrat (fin le dimanche, début le lundi), rendue, jamais stockée. */
+
+/* ── Légende + barre de navigation ─────────────────────────────────────────── */
+.pl-legend{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:14px 0 4px; padding-bottom:15px; border-bottom:1px solid var(--line); }
+.pl-lpill{ font:600 10.5px var(--f-mono); border-radius:var(--r-pill); padding:3px 10px; display:inline-flex; gap:6px; align-items:center;
+  color:var(--rc,var(--accent)); background:color-mix(in srgb, var(--rc,var(--accent)) 12%, transparent); border:1px solid color-mix(in srgb, var(--rc,var(--accent)) 30%, transparent); }
+.pl-lpill::before{ content:""; width:6px; height:6px; border-radius:var(--r-round); background:var(--rc,var(--accent)); }
+.plbar{ display:flex; align-items:center; gap:10px; margin:14px 0 10px; }
+.plmodes{ display:flex; gap:5px; }
+.plnav{ width:28px; height:28px; border-radius:var(--r-sm); border:1px solid var(--line); background:var(--surface); display:grid; place-items:center; color:var(--ink-soft); font:600 14px var(--f-mono); }
+.plnav:hover{ border-color:var(--ink-faint); }
+.plto{ font-size:12px; }
+.plmt{ flex:1; text-align:center; font:600 17px var(--f-title); text-transform:capitalize; }
+
+/* ── Cartes et bandeaux (partagés semaine / mois / panneau) ────────────────── */
+.plcard{ display:block; text-align:left; color:var(--ink); text-decoration:none; background:var(--surface2); border:1px solid var(--line); border-left:3px solid var(--ic,var(--agenda)); border-radius:var(--r-ctl); padding:7px 9px; margin-top:6px; }
+a.plcard:hover{ border-color:color-mix(in srgb, var(--ic,var(--agenda)) 55%, var(--line)); }
+.plcard .tm{ display:flex; gap:5px; align-items:center; font:600 10px var(--f-mono); color:var(--ink-soft); }
+.plcard .tm .due{ margin-left:auto; font-size:9px; color:var(--accent); background:var(--accent-lo); border:1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius:var(--r-xs); padding:0 4px; }
+.plcard .pt{ font:600 12.5px/1.35 var(--f-body); margin-top:3px; }
+.plcard .pd{ font:10.5px/1.4 var(--f-body); color:var(--ink-soft); margin-top:2px; }
+.plband{ display:flex; align-items:center; gap:7px; font:600 10.5px var(--f-mono); color:var(--rc,var(--maison)); background:color-mix(in srgb, var(--rc,var(--maison)) 9%, transparent); border:1px solid color-mix(in srgb, var(--rc,var(--maison)) 26%, transparent); border-radius:var(--r-sm); padding:4px 10px; margin-top:8px; }
+.plband::before{ content:"🏨"; }
+.plband .fx{ margin-left:auto; font-weight:500; color:var(--ink-faint); }
+.plwho{ font:600 10.5px var(--f-mono); color:var(--rc,var(--accent)); margin-top:8px; }
+.plfree{ font:11px var(--f-mono); color:var(--ink-faint); border:1.5px dashed var(--line); border-radius:var(--r-ctl); padding:10px; text-align:center; margin-top:6px; }
+
+/* ── Bandes de période ─────────────────────────────────────────────────────── */
+.pl-lane{ height:10px; margin:4px calc(-1 * var(--pl-pad) - 1px) 0; font:600 7.5px/10px var(--f-mono); letter-spacing:.06em; padding-left:10px; color:var(--on-solid); white-space:nowrap; overflow:hidden; background:color-mix(in srgb, var(--rc,var(--accent)) 78%, transparent); }
+.pl-lane.start{ margin-left:1px; border-radius:var(--r-xs) 0 0 var(--r-xs); }
+.pl-lane.end{ margin-right:1px; border-radius:0 var(--r-xs) var(--r-xs) 0; }
+.pl-lane.spacer{ background:none; }
+
+/* ── Vue semaine, desktop : 7 colonnes ─────────────────────────────────────── */
+.pl-mob{ display:none; }
+.plwgrid{ --pl-pad:9px; display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; }
+.plwh{ background:var(--surface2); font:600 10.5px var(--f-mono); letter-spacing:.06em; text-transform:capitalize; color:var(--ink-soft); padding:7px var(--pl-pad); }
+.plwh.today{ color:var(--accent); }
+.plwl{ background:var(--surface); padding:5px var(--pl-pad) 7px; }
+.plwc{ background:var(--surface); padding:2px 7px 8px; min-height:220px; }
+
+/* ── Vue semaine, mobile : pile de jours + rails de présence ───────────────── */
+.plmweek{ display:grid; column-gap:7px; row-gap:10px; }
+.plrail{ border-radius:var(--r-pill); display:flex; align-items:center; justify-content:center; padding:10px 0;
+  background:color-mix(in srgb, var(--rc,var(--accent)) 15%, transparent); border:1px solid color-mix(in srgb, var(--rc,var(--accent)) 32%, transparent); }
+.plrail .rl{ writing-mode:vertical-rl; transform:rotate(180deg); font:600 8.5px var(--f-mono); letter-spacing:.13em; text-transform:uppercase; color:var(--rc,var(--accent)); }
+.plday{ grid-column:-2; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); padding:11px 12px 10px; }
+.plday.today{ border-color:color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow:0 0 0 3px var(--accent-lo); }
+.pldh{ display:flex; align-items:baseline; gap:9px; font:600 12.5px var(--f-mono); text-transform:capitalize; }
+.pldh .tdy{ margin-left:auto; font:600 10.5px var(--f-mono); color:var(--accent); background:var(--accent-lo); border-radius:var(--r-pill); padding:2px 9px; text-transform:none; }
+.plskip{ grid-column:-2; font:10.5px var(--f-mono); color:var(--ink-faint); text-align:center; display:flex; align-items:center; gap:9px; align-self:center; }
+.plskip::before,.plskip::after{ content:""; flex:1; border-top:1px dashed var(--line); }
+
+/* ── Vue mois : la grille + le jour sélectionné à côté ─────────────────────── */
+.plmwrap{ display:flex; gap:22px; align-items:flex-start; }
+.plmcal{ flex:1 1 0; min-width:0; }
+.plpanel{ flex:0 0 300px; min-width:0; }
+.plpanel .grouplabel{ margin-top:0; }
+.plmgrid{ --pl-pad:8px; display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; }
+.plmh{ background:var(--surface2); font:600 9.5px var(--f-mono); letter-spacing:.1em; text-transform:uppercase; color:var(--ink-faint); padding:6px var(--pl-pad); }
+.plmc{ display:block; text-align:left; background:var(--surface); min-height:86px; padding:6px var(--pl-pad); color:var(--ink); font:inherit; border-radius:0; }
+.plmc.off{ background:color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+.plmc.off .n{ color:var(--ink-faint); }
+.plmc.sel{ box-shadow:inset 0 0 0 2px var(--accent); }
+.plmc.today .n{ color:var(--accent); }
+.plmc .n{ font:600 11px var(--f-mono); color:var(--ink-soft); }
+.plmev{ display:block; width:fit-content; max-width:100%; font:600 9.5px var(--f-mono); color:var(--ink-soft); background:var(--surface2); border:1px solid var(--line); border-left:2px solid var(--ic,var(--agenda)); border-radius:var(--r-micro); padding:1px 5px; margin-top:4px; white-space:nowrap; overflow:hidden; }
+
+@media (max-width:820px){
+  .pl-desk{ display:none; }
+  .pl-mob{ display:block; }
+  .plmwrap{ flex-direction:column; }
+  .plpanel{ flex-basis:auto; width:100%; }
+  .plmc{ min-height:64px; padding:4px 6px; }
+  .plmgrid{ --pl-pad:6px; }
+  .plmev{ font-size:8.5px; padding:1px 3px; }
+  .plmt{ font-size:14px; }
+}

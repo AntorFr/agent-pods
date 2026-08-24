@@ -1,0 +1,5 @@
+{
+  "name": "planning",
+  "description": "Contrat de donnees de l'app Planning : le format de planning.json (suivis, periodes, elements), rendu en vue semaine et vue mois par la PWA. Livre par l'image avec le module qui le lit.",
+  "version": "1.0.0"
+}
