@@ -49,7 +49,20 @@ if oidc_enabled:
         client_secret=OIDC_CLIENT_SECRET,
         client_kwargs={
             # offline_access -> refresh token, la graine du rebond rosetta.
-            "scope": "openid profile email groups offline_access",
+            # `mail` -> le claim `mail_local` (partie locale de l'adresse, pliee
+            # par Authelia) dans l'access token. Le hub s'en sert pour ouvrir la
+            # boite IMAP de la maison : la policy du coffre est TEMPLEE dessus,
+            # donc sans ce claim l'echange de jeton echoue en 400 et l'addon est
+            # mort. Le demander n'est PAS optionnel : declarer un custom claim
+            # dans une claims policy le rend disponible, jamais accorde. Authelia
+            # ne copie un claim que si un scope accorde le porte, et il saute les
+            # autres EN SILENCE — aucun log, aucune erreur. (Vecu du 13/08 au
+            # 24/08 : /mail a terre, et le coffre accuse a tort.)
+            # ⚠️ Un scope demande ici mais absent du client cote Authelia rend
+            # `invalid_scope` a l'autorisation, cad PLUS AUCUN LOGIN sur ce corps.
+            # Toute image qui ajoute un scope se deploie donc APRES Authelia,
+            # jamais avant. `mail` y est depuis le 2026-08-24 (alfred/skippy/nestor).
+            "scope": "openid profile email groups offline_access mail",
             "code_challenge_method": "S256",
             # Authelia rejects client_secret_post — be explicit.
             "token_endpoint_auth_method": "client_secret_basic",

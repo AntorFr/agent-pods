@@ -1,5 +1,22 @@
 # Status — agent-pods
-> MàJ : 2026-08-20
+> MàJ : 2026-08-24
+
+🧯 **Le scope `mail` entre dans la demande OIDC — 0.82.0 (2026-08-24).** Le login
+demandait `openid profile email groups offline_access` ; il demande `mail` en plus.
+Sans lui, le claim `mail_local` — déclaré côté Authelia depuis le 13/08 — n'était
+**jamais accordé** : un `custom_claims` rend un claim *disponible* à la policy, et
+Authelia ne le copie dans l'access token que si un scope accordé le **porte**. Les
+autres, il les saute **en silence**. Résultat : l'addon `mail` du hub (boîte IMAP de
+la maison) se faisait refuser par le coffre en HTTP 400 du 13/08 au 24/08, pendant que
+Gmail — qui se repère sur `preferred_username`, standard donc accordé — fonctionnait :
+c'est ce contraste qui a fait accuser le coffre à tort.
+
+⚠️ **Ordre de déploiement non négociable** : Authelia d'abord, l'image ensuite. Un
+scope demandé mais absent du client côté Authelia rend `invalid_scope` à
+l'autorisation — c'est-à-dire **plus aucun login** sur le corps concerné.
+⚠️ **Une reconnexion PWA est requise, un refresh ne suffit pas** : les scopes accordés
+sont gelés dans le grant, et `user_access_token()` rafraîchit sans envoyer `scope`.
+Tant qu'un corps n'a pas re-loggé, son jeton reste dépourvu de `mail_local`.
 
 🧯 **L'umask 002 descend dans l'image — 0.80.0 (2026-08-20).** Il vivait en `args` dans
 deux manifestes k8s, ce qui y **recopiait le CMD** de l'image : la commande de démarrage
@@ -95,7 +112,7 @@ helper scopé reste, la référence à l'outil est datée). `python test/bin_tes
 > dans le pod, `/workspace/memory` est un point de montage NFS, et un `pull` sur
 > l'historique réécrit **supprimerait la mémoire vivante du NAS**.
 
-**État :** Trois images en production, **déployées** — `agent-gw` 0.81.0 sur les trois
+**État :** Trois images en production, **déployées** — `agent-gw` 0.82.0 sur les trois
 corps (Alfred, Skippy, Nestor), `claude-pod` 0.7.0, `agent-voice` 0.3.0. L'identité vient
 du `/workspace` monté, jamais de l'image, et c'est maintenant vrai jusque dans les noms.
 
