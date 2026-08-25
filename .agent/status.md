@@ -21,7 +21,11 @@ interactif — qui se périme, et que rien ne rafraîchirait dans un pod où la 
 Au passage, les fenêtres ne sont plus listées en dur (`five_hour`, `seven_day`,
 `seven_day_opus`, `seven_day_sonnet`) : Anthropic en ajoute une par famille de modèles, et la
 fenêtre **Fable** — bien présente dans le `/usage` du CLI — aurait disparu de la modale sans
-que personne ne le voie. On dérive le libellé des clés reçues.
+que personne ne le voie. On dérive le libellé des clés reçues. ⚠️ Mais le guichet rend aussi des
+fenêtres à **nom de code** inertes (`nimbus_quill`, `iguana_necktie`, `tangelo`… relevées le
+2026-08-25) : hors des deux fenêtres canoniques, on n'affiche donc qu'une fenêtre **active**,
+c'est-à-dire datée d'une remise à zéro — seul critère que le guichet fournisse, et qui ne
+demande de deviner aucun nom.
 
 🗓️ **Le plugin `planning` — l'agenda transverse (0.84.1, 2026-08-25).** Nouvelle app
 du lanceur : vue **semaine** (7 colonnes, bandes de présence en travers, cartes dans

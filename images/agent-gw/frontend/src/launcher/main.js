@@ -1935,11 +1935,20 @@ function usageLabel(key) {
   if (m) return 'Semaine — ' + m[1].replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   return key;
 }
-/* Les deux fenêtres stables d'abord (l'ordre de lecture de Monsieur), les
-   fenêtres par modèle ensuite, par ordre alphabétique. */
+/* Les deux fenêtres stables d'abord (l'ordre de lecture de Monsieur), les autres
+   ensuite, par ordre alphabétique.
+   ⚠️ Le guichet rend aussi des fenêtres à NOM DE CODE, inertes : relevé le
+   2026-08-25 sur le compte de Monsieur — `nimbus_quill`, `iguana_necktie`,
+   `tangelo`, `amber_ladder`… la plupart à `null`, une à 0 % sans remise à zéro.
+   Ce sont des compteurs internes d'Anthropic, pas des plafonds de l'abonnement.
+   D'où le filtre : hors des deux fenêtres canoniques, on n'affiche qu'une fenêtre
+   ACTIVE, c'est-à-dire datée d'une remise à zéro. C'est le seul critère que le
+   guichet fournisse, et il ne demande de deviner aucun nom. */
 function usageKeys(d) {
   const head = ['five_hour', 'seven_day'];
-  const rest = Object.keys(d).filter((k) => !head.includes(k) && d[k] && d[k].utilization != null);
+  const rest = Object.keys(d).filter(
+    (k) => !head.includes(k) && d[k] && d[k].utilization != null && d[k].resets_at,
+  );
   return head.concat(rest.sort());
 }
 function fmtReset(iso) {
