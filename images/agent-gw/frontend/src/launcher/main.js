@@ -1125,15 +1125,26 @@ function renderRoute() {
   // Il n'a donc pas de domaine à lui : il s'accroche à la fiche qui a une raison
   // d'en parler, et celle-ci y renvoie par `{% parcours vue="lien" %}`.
   if (route.startsWith('parcours/')) return renderParcours(decodeURIComponent(route.slice(9)));
-  // L'app Voyages intercepte son domaine : la tuile générique #/dom/voyages
-  // mène au hub (timeline), pas à la collection de fiches. Module éteint :
-  // l'interception saute et #/dom/voyages redevient un domaine ordinaire.
-  if (route.startsWith('dom/')) return renderDomain(route.slice(4));
-  if (appOn('todo')) {
-    if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
-    if (route === 'todo') return renderTodo();
-  }
-  if (route === 'planif' && appOn('planif')) return renderPlanif();
+  /* Les vues de plugin, AVANT les routes du socle qu'elles peuvent RECOUVRIR.
+     ═══════════════════════════════════════════════════════════════════════════
+     Testées sous `appOn` comme les autres : une route ne survit pas à
+     l'extinction de son module, marque-page compris.
+
+     ⚠️ L'ORDRE EST LE CONTRAT, pas une commodité de lecture. Un plugin déclare
+     parfois une route que le socle sait aussi servir — `voyages` déclare
+     `dom/voyages` pour que la tuile générique de son domaine ouvre la TIMELINE
+     et non la mosaïque de fiches. Cette interception n'existe que si la boucle
+     passe la première.
+
+     Elle est passée en dernier du 2026-08-20 au 25 : la vue Voyages avait quitté
+     ce fichier, et l'interception — un `if` nommant `voyages`, juste au-dessus de
+     `dom/` — est partie avec elle sans que sa place soit reprise. Il n'est resté
+     que son commentaire, orphelin, à décrire un comportement que plus une ligne
+     n'appliquait. La tuile Voyages ouvrait un domaine ordinaire, le hub n'était
+     plus atteignable que par `#/voyages`, que rien ne produit. Aucune erreur : un
+     écran plausible, simplement pas le bon. `test/registry-test.mjs` tient
+     désormais l'invariant — aucune route du socle évaluée avant cette boucle ne
+     doit recouvrir un préfixe déclaré par un plugin. */
   // Les apps du registre (`apps/index.js`) — celles qui ont déjà quitté ce
   // fichier. Testées SOUS `appOn` comme les autres : une route ne survit pas à
   // l'extinction de son module, marque-page compris.
@@ -1145,6 +1156,14 @@ function renderRoute() {
       } else if (route === prefix) return render('');
     }
   }
+  // Un domaine ordinaire : la mosaïque de ses fiches. Les plugins ont eu leur
+  // tour au-dessus, donc celui qui absorbe le sien l'a déjà servi.
+  if (route.startsWith('dom/')) return renderDomain(route.slice(4));
+  if (appOn('todo')) {
+    if (route.startsWith('todo/')) return renderList(decodeURIComponent(route.slice(5)));
+    if (route === 'todo') return renderTodo();
+  }
+  if (route === 'planif' && appOn('planif')) return renderPlanif();
   renderHome();
 }
 

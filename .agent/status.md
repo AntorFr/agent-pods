@@ -1,6 +1,28 @@
 # Status — agent-pods
 > MàJ : 2026-08-25
 
+🧭 **La tuile Voyages ouvrait le mauvais écran — 0.84.4 (2026-08-25).** Second
+défaut du même déménagement, et il ne se voyait pas dans la correction du premier :
+`#/dom/voyages` rendait la mosaïque de fiches du domaine au lieu de la timeline. La
+vue Voyages déclare `dom/voyages` dans ses `routes` EXPRÈS — mais la boucle qui les
+consulte passait en DERNIER dans `renderRoute`, après le `dom/` du socle, qui
+l'avalait. Le hub n'était donc plus atteignable que par `#/voyages`, que rien ne
+produit : ni tuile, ni fil d'Ariane, ni lien.
+
+En sortant de `main.js` le 20/08, la vue a emporté l'`if` qui l'interceptait (placé
+juste au-dessus de `dom/`) sans que sa place soit reprise. **Il n'est resté que son
+commentaire**, orphelin, décrivant fidèlement un comportement que plus une ligne
+n'appliquait — c'est lui qui a mis sur la piste. Aucune erreur nulle part : un écran
+plausible, simplement pas le bon, ce qui est exactement ce qui l'a fait survivre à la
+première passe de correction (l'Atelier, lui, s'en tirait par le cas spécial `diy` de
+`renderDomain`).
+
+> 🛡 La boucle des vues passe désormais AVANT les routes du socle qu'elle peut
+> recouvrir, et `registry-test.mjs` tient l'invariant : il lit l'ordre réel de
+> `renderRoute` et le confronte aux préfixes que les plugins déclarent vraiment —
+> **aucune des deux listes n'est recopiée**. Éprouvé à l'envers sur le `main.js` de
+> 0.84.3, qui le fait tomber.
+
 🩹 **Atelier et Voyages rendaient un écran blanc depuis cinq jours — 0.84.3
 (2026-08-25).** Les deux vues jetaient `ReferenceError: page is not defined` à la
 première ligne de leur rendu. Fil d'Ariane correct, page vide, aucune erreur visible

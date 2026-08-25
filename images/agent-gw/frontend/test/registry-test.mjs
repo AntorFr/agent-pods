@@ -129,6 +129,56 @@ const MAIN = readFileSync(resolve('src/launcher/main.js'), 'utf8');
 check('le lanceur ne code plus la tuile d’une vue de plugin en dur',
   !/repos:\s*\{\s*label:/.test(MAIN) && MAIN.includes('appTiles()'));
 
+/* ── L'ORDRE du routeur : une route de plugin doit être ATTEIGNABLE ──────
+   Un plugin déclare parfois un préfixe que le socle sait aussi servir —
+   `voyages` déclare `dom/voyages` pour que la tuile générique de son domaine
+   ouvre la timeline plutôt que la mosaïque de fiches. L'interception n'existe
+   que si la boucle des vues passe AVANT le `dom/` du socle.
+
+   Elle est passée en dernier cinq jours durant (2026-08-20 → 25) : en sortant
+   de `main.js`, la vue Voyages a emporté le `if` qui l'interceptait, et personne
+   n'a repris sa place. Zéro erreur, zéro banc rouge — juste la mauvaise page.
+   Ce banc lit l'ordre réel de `renderRoute` et le confronte aux préfixes que les
+   plugins déclarent VRAIMENT, sans qu'aucune des deux listes soit recopiée. */
+
+const CORPS = MAIN.slice(MAIN.indexOf('function renderRoute'));
+const FIN = CORPS.indexOf('\n}');
+const ROUTEUR = CORPS.slice(0, FIN);
+const posBoucle = ROUTEUR.indexOf('Object.entries(APP_VIEWS)');
+check('renderRoute contient bien la boucle des vues de plugin', posBoucle > 0);
+
+// Les préfixes déclarés par les plugins, lus dans leur `routes: { … }`.
+const prefixes = [];
+for (const v of scanner(resolve('..', 'plugins'))) {
+  const src = readFileSync(resolve('..', 'plugins', v.id, 'web', 'app.js'), 'utf8');
+  const bloc = src.slice(src.lastIndexOf('routes: {'));
+  for (const m of bloc.matchAll(/^\s*'?([a-z][\w/-]*\/?)'?\s*:\s*(?:\(|async|\w)/gm)) {
+    prefixes.push({ id: v.id, prefix: m[1] });
+  }
+}
+check('les préfixes des plugins sont relevés dans leurs sources',
+  prefixes.some((p) => p.prefix === 'dom/voyages') && prefixes.some((p) => p.prefix === 'atelier/'),
+  prefixes.map((p) => `${p.id}:${p.prefix}`).join(', '));
+
+// Ce que le socle attrape AVANT la boucle : `route.startsWith('X')` / `route === 'X'`.
+const avant = ROUTEUR.slice(0, posBoucle);
+const gardes = [
+  ...[...avant.matchAll(/route\.startsWith\('([^']+)'\)/g)].map((m) => ({ kind: 'prefix', v: m[1] })),
+  ...[...avant.matchAll(/route === '([^']+)'/g)].map((m) => ({ kind: 'exact', v: m[1] })),
+];
+const avales = [];
+for (const p of prefixes) {
+  // Une route servie par ce préfixe : `dom/voyages` tel quel, `voyage/` + un reste.
+  const exemple = p.prefix.endsWith('/') ? p.prefix + 'x' : p.prefix;
+  for (const g of gardes) {
+    if (g.kind === 'prefix' ? exemple.startsWith(g.v) : exemple === g.v) {
+      avales.push(`${p.id} « ${p.prefix} » avalé par le socle (${g.v})`);
+    }
+  }
+}
+check('aucune route de plugin n’est avalée par le socle avant la boucle',
+  avales.length === 0, avales.join(' ; '));
+
 console.log();
 if (ko) { console.log(`${ko} échec(s)`); process.exit(1); }
 console.log('REGISTRY OK');
