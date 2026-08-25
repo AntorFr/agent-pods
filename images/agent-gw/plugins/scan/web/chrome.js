@@ -16,7 +16,8 @@
      mount()   appelé APRÈS injection : c'est là qu'on câble les écouteurs, une
                fois que les nœuds existent.
 
-   L'api porte `$` (requête par id), `input` (le champ de saisie) et `esc`.
+   L'api porte `$` (requête par id), `input` (le champ de saisie), `add` (poser
+   une bulle dans le fil — c'est par là que passent les refus de caméra) et `esc`.
 
    ⚠️ CE PLUGIN NE DÉCIDE RIEN. Il dépose des codes dans le champ de saisie —
    c'est un clavier, pas un scanner qui commande. Ce que Monsieur a tapé devant
@@ -44,7 +45,7 @@ const MARKUP = `
     </div>
   </div>`;
 
-export default function createScanChrome({ $, input }) {
+export default function createScanChrome({ $, input, add }) {
   return {
     composer: [{ id: 'scan', glyphe: '▥', titre: 'Scanner un code-barres' }],
     markup: MARKUP,

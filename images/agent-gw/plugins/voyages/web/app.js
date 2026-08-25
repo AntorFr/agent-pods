@@ -22,9 +22,22 @@
                build that HTML itself while naming this plugin; it now renders
                whatever any plugin hands back.
 
-   ⚠️ `api.page` is a GETTER and must not be destructured — the node does not
-   exist yet when views are instantiated. Same trap as `repos`, same silent
-   failure: correct breadcrumb, blank screen, no error anywhere. */
+   ⚠️ EVERYTHING THIS VIEW BORROWS FROM THE SHELL COMES THROUGH `api`, AND
+   NOTHING ELSE. A bare `page`, `IC`, `memInfo` reads as a plain global here —
+   and until 2026-08-25 that is what this file did, three of them, left behind
+   when the view moved out of `launcher/main.js` on 2026-08-20.
+
+   It did not fail where it was written, which is the whole lesson. esbuild
+   concatenates every module into ONE scope, so an unbundled build resolved those
+   names against `main.js`'s own bindings and the view rendered. `--minify`
+   renames those bindings; the free reference does not follow. So the bundle that
+   ships — and only that one — threw `ReferenceError: page is not defined` on the
+   first line of every render, leaving a correct breadcrumb over a blank screen.
+   Nothing in the repo saw it: the tests do not minify. `test/plugin-globals-test.mjs`
+   does now, and it is the only place that can.
+
+   ⚠️ `api.page` is also a GETTER — read it, never destructure it. The node does
+   not exist yet when the views are instantiated at module load. */
 
 export default function createVoyagesApp(api) {
   const { esc, crumbs, headers, loadIndex, loadTree, prettify, add, sc } = api;
@@ -76,7 +89,7 @@ export default function createVoyagesApp(api) {
     }
     return { idx, els };
   }
-  function vclearIns() { page.querySelectorAll('.inst,.insb').forEach((x) => x.classList.remove('inst', 'insb')); }
+  function vclearIns() { api.page.querySelectorAll('.inst,.insb').forEach((x) => x.classList.remove('inst', 'insb')); }
   const vRouteCache = new Map();
   async function vroute(a, b, mode) {
     const key = `${a.lat.toFixed(4)},${a.lng.toFixed(4)}|${b.lat.toFixed(4)},${b.lng.toFixed(4)}|${mode}`;
@@ -144,12 +157,12 @@ export default function createVoyagesApp(api) {
 
   async function renderVoyagesHub() {
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }]);
-    page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+    api.page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
     let list;
     try { const r = await fetch('/api/voyage/list', { headers: headers(false), cache: 'no-store' }); list = (await r.json()).voyages; }
-    catch { page.innerHTML = '<div class="wrap"><div class="empty">Voyages indisponibles.</div></div>'; return; }
+    catch { api.page.innerHTML = '<div class="wrap"><div class="empty">Voyages indisponibles.</div></div>'; return; }
     let html = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>Voyages</h1><div class="lede">Un dossier par voyage — résas sourcées de Gmail, suggestions d’Alfred, timeline à composer.</div></div></div>`;
-    if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun voyage — demandez à Alfred d’en cadrer un (« on part en Corse du 8 au 22 août »).</div></div>'; return; }
+    if (!list.length) { api.page.innerHTML = html + '<div class="empty">Aucun voyage — demandez à Alfred d’en cadrer un (« on part en Corse du 8 au 22 août »).</div></div>'; return; }
     const vCard = (v) => {
       const dates = v.debut ? `${vfmtDay(v.debut)} → ${vfmtDay(v.fin)}` : 'sans dates — envie à cadrer';
       const foot = [];
@@ -165,12 +178,12 @@ export default function createVoyagesApp(api) {
     const clos = list.filter((v) => sc(v.status) === 'clos');
     if (vivants.length) html += `<div class="cards">${vivants.map(vCard).join('')}</div>`;
     if (clos.length) html += `<details class="archsec"${vivants.length ? '' : ' open'}><summary>🗄️ Archive <span class="hint">— ${clos.length} voyage${clos.length > 1 ? 's' : ''} clos</span></summary><div class="cards">${clos.map(vCard).join('')}</div></details>`;
-    page.innerHTML = html + '</div>';
+    api.page.innerHTML = html + '</div>';
   }
 
   async function renderVoyage(path) {
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }, { label: '…', hash: '#/voyage/' + encodeURIComponent(path) }]);
-    page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+    api.page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
     let data, state;
     try {
       const [rd, rs] = await Promise.all([
@@ -179,11 +192,11 @@ export default function createVoyagesApp(api) {
       ]);
       if (!rd.ok) throw new Error(rd.status);
       data = await rd.json(); state = await rs.json();
-    } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Voyage illisible (' + esc(String(e)) + ').</div></div>'; return; }
+    } catch (e) { api.page.innerHTML = '<div class="wrap"><div class="empty">Voyage illisible (' + esc(String(e)) + ').</div></div>'; return; }
     voy = { path, data, state, filter: null };
     // L'arbre et l'index alimentent le listing du dossier (vDossier). Un échec
     // n'empêche pas la timeline : le bloc disparaît, la page vit.
-    await Promise.all([memInfo ? null : loadTree(), loadIndex()].filter(Boolean));
+    await Promise.all([api.memInfo ? null : loadTree(), loadIndex()].filter(Boolean));
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'Voyages', hash: '#/voyages' }, { label: data.titre || 'Voyage', hash: '#/voyage/' + encodeURIComponent(path) }]);
     paintVoyage();
   }
@@ -221,8 +234,9 @@ export default function createVoyagesApp(api) {
      que le dossier contient, qu'on l'ait pointé ou non. */
   function vDossier() {
     const dir = vDir().replace(/\/$/, '');
-    if (!dir || !memInfo?.entries) return [];
-    return memInfo.entries
+    const arbo = api.memInfo;
+    if (!dir || !arbo?.entries) return [];
+    return arbo.entries
       .filter((e) => !e.dir && e.path.startsWith(dir + '/')
         && /\.(md|parcours\.json)$/i.test(e.path)
         // enfants DIRECTS + les parcours d'assets/ : le reste (pièces jointes,
@@ -230,7 +244,7 @@ export default function createVoyagesApp(api) {
         && (!e.path.slice(dir.length + 1).includes('/') || /\.parcours\.json$/i.test(e.path)))
       .map((e) => ({
         path: e.path,
-        nom: (memIndex?.get(e.path)?.titre) || prettify(e.path.split('/').pop().replace(/\.(parcours\.json|md)$/i, '')),
+        nom: (api.memIndex?.get(e.path)?.titre) || prettify(e.path.split('/').pop().replace(/\.(parcours\.json|md)$/i, '')),
         parcours: /\.parcours\.json$/i.test(e.path),
       }))
       .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
@@ -270,11 +284,11 @@ export default function createVoyagesApp(api) {
 
     // Voyage « idée » : pas de timeline, le tray seul — rien ne se confirme sans dates.
     if (!d.debut || !d.fin) {
-      page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">Voyage à l’état d’idée — le tray vit, la timeline attend les dates.</div></div></div>${props}
+      api.page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">Voyage à l’état d’idée — le tray vit, la timeline attend les dates.</div></div></div>${props}
         <div class="callout">🗓️ <b>Posez les dates pour composer</b> — dites-le à Alfred (« on part du 12 au 26 avril ») : sans début ni fin, la confirmation est impossible.</div>
         <div class="grouplabel">Suggestions <span class="hint">— par Alfred, en attendant</span></div>
         <div class="cards">${allSug.map((i) => `<button class="card" data-open="${esc(i.id)}"><div class="ct">${vicoOf(i)} ${esc(i.titre || i.id)}</div><div class="cmeta">${esc(i.hint || '')}</div><div class="foot"><span class="tag">${vtypeOf(i.type).n}</span></div></button>`).join('') || '<div class="empty">Aucune suggestion — demandez-en à Alfred.</div>'}</div></div>`;
-      page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
+      api.page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
       return;
     }
 
@@ -313,21 +327,21 @@ export default function createVoyagesApp(api) {
     const fiches = vDossier();
     const bloc = fiches.length ? `<div class="grouplabel">Les fiches de ce voyage <span class="hint">— ce que le dossier contient</span></div>
       <div class="cards vdoss">${fiches.map((f) => `<a class="card" href="${f.parcours ? '#/parcours/' : '#/mem/'}${esc(f.path.split('/').map(encodeURIComponent).join('/'))}"><div class="ct">${f.parcours ? '🗺' : '📄'} ${esc(f.nom)}</div><div class="foot"><span class="tag">${f.parcours ? 'parcours' : 'fiche'}</span></div></a>`).join('')}</div>` : '';
-    page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div>${bloc}</div>`;
+    api.page.innerHTML = `<div class="wrap" style="--dc:var(--voyage)"><div class="chead"><div class="aico" style="--dc:var(--voyage)">🌴</div><div><h1>${esc(d.titre || 'Voyage')}</h1><div class="lede">${days.length} jours${(d.lieux || []).length ? ' · ' + d.lieux.map((l) => esc(l.nom)).join(' → ') : ''} · liaisons et météo dérivées au rendu</div></div></div>${props}<div class="vwrap"><div class="vtl">${tl}</div>${tray}</div>${bloc}</div>`;
 
     // Fiches (clic), tray (filtre, écarter), drag & drop → API d'état.
-    page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
-    page.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => { voy.filter = b.dataset.tf || null; paintVoyage(); }));
-    page.querySelectorAll('[data-dis]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.dis, statut: 'ecartee' }); }));
-    page.querySelectorAll('[data-rest]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.rest, statut: 'suggestion' }); }));
-    const ecT = page.querySelector('[data-ectoggle]');
+    api.page.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => openVFiche(b.dataset.open)));
+    api.page.querySelectorAll('[data-tf]').forEach((b) => b.addEventListener('click', () => { voy.filter = b.dataset.tf || null; paintVoyage(); }));
+    api.page.querySelectorAll('[data-dis]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.dis, statut: 'ecartee' }); }));
+    api.page.querySelectorAll('[data-rest]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); vgesture({ id: b.dataset.rest, statut: 'suggestion' }); }));
+    const ecT = api.page.querySelector('[data-ectoggle]');
     if (ecT) ecT.addEventListener('click', () => { voy.showEc = !voy.showEc; paintVoyage(); });
-    page.querySelectorAll('.vcard,.traycard').forEach((c) => {
+    api.page.querySelectorAll('.vcard,.traycard').forEach((c) => {
       c.addEventListener('click', () => { if (!vdrag) openVFiche(c.dataset.vi); });
       c.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', c.dataset.vi); e.dataTransfer.effectAllowed = 'move'; c.classList.add('drag'); vdrag = true; vdragId = c.dataset.vi; });
       c.addEventListener('dragend', () => { c.classList.remove('drag'); vclearIns(); setTimeout(() => { vdrag = false; vdragId = null; }, 0); });
     });
-    page.querySelectorAll('.vday').forEach((dz) => {
+    api.page.querySelectorAll('.vday').forEach((dz) => {
       dz.addEventListener('dragover', (e) => {
         e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dz.classList.add('dropok');
         // Liseré d'insertion : au-dessus de la carte visée, ou sous la dernière.
@@ -353,7 +367,7 @@ export default function createVoyagesApp(api) {
       });
     });
     // Geste inverse : une carte du planning glissée sur le tray redevient suggestion.
-    const trayEl = page.querySelector('.vtray');
+    const trayEl = api.page.querySelector('.vtray');
     if (trayEl) {
       trayEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; trayEl.classList.add('dropok'); });
       trayEl.addEventListener('dragleave', () => trayEl.classList.remove('dropok'));
@@ -368,7 +382,7 @@ export default function createVoyagesApp(api) {
     // Météo (dérivée) : patch des jours couverts par la fenêtre fiable ; les autres
     // restent vides côté futur lointain, « — » côté passé. L'absence, pas la fiction.
     const today = new Date().toISOString().slice(0, 10);
-    page.querySelectorAll('[data-wx]').forEach((el) => {
+    api.page.querySelectorAll('[data-wx]').forEach((el) => {
       const day = el.dataset.wx;
       if (day < today) el.textContent = '—';
       else { el.textContent = 'météo à J-10'; el.title = 'hors fenêtre fiable (J+10) — le picto apparaîtra à l’approche du départ'; }
@@ -377,7 +391,7 @@ export default function createVoyagesApp(api) {
       .then((r) => (r.ok ? r.json() : null))
       .then((wx) => {
         if (!wx || !wx.available) return;
-        page.querySelectorAll('[data-wx]').forEach((el) => {
+        api.page.querySelectorAll('[data-wx]').forEach((el) => {
           const w = wx.days[el.dataset.wx];
           if (!w) return;
           el.className = 'wx';

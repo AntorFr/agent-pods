@@ -125,6 +125,15 @@ an `api` object would not be one: once code runs in the page, no API design boun
 The boundary here is review and the CI, not isolation. Keep that in mind before
 vendoring a view you have not read.
 
+⚠️ **Everything a view borrows from the shell comes through `api`, and a bare name is
+never a shortcut for it.** The bundle puts every module in one scope, so an unminified
+build resolves a free `page` or `add` against the launcher's own binding and the screen
+renders — while the shipped, minified bundle renames that binding and throws
+`ReferenceError` on the first line of the render. Two views spent five days blank that
+way after moving out of `launcher/main.js` (2026-08-20 → 25). Missing a primitive is a
+reason to *add one to `EXT_API`*, deliberately; `frontend/test/plugin-globals-test.mjs`
+minifies every view, block and skin and fails on any name the launcher declares.
+
 **`web/blocks.js`** — Markdoc tags for the content engine, the vocabulary an agent
 writes in a note. Exports a factory `(api) => ({ tags, mount? })`, where `api` carries the
 engine's primitives (`Tag`, `asset`, `manque`) — injected rather than imported, because

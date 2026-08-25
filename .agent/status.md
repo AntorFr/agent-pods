@@ -1,6 +1,34 @@
 # Status — agent-pods
 > MàJ : 2026-08-25
 
+🩹 **Atelier et Voyages rendaient un écran blanc depuis cinq jours — 0.84.3
+(2026-08-25).** Les deux vues jetaient `ReferenceError: page is not defined` à la
+première ligne de leur rendu. Fil d'Ariane correct, page vide, aucune erreur visible
+sans ouvrir la console : `#/atelier/<workbook.json>` et `#/voyage/<voyage.json>`
+n'affichaient plus rien. Ce n'était PAS le double-run Golem — la mémoire n'a pas
+bougé (`workbook.json` du garage inchangé depuis le 30/07, `voyage.json` de Baden
+depuis le 15/08) ; c'est la migration du 2026-08-20, quand les deux vues ont quitté
+`launcher/main.js` pour leur plugin en emportant des références à `page`, `IC`,
+`memInfo`, `memIndex`, `$` — liaisons de module là-bas, **variables libres** ici.
+Deux fuites de plus trouvées au passage : `$` dans `atelier` (l'établi) et `add`
+dans `scan/web/chrome.js` (le refus de caméra, qui n'affichait donc rien).
+
+> ☠️ **Ça ne pouvait se voir QUE minifié, et rien ne minifiait.** esbuild range tous
+> les modules dans un seul scope : sans `--minify`, la référence libre du plugin tombe
+> par accident sur la liaison homonyme de `main.js` et l'écran s'affiche. Le build
+> livré, lui, renomme cette liaison (`page` → `Le`) — la référence libre ne suit pas.
+> Bancs verts, dev vert, production blanche. **`frontend/test/plugin-globals-test.mjs`**
+> comble le trou : il minifie chaque vue, bloc et skin, et cherche les fuites avec
+> `--define` (esbuild ne substitue QUE les références libres, jamais ce qu'une portée
+> lie — donc zéro faux positif, sans lexeur maison). La liste des noms interdits est
+> **dérivée de `main.js`** : une primitive ajoutée au lanceur entre dans la garde le
+> jour même. Éprouvé à l'envers.
+
+Trois primitives entrent au contrat d'`EXT_API`, délibérément — c'était la vraie
+demande derrière les fuites : `memInfo` / `memIndex` (des GETTERS : prêter `loadTree`
+sans prêter son cache obligeait la vue à refaire la requête) et `ico(spec)`, qui résout
+`ic:<nom>` avec le même code que les tuiles.
+
 🔎 **Le guichet d'usage dit POURQUOI il refuse — 0.84.2 (2026-08-25).** La modale des
 quotas ne rendait qu'un code HTTP nu. Un `403` a fait chercher la panne pendant des jours
 alors qu'Anthropic écrivait la cause dans le corps qu'on jetait :

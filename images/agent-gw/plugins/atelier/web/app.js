@@ -15,9 +15,22 @@
    one workbook. The domain tiles `diy` and `atelier` are intercepted by the hub
    on purpose: a workbook is not a folder of notes.
 
-   ⚠️ `api.page` is a GETTER and must not be destructured — the node does not
-   exist yet when views are instantiated. Correct breadcrumb, blank screen, no
-   error: the failure this rule prevents was found by a screenshot, nothing else. */
+   ⚠️ EVERYTHING THIS VIEW BORROWS FROM THE SHELL COMES THROUGH `api`, AND
+   NOTHING ELSE. A bare `page`, `IC`, `memInfo` reads as a plain global here —
+   and until 2026-08-25 that is what this file did, three of them, left behind
+   when the view moved out of `launcher/main.js` on 2026-08-20.
+
+   It did not fail where it was written, which is the whole lesson. esbuild
+   concatenates every module into ONE scope, so an unbundled build resolved those
+   names against `main.js`'s own bindings and the view rendered. `--minify`
+   renames those bindings; the free reference does not follow. So the bundle that
+   ships — and only that one — threw `ReferenceError: page is not defined` on the
+   first line of every render, leaving a correct breadcrumb over a blank screen.
+   Nothing in the repo saw it: the tests do not minify. `test/plugin-globals-test.mjs`
+   does now, and it is the only place that can.
+
+   ⚠️ `api.page` is also a GETTER — read it, never destructure it. The node does
+   not exist yet when the views are instantiated at module load. */
 
 import { normalise } from './convert.js';
 import {
@@ -26,7 +39,7 @@ import {
 } from './regles.js';
 
 export default function createAtelierApp(api) {
-  const { esc, crumbs, headers, add, chipsOf } = api;
+  const { $, esc, crumbs, headers, add, chipsOf } = api;
 
   let wb = null;       // {path, data, state, byEtq}
   let wbTab = 0;       // index dans wbStations() — la barre est propre à chaque workbook
@@ -81,12 +94,12 @@ export default function createAtelierApp(api) {
 
   async function renderAtelierHub() {
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }]);
-    page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+    api.page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
     let list;
     try { const r = await fetch('/api/workbook/list', { headers: headers(false), cache: 'no-store' }); list = (await r.json()).workbooks; }
-    catch { page.innerHTML = '<div class="wrap"><div class="empty">Atelier indisponible.</div></div>'; return; }
-    let html = `<div class="wrap" style="--dc:var(--shop)"><div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>L’Atelier</h1><div class="lede">Suivi menuiserie — vos plans de débit.</div></div></div>`;
-    if (!list.length) { page.innerHTML = html + '<div class="empty">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div></div>'; return; }
+    catch { api.page.innerHTML = '<div class="wrap"><div class="empty">Atelier indisponible.</div></div>'; return; }
+    let html = `<div class="wrap" style="--dc:var(--shop)"><div class="chead"><div class="aico" style="--dc:var(--shop)">${api.ico('ic:shop')}</div><div><h1>L’Atelier</h1><div class="lede">Suivi menuiserie — vos plans de débit.</div></div></div>`;
+    if (!list.length) { api.page.innerHTML = html + '<div class="empty">Aucun workbook — demandez à Alfred d’en générer un (skill menuiserie).</div></div>'; return; }
     html += '<div class="grouplabel">Workbooks</div><div class="cards">';
     for (const w of list) {
       const tot = w.total || w.pieces || 0;
@@ -94,12 +107,12 @@ export default function createAtelierApp(api) {
       const last = w.lastActivity ? new Date(w.lastActivity).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : 'jamais';
       html += `<a class="card" href="#/atelier/${encodeURIComponent(w.path)}"><div class="ct">${esc(w.titre)}</div><div class="cmeta">${w.done}/${tot} étapes · ${w.pieces} pièces · ${esc(last)}</div><div class="bar"><i style="width:${pct}%"></i></div></a>`;
     }
-    page.innerHTML = html + '</div></div>';
+    api.page.innerHTML = html + '</div></div>';
   }
 
   async function renderWorkbook(path) {
     crumbs([{ label: 'Accueil', hash: '#/' }, { label: 'L’Atelier', hash: '#/atelier' }, { label: '…', hash: '#/atelier/' + encodeURIComponent(path) }]);
-    page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
+    api.page.innerHTML = '<div class="wrap"><div class="empty">chargement…</div></div>';
     let data, state, layout;
     try {
       const [rd, rs, rl] = await Promise.all([
@@ -110,7 +123,7 @@ export default function createAtelierApp(api) {
       if (!rd.ok) throw new Error(rd.status);
       data = normalise(await rd.json()); state = await rs.json();
       layout = rl.ok ? await rl.json() : { poses: {}, bandes: {} };
-    } catch (e) { page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
+    } catch (e) { api.page.innerHTML = '<div class="wrap"><div class="empty">Workbook illisible (' + esc(String(e)) + ').</div></div>'; return; }
     if (!wb || wb.path !== path) { wbTab = 0; wbEditOn = false; wbSel = null; }   // autre workbook = autre barre, l'index ne se transpose pas
     wb = { path, data, state, layout, byEtq: new Map((data.pieces || []).map((p) => [p.etiquette, p])) };
     buildWbIndex();
@@ -174,8 +187,8 @@ export default function createAtelierApp(api) {
     const stations = wbStations();
     if (wbTab >= stations.length) wbTab = 0;
     const cur = stations[wbTab] || { type: 'suivi', titre: 'Suivi' };
-    page.innerHTML = `<div class="wrap" style="--dc:var(--shop)">
-      <div class="chead"><div class="aico" style="--dc:var(--shop)">${IC.shop}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} étapes</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
+    api.page.innerHTML = `<div class="wrap" style="--dc:var(--shop)">
+      <div class="chead"><div class="aico" style="--dc:var(--shop)">${api.ico('ic:shop')}</div><div><h1>${esc(d.titre || d.projet || 'Workbook')}</h1><div class="lede">Workbook menuiserie · ${done}/${total} étapes</div></div><span style="flex:1"></span><button class="tag" id="shopmode" style="cursor:pointer;padding:8px 14px;border-color:var(--shop);color:var(--shop)">▶ Mode atelier</button></div>
       <div class="prog"><i style="width:${pct}%"></i></div>
       <div class="wbtabs">${stations.map((s, i) => `<button class="wbtab${wbTab === i ? ' on' : ''}" data-w="${i}">${esc(s.titre)}</button>`).join('')}</div>
       <div id="wbbody"></div></div>`;
@@ -186,7 +199,7 @@ export default function createAtelierApp(api) {
     else if (cur.type === 'lamello') renderLamello(body, cur);
     else if (cur.type === 'assemblage') renderAsm(body, cur);
     else renderSuivi(body);
-    page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = +t.dataset.w; renderWb(); }));
+    api.page.querySelectorAll('.wbtab').forEach((t) => t.addEventListener('click', () => { wbTab = +t.dataset.w; renderWb(); }));
     $('shopmode').addEventListener('click', () => { atelierFull.hidden = false; renderShop(); });
   }
 

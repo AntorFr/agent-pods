@@ -716,8 +716,9 @@ const APP_META = {
    cette indirection, une tuile déclarée dans un manifeste JSON ne pourrait porter
    qu'un emoji — et `atelier`, qui utilisait le glyphe `shop`, aurait perdu son
    dessin au passage. Un manifeste ne doit pas coûter une régression visuelle. */
+const icoOf = (spec) => (typeof spec === 'string' && spec.startsWith('ic:') ? IC[spec.slice(3)] : spec);
 for (const [id, t] of Object.entries(appTiles())) {
-  const ico = typeof t.ico === 'string' && t.ico.startsWith('ic:') ? IC[t.ico.slice(3)] : t.ico;
+  const ico = icoOf(t.ico);
   APP_META[id] = { ...t, ...(ico ? { ico } : {}) };
 }
 const COLORS = ['todo', 'shop', 'proj', 'agenda', 'maison', 'cuisine', 'achats', 'cadeaux', 'contacts', 'search'];
@@ -885,12 +886,14 @@ let memInfo = null; // {root, todo, entries:[{path,dir}]}
 let memIndex = null; // Map path -> frontmatter (dérivé, une requête)
 async function loadTree() {
   try { const r = await fetch('/api/memory/tree', { headers: headers(false) }); if (r.ok) memInfo = await r.json(); } catch {}
+  return memInfo;
 }
 function loadTreeThen(fn) { loadTree().then(fn); }
 async function loadIndex() {
-  if (memIndex) return;
+  if (memIndex) return memIndex;
   memIndex = new Map();
   try { const r = await fetch('/api/memory/index', { headers: headers(false) }); if (r.ok) { const { items } = await r.json(); for (const it of items) memIndex.set(it.path, it.fm || {}); } } catch {}
+  return memIndex;
 }
 // Overlay des gestes todo (D28) : cocher est un POST direct, jamais une phrase au LLM.
 // Prioritaire sur le `done:` de la fiche tant qu'Alfred n'a pas consolidé — sans quoi la
@@ -1005,7 +1008,13 @@ function ficheCount(prefix) {
 
    `page` reste un GETTER : le nœud n'existe pas encore quand les vues sont
    instanciées (cf. le commentaire en tête de `plugins/repos/web/app.js`, qui a
-   coûté une capture d'écran pour être trouvé). */
+   coûté une capture d'écran pour être trouvé).
+
+   ⚠️ Cette table est la SEULE porte. Une vue qui écrit `page` ou `add` tout court
+   ne prend pas le même chemin en plus court : elle référence une globale, qui
+   n'existe que dans un build non minifié (tous les modules y partagent un scope)
+   et disparaît dans celui qu'on livre. Manque une primitive ? On l'ajoute ICI.
+   `test/plugin-globals-test.mjs` minifie chaque vue et refuse le reste. */
 const EXT_API = {
   $, esc, crumbs, headers,
   get page() { return page; },
@@ -1013,6 +1022,18 @@ const EXT_API = {
   // Lecture de la mémoire — une vue qui affiche des fiches en a besoin, et
   // refaire un fetch/parse chez elle dupliquerait le cache de l'index.
   loadIndex, loadTree, prettify, add, sc, chipsOf,
+  // …et le RÉSULTAT de ces deux chargements, pas seulement le geste. Prêter le
+  // loader sans prêter le cache oblige la vue à refaire la requête pour lire ce
+  // qu'elle vient de charger — c'est-à-dire à dupliquer exactement ce que ces
+  // deux entrées existent pour éviter. Des GETTERS, comme `page` : le cache est
+  // remplacé (`memIndex = null` à chaque écriture de l'agent), et une vue
+  // instanciée au chargement du module capturerait sinon le `null` du départ.
+  get memInfo() { return memInfo; },
+  get memIndex() { return memIndex; },
+  // Le glyphe d'une tuile : un emoji passe tel quel, `ic:<nom>` désigne un dessin
+  // du socle. Une vue ne peut pas se le fabriquer — le jeu de glyphes appartient
+  // au lanceur — et son propre `gw-plugin.json` le nomme déjà sous cette forme.
+  ico: (spec) => icoOf(spec) || '',
 };
 let SKIN = resolveSkin(null, EXT_API);
 // Les apps sont instanciées UNE fois, au chargement du module : elles ne

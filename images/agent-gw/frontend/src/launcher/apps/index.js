@@ -31,6 +31,17 @@
    vivent dans `main.js`, lequel importe ce registre. On injecte donc un `api`
    explicite : dépendance visible, testable, unidirectionnelle.
 
+   ⚠️ ET SEULEMENT PAR LÀ. Écrire `page` tout court dans une vue n'est pas un
+   raccourci vers la même chose : c'est une variable libre, donc une globale. Le
+   bundle range tous les modules dans UN scope, si bien qu'un build non minifié
+   la fait tomber sur la liaison de `main.js` et l'écran s'affiche — pendant que
+   le build LIVRÉ, minifié, renomme cette liaison et jette `ReferenceError` au
+   premier rendu. `atelier` et `voyages` ont passé cinq jours en écran blanc
+   ainsi, après être sorties de `main.js` le 2026-08-20. Il manque une primitive ?
+   On l'AJOUTE à `EXT_API`, délibérément. `test/plugin-globals-test.mjs` minifie
+   chaque vue, chaque bloc et chaque skin, et refuse tout nom déclaré par le
+   lanceur.
+
    ⚠️ Les cinq modules historiques (`todo`, `projets`, `atelier`, `planif`,
    `voyages`) vivent encore dans `main.js`. On les déplace quand on y touche de
    toute façon, pas pour la symétrie — décision tenue depuis l'extraction de
