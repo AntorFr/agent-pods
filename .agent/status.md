@@ -1,6 +1,28 @@
 # Status — agent-pods
 > MàJ : 2026-08-25
 
+🔎 **Le guichet d'usage dit POURQUOI il refuse — 0.84.2 (2026-08-25).** La modale des
+quotas ne rendait qu'un code HTTP nu. Un `403` a fait chercher la panne pendant des jours
+alors qu'Anthropic écrivait la cause dans le corps qu'on jetait :
+`OAuth token does not meet scope requirement user:profile`. Le motif de l'amont remonte
+désormais, et le cas de portée est traité à part — **jamais de relevé « stale »** : servir
+le dernier chiffre connu faisait passer un mur définitif pour un amont capricieux, et c'est
+précisément ce qui a masqué la rupture jusqu'au redémarrage du pod.
+
+⚠️ **Ce que ça ne répare pas, et ne peut pas réparer.** Le jeton de `claude setup-token`
+*« can only make model requests »* (doc officielle) : les fenêtres d'usage lui sont
+**structurellement** fermées, et sa portée n'est pas négociable côté client (`setup-token`
+n'expose aucune option). Mesuré le 2026-08-25 : 403 sur les deux jetons du pod, 200 pour la
+même requête depuis une session `claude auth login`. Les rendre exigerait un identifiant
+interactif — qui se périme, et que rien ne rafraîchirait dans un pod où la variable
+`CLAUDE_CODE_OAUTH_TOKEN` (rang 5) supplante les credentials `/login` (rang 7). Consigné en
+**F9** du `DECISIONS.md` d'Alfred.
+
+Au passage, les fenêtres ne sont plus listées en dur (`five_hour`, `seven_day`,
+`seven_day_opus`, `seven_day_sonnet`) : Anthropic en ajoute une par famille de modèles, et la
+fenêtre **Fable** — bien présente dans le `/usage` du CLI — aurait disparu de la modale sans
+que personne ne le voie. On dérive le libellé des clés reçues.
+
 🗓️ **Le plugin `planning` — l'agenda transverse (0.84.1, 2026-08-25).** Nouvelle app
 du lanceur : vue **semaine** (7 colonnes, bandes de présence en travers, cartes dans
 les colonnes ; pile de jours + rails sur mobile) et vue **mois** (grille + jour
@@ -194,6 +216,9 @@ Vérifié bout en bout après coup : le jeton d'un agent atteint `maps`, `github
       Le lot 3 est clos : rien n'y reste à constater.
 - [ ] Côté cerveau (Alfred, pas ici) : réécrire les 17 jonctions d'`imp3d` sous
       `jonctions[]` et déclarer les `appui`.
+- [ ] Trancher si les jauges d'usage valent un identifiant `claude auth login` dédié dans le
+      pod. **Tester avant de construire** : sauvegarder `.credentials.json`, faire le login,
+      rejouer la sonde. 403 de nouveau → retirer la tuile plutôt que la réparer.
 
 > Ce fichier est une **synthèse**, pas un journal : l'historique détaillé de chaque
 > chantier est dans `git log` (messages de commit longs, un par intention) et le

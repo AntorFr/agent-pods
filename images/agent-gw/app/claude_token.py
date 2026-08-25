@@ -254,6 +254,14 @@ async def start():
 # Le même guichet que le `/usage` du CLI : fenêtres serveur (session 5 h,
 # plafonds hebdomadaires) avec pourcentage consommé et heure de remise à zéro.
 # Endpoint non documenté mais stable, utilisé par tout l'outillage communautaire.
+#
+# ⚠️ Il exige la portée `user:profile`, que le jeton de `claude setup-token` ne
+# porte PAS : la doc dit de lui « It can only make model requests », d'où son
+# incapacité connue à ouvrir une session Remote Control ou à lire les connecteurs.
+# Un corps qui vit sur ce jeton reçoit donc 403 ici, quoi qu'on fasse — mesuré le
+# 2026-08-25 sur les deux jetons du pod, quand la même requête depuis une session
+# `claude auth login` répondait 200. Rendre les jauges exigerait un identifiant
+# interactif, qui se périme et que rien ne rafraîchirait dans un pod.
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 # L'amont rate-limite sévèrement (anthropics/claude-code#31637) : on ne le
@@ -298,6 +306,26 @@ async def _ua_version() -> str:
     return _cli_version
 
 
+def _upstream_message(resp) -> str:
+    """Le motif que l'amont écrit dans son corps — le code HTTP seul ne diagnostique rien.
+
+    Vécu le 2026-08-25 : un 403 rendu nu a coûté une demi-journée d'enquête alors
+    qu'Anthropic nommait la cause en toutes lettres dans le JSON qu'on jetait.
+    """
+    try:
+        payload = resp.json()
+    except (ValueError, AttributeError):
+        return ""
+    err = (payload or {}).get("error") if isinstance(payload, dict) else None
+    msg = err.get("message") if isinstance(err, dict) else None
+    return str(msg or "").strip()[:300]
+
+
+def _usage_reason(status: int, detail: str) -> str:
+    base = f"Réponse {status} du guichet d'usage d'Anthropic"
+    return f"{base} : {detail}" if detail else f"{base}."
+
+
 def _usage_stale_or(reason: str, token: str) -> dict:
     """Amont injoignable : mieux vaut le dernier relevé, marqué `stale`, que rien."""
     cache = _usage_cache
@@ -335,8 +363,24 @@ async def usage():
         }
     if resp.status_code == 429:
         return _usage_stale_or("Le guichet d'usage d'Anthropic rate-limite — réessaie dans quelques minutes.", token)
+    if resp.status_code == 403:
+        detail = _upstream_message(resp)
+        # Portée insuffisante : c'est un mur définitif, pas un aléa réseau. Servir
+        # le dernier relevé marqué « stale » le masquerait — et c'est précisément
+        # ce qui a fait passer la panne pour un amont capricieux pendant des jours.
+        if "user:profile" in detail:
+            return {
+                "available": False,
+                "reason": (
+                    "Le jeton d'abonnement headless ne fait que de l'inférence : Anthropic "
+                    "réserve les fenêtres d'usage à la portée user:profile, qu'il ne porte pas. "
+                    "Les jauges exigeraient un identifiant issu de « claude auth login »."
+                ),
+                "upstream": detail,
+            }
+        return _usage_stale_or(_usage_reason(403, detail), token)
     if resp.status_code != 200:
-        return _usage_stale_or(f"Réponse {resp.status_code} du guichet d'usage d'Anthropic.", token)
+        return _usage_stale_or(_usage_reason(resp.status_code, _upstream_message(resp)), token)
     try:
         data = resp.json()
     except ValueError:

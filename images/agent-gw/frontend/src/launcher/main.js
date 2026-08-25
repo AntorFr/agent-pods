@@ -1923,12 +1923,25 @@ $('claude-usage').addEventListener('click', () => { setModal.hidden = true; usag
 $('usage-close').addEventListener('click', () => { usageModal.hidden = true; });
 $('usage-refresh').addEventListener('click', refreshUsage);
 usageModal.addEventListener('click', (e) => { if (e.target === usageModal) usageModal.hidden = true; });
-const USAGE_WINDOWS = [
-  ['five_hour', 'Session (5 h)'],
-  ['seven_day', 'Semaine — tous modèles'],
-  ['seven_day_opus', 'Semaine — Opus'],
-  ['seven_day_sonnet', 'Semaine — Sonnet'],
-];
+/* Anthropic ajoute une fenêtre hebdomadaire par famille de modèles, et la liste
+   bouge à chaque sortie (`seven_day_opus`, `seven_day_sonnet`, `seven_day_fable`…).
+   Lister les clés en dur les fait disparaître EN SILENCE : la boucle saute ce
+   qu'elle ne connaît pas, et la modale a l'air complète alors qu'elle ment.
+   On ne nomme donc que les deux fenêtres stables, et on dérive le reste. */
+const USAGE_LABELS = { five_hour: 'Session (5 h)', seven_day: 'Semaine — tous modèles' };
+function usageLabel(key) {
+  if (USAGE_LABELS[key]) return USAGE_LABELS[key];
+  const m = /^seven_day_(.+)$/.exec(key);
+  if (m) return 'Semaine — ' + m[1].replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  return key;
+}
+/* Les deux fenêtres stables d'abord (l'ordre de lecture de Monsieur), les
+   fenêtres par modèle ensuite, par ordre alphabétique. */
+function usageKeys(d) {
+  const head = ['five_hour', 'seven_day'];
+  const rest = Object.keys(d).filter((k) => !head.includes(k) && d[k] && d[k].utilization != null);
+  return head.concat(rest.sort());
+}
 function fmtReset(iso) {
   const t = new Date(iso);
   if (isNaN(t)) return '';
@@ -1948,12 +1961,12 @@ async function refreshUsage() {
   if (!u.available) { usageBody.innerHTML = '<div class="row">' + esc(u.reason || 'Quotas indisponibles.') + '</div>'; return; }
   const d = u.usage || {};
   usageBody.innerHTML = '';
-  for (const [key, label] of USAGE_WINDOWS) {
+  for (const key of usageKeys(d)) {
     const w = d[key];
     if (!w || w.utilization == null) continue; // fenêtre absente = plan sans ce plafond, pas un zéro
     const pct = Math.max(0, Math.min(100, Math.round(w.utilization)));
     usageBody.insertAdjacentHTML('beforeend',
-      '<div class="usewin' + (pct >= 80 ? ' attn' : '') + '"><div class="uk"><b>' + esc(label) + '</b><span class="upct">' + pct + ' %</span></div>'
+      '<div class="usewin' + (pct >= 80 ? ' attn' : '') + '"><div class="uk"><b>' + esc(usageLabel(key)) + '</b><span class="upct">' + pct + ' %</span></div>'
       + '<div class="ubar"><i style="width:' + pct + '%"></i></div>'
       + (w.resets_at ? '<div class="ureset">' + esc(fmtReset(w.resets_at)) + '</div>' : '')
       + '</div>');

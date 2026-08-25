@@ -179,6 +179,39 @@ async def usage_flows():
     res = await ct.usage()
     check("401 → indisponible avec motif", res["available"] is False and "token" in res["reason"].lower())
 
+    # 403 de portée : mur définitif, pas un aléa d'amont. Le cache porte encore le
+    # relevé nominal — le servir marqué « stale » masquerait le mur, ce qui a fait
+    # passer la panne du 2026-08-25 pour un réseau capricieux pendant des jours.
+    _expire_cache()
+    _FakeClient.plan = [
+        _FakeResp(
+            403,
+            {
+                "type": "error",
+                "error": {
+                    "type": "permission_error",
+                    "message": "OAuth token does not meet scope requirement user:profile",
+                },
+            },
+        )
+    ]
+    res = await ct.usage()
+    check("403 de portée → indisponible malgré le relevé en cache", res["available"] is False)
+    check("403 de portée → motif explicite", "inférence" in res["reason"])
+    check("403 de portée → message de l'amont conservé", "user:profile" in res.get("upstream", ""))
+
+    # Autre non-200 : on relaie le motif écrit par l'amont, pas un chiffre nu.
+    ct._usage_cache.update(token=None, at=-1e9, payload=None)
+    _FakeClient.plan = [_FakeResp(503, {"error": {"message": "upstream is having a moment"}})]
+    res = await ct.usage()
+    check("non-200 → motif de l'amont relayé", "upstream is having a moment" in res.get("reason", ""))
+
+    # Corps illisible : on dégrade sur le code seul, sans exploser.
+    ct._usage_cache.update(token=None, at=-1e9, payload=None)
+    _FakeClient.plan = [_FakeResp(500)]
+    res = await ct.usage()
+    check("non-200 sans corps JSON → motif au code seul", "500" in res.get("reason", ""))
+
     ct.httpx = real_httpx
 
 
